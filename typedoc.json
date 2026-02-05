@@ -1,0 +1,26 @@
+{
+  "includeVersion": true,
+  "sortEntryPoints": false,
+  "sort": [
+    "source-order"
+  ],
+  "categorizeByGroup": true,
+  "groupOrder": [
+    "Variables",
+    "Type Aliases",
+    "Interfaces",
+    "*"
+  ],
+  "useFirstParagraphOfCommentAsSummary": true,
+  "favicon": "https://metreeca.com/assets/icon.ico",
+  "sourceLinkExternal": true,
+  "markdownLinkExternal": true,
+  "navigationLinks": {
+    "GitHub": "https://github.com/metreeca/keep"
+  },
+  "hideGenerator": true,
+  "customFooterHtml": "Copyright © 2025 <a href='https://www.metreeca.com/'><img src='https://metreeca.com/assets/icon.svg' alt='Metreeca' style='width: 1.25em; height: 1.25em; vertical-align: bottom;'/> Metreeca</a>",
+  "headings": {
+    "readme": false
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "name": "@metreeca/keep",
+  "version": "0.9.0",
+  "description": "{TBD}",
+  "keywords": [
+    "typescript",
+    "utilities"
+  ],
+  "homepage": "https://metreeca.github.io/keep/",
+  "bugs": {
+    "url": "https://github.com/metreeca/keep/issues",
+    "email": "info@metreeca.com"
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Metreeca",
+    "email": "info@metreeca.com",
+    "url": "https://www.metreeca.com/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/metreeca/keep.git"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./dist/index/index.js",
+    "./stores": "./dist/stores/index.js",
+    "./states": "./dist/states/index.js"
+  },
+  "files": [
+    "README.md",
+    "LICENSE",
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "clean": "rm -rf dist docs node_modules",
+    "setup": "npm install && npm audit fix",
+    "build": "rm -rf dist docs && tsc -p tsconfig.build.json && npx typedoc",
+    "check": "npx vitest --typecheck run",
+    "watch": "npx tsc --watch",
+    "proof": "npx typedoc && (npx typedoc --watch & npx five-server docs --open)"
+  },
+  "dependencies": {
+    "@metreeca/core": "^0.9.13",
+    "@metreeca/qest": "^0.9.0",
+    "@metreeca/blue": "^0.9.0"
+  },
+  "devDependencies": {
+    "five-server": "^0.4.5",
+    "typedoc": "^0.28.14",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.13"
+  }
+}
