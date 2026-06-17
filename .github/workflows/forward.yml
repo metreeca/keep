@@ -1,0 +1,16 @@
+name: Forward
+
+on:
+  issues:
+    types: [ opened, reopened, transferred ]
+  pull_request:
+    types: [ opened, reopened ]
+
+jobs:
+
+  forward:
+
+    uses: metreeca/.github/.github/workflows/forward.yml@main
+    with:
+      project-url: https://github.com/orgs/metreeca/projects/3
+    secrets: inherit
