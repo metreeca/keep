@@ -38,7 +38,7 @@
     "dist"
   ],
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=22.22.0"
   },
   "scripts": {
     "clean": "rm -rf dist docs node_modules",
