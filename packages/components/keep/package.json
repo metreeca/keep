@@ -1,6 +1,6 @@
 {
   "name": "@metreeca/keep",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "description": "Core model-driven storage API for @metreeca/keep.",
   "keywords": [
     "typescript",
@@ -62,10 +62,10 @@
     "check": "npx vitest --typecheck run"
   },
   "dependencies": {
-    "@metreeca/blue": "^0.9.1",
-    "@metreeca/core": "^0.9.22",
-    "@metreeca/http": "^0.1.1",
-    "@metreeca/qest": "^0.9.2"
+    "@metreeca/blue": "^0.10.0",
+    "@metreeca/core": "^0.10.0",
+    "@metreeca/http": "^0.2.0",
+    "@metreeca/qest": "^0.10.0"
   },
   "devDependencies": {
     "typescript": "^5.9.3",
