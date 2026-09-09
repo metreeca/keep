@@ -22,10 +22,10 @@ jobs:
     steps:
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
@@ -51,7 +51,7 @@ jobs:
           HIGHEST=$(printf '%s\n' "$SERIES" "${LATEST%.*}" | sort -V | tail -1)
 
           if [ "$SERIES" = "$HIGHEST" ]; then
-            npm publish --access public
+            npm publish --workspaces --access public
           else
-            npm publish --access public --tag "v$SERIES"
+            npm publish --workspaces --access public --tag "v$SERIES"
           fi

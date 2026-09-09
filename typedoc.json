@@ -1,16 +1,12 @@
 {
-  "includeVersion": true,
-  "sortEntryPoints": false,
-  "sort": [
-    "source-order"
+  "entryPoints": [
+    "packages/*/*"
   ],
-  "categorizeByGroup": true,
-  "groupOrder": [
-    "Variables",
-    "Type Aliases",
-    "Interfaces",
-    "*"
-  ],
+  "entryPointStrategy": "packages",
+  "name": "Metreeca Keep",
+  "out": "docs",
+  "readme": "README.md",
+  "hostedBaseUrl": "https://metreeca.github.io/keep/",
   "useFirstParagraphOfCommentAsSummary": true,
   "favicon": "https://metreeca.com/assets/icon.ico",
   "sourceLinkExternal": true,
@@ -18,9 +14,85 @@
   "navigationLinks": {
     "GitHub": "https://github.com/metreeca/keep"
   },
+  "navigation": {
+    "includeGroups": true
+  },
+  "groupOrder": [
+    "Components",
+    "Connectors",
+    "*"
+  ],
+  "githubPages": false,
   "hideGenerator": true,
-  "customFooterHtml": "Copyright © 2025 <a href='https://www.metreeca.com/'><img src='https://metreeca.com/assets/icon.svg' alt='Metreeca' style='width: 1.25em; height: 1.25em; vertical-align: bottom;'/> Metreeca</a>",
+  "customFooterHtml": "<a href='https://www.metreeca.com/' style='display: flex; align-items: center; gap: 0.25em'><img src='https://metreeca.com/assets/icon.svg' alt='Metreeca' style='width: 1.25em; height: 1.25em;'/><span>Copyright © 2025-2026 Metreeca</span></a>",
   "headings": {
     "readme": false
+  },
+  "highlightLanguages": [
+    "bash",
+    "console",
+    "css",
+    "html",
+    "javascript",
+    "json",
+    "jsonc",
+    "mermaid",
+    "tsx",
+    "typescript",
+    "yaml"
+  ],
+  "externalSymbolLinkMappings": {
+    "@metreeca/blue": {
+      "validate": "https://metreeca.github.io/blue/functions/index.validate.html",
+      "resource": "https://metreeca.github.io/blue/functions/resource.resource.html"
+    },
+    "@metreeca/blue/value": {
+      "model": "https://metreeca.github.io/blue/functions/value.model.html"
+    },
+    "@metreeca/blue/reference": {
+      "ReferenceConstraints": "https://metreeca.github.io/blue/interfaces/reference.ReferenceConstraints.html",
+      "ReferenceConstraints.foreign": "https://metreeca.github.io/blue/interfaces/reference.ReferenceConstraints.html#foreign",
+      "ReferenceConstraints.captive": "https://metreeca.github.io/blue/interfaces/reference.ReferenceConstraints.html#captive"
+    },
+    "@metreeca/core": {
+      "isNestedIRI": "https://metreeca.github.io/core/functions/resource.isNestedIRI.html"
+    },
+    "@metreeca/http": {
+      "createFetch": "https://metreeca.github.io/http/functions/index.createFetch.html",
+      "Problem": "https://metreeca.github.io/http/types/success.Problem.html"
+    },
+    "@metreeca/trio": {
+      "Triple": "https://metreeca.github.io/trio/types/index.Triple.html",
+      "Term": "https://metreeca.github.io/trio/types/index.Term.html",
+      "Blank": "https://metreeca.github.io/trio/types/index.Blank.html",
+      "Named": "https://metreeca.github.io/trio/types/index.Named.html",
+      "Tagged": "https://metreeca.github.io/trio/types/index.Tagged.html",
+      "Typed": "https://metreeca.github.io/trio/types/index.Typed.html",
+      "named": "https://metreeca.github.io/trio/functions/index.named.html",
+      "tagged": "https://metreeca.github.io/trio/functions/index.tagged.html",
+      "typed": "https://metreeca.github.io/trio/functions/index.typed.html"
+    },
+    "@metreeca/wire-sparql": {
+      "Repository": "https://metreeca.github.io/wire/interfaces/_metreeca_wire-sparql.Repository.html",
+      "Repository.execute": "https://metreeca.github.io/wire/interfaces/_metreeca_wire-sparql.Repository.html#execute",
+      "SPARQL": "https://metreeca.github.io/wire/types/_metreeca_wire-sparql.SPARQL.html",
+      "Tuple": "https://metreeca.github.io/wire/types/_metreeca_wire-sparql.Tuple.html"
+    }
+  },
+  "packageOptions": {
+    "tsconfig": "./tsconfig.build.json",
+    "readme": "none",
+    "includeVersion": true,
+    "sortEntryPoints": false,
+    "sort": [
+      "source-order"
+    ],
+    "categorizeByGroup": true,
+    "groupOrder": [
+      "Variables",
+      "Interfaces",
+      "Type Aliases",
+      "*"
+    ]
   }
 }

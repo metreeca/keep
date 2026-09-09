@@ -1,0 +1,19 @@
+{
+  "externalSymbolLinkMappings": {
+    "@metreeca/keep": {
+      "*": "https://metreeca.github.io/keep/"
+    },
+    "@metreeca/blue": {
+      "*": "https://metreeca.github.io/blue/"
+    },
+    "@metreeca/core": {
+      "*": "https://metreeca.github.io/core/"
+    },
+    "@metreeca/qest": {
+      "*": "https://metreeca.github.io/qest/"
+    },
+    "typescript": {
+      "Crypto.randomUUID": "https://developer.mozilla.org/en-US/docs/Web/API/Crypto/randomUUID"
+    }
+  }
+}

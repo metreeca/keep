@@ -1,0 +1,49 @@
+{
+  "externalSymbolLinkMappings": {
+    "@metreeca/blue": {
+      "*": "https://metreeca.github.io/blue/",
+      "ValueShape": "https://metreeca.github.io/blue/types/index.ValueShape.html",
+      "TraceError": "https://metreeca.github.io/blue/classes/index.TraceError.html",
+      "audit": "https://metreeca.github.io/blue/functions/index.audit.html",
+      "validate": "https://metreeca.github.io/blue/functions/index.validate.html",
+      "tag": "https://metreeca.github.io/blue/functions/index.tag.html"
+    },
+    "@metreeca/core/resource": {
+      "nests": "https://metreeca.github.io/core/functions/resource.nests.html"
+    },
+    "@metreeca/blue/resource": {
+      "id": "https://metreeca.github.io/blue/functions/resource.id.html",
+      "foreign": "https://metreeca.github.io/blue/functions/resource.foreign.html",
+      "resource": "https://metreeca.github.io/blue/functions/resource.resource.html",
+      "Property": "https://metreeca.github.io/blue/interfaces/resource.Property.html",
+      "ResourceShape": "https://metreeca.github.io/blue/interfaces/resource.ResourceShape.html"
+    },
+    "@metreeca/blue/value": {
+      "model": "https://metreeca.github.io/blue/functions/value.model.html",
+      "getShapeModel": "https://metreeca.github.io/blue/functions/value.getShapeModel.html"
+    },
+    "@metreeca/blue/reference": {
+      "ReferenceConstraints": "https://metreeca.github.io/blue/interfaces/reference.ReferenceConstraints.html",
+      "ReferenceConstraints.foreign": "https://metreeca.github.io/blue/interfaces/reference.ReferenceConstraints.html#foreign",
+      "ReferenceConstraints.captive": "https://metreeca.github.io/blue/interfaces/reference.ReferenceConstraints.html#captive"
+    },
+    "@metreeca/core": {
+      "*": "https://metreeca.github.io/core/",
+      "Problem": "https://metreeca.github.io/core/types/index.Problem.html",
+      "nests": "https://metreeca.github.io/core/functions/resource.nests.html"
+    },
+    "@metreeca/qest": {
+      "*": "https://metreeca.github.io/qest/",
+      "Reference": "https://metreeca.github.io/qest/types/state.Reference.html",
+      "Resource": "https://metreeca.github.io/qest/types/state.Resource.html",
+      "Values": "https://metreeca.github.io/qest/types/state.Values.html",
+      "Indexed": "https://metreeca.github.io/qest/types/index.Indexed.html"
+    },
+    "@metreeca/qest/template": {
+      "*": "https://metreeca.github.io/qest/modules/model.html",
+      "Transform": "https://metreeca.github.io/qest/types/model.Transform.html",
+      "Pipe": "https://metreeca.github.io/qest/types/model.Pipe.html",
+      "Query": "https://metreeca.github.io/qest/types/model.Query.html"
+    }
+  }
+}

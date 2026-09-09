@@ -15,6 +15,10 @@
 #
 
 npx link \
-  ../Blue \
+  ../Core \
+  ../Tape \
+  ../HTTP \
+  ../Trio \
   ../Qest \
-  ../Core
+  ../Blue \
+  ../Wire/packages/*/*

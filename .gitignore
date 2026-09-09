@@ -1,10 +1,10 @@
 /.idea/
 /.vscode/
 
-/dist/
-/docs/
-/node_modules/
+/**/dist/
+/**/docs/
+/**/node_modules/
 
 @*
-*~
 ~*
+*~

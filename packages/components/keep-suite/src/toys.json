@@ -1,0 +1,3627 @@
+{
+  "categories": [
+    {
+      "id": "https://data.example.net/categories/1000",
+      "type": "https://data.example.net/toys#Category",
+      "label": {
+        "en": "Action Figures",
+        "de": "Actionfiguren",
+        "fr": "Figurines d'action",
+        "it": "Action figure"
+      },
+      "comment": {
+        "en": "Collectible and playable character figures and accessories",
+        "de": "Sammelfiguren und bespielbare Charakterfiguren mit Zubehör",
+        "fr": "Figurines d'action à collectionner et accessoires de jeu",
+        "it": "Figure da collezione e da gioco con relativi accessori"
+      },
+      "code": "1000",
+      "title": {
+        "en": "Action Figures",
+        "de": "Actionfiguren",
+        "fr": "Figurines d'action",
+        "it": "Action figure"
+      },
+      "description": {
+        "en": "Collectible and playable character figures and accessories",
+        "de": "Sammelfiguren und bespielbare Charakterfiguren mit Zubehör",
+        "fr": "Figurines d'action à collectionner et accessoires de jeu",
+        "it": "Figure da collezione e da gioco con relativi accessori"
+      },
+      "featured": true,
+      "created": "2025-01-15T00:31:44.263Z"
+    },
+    {
+      "id": "https://data.example.net/categories/1100",
+      "type": "https://data.example.net/toys#Category",
+      "label": {
+        "en": "Superheroes",
+        "de": "Superhelden",
+        "fr": "Super-héros",
+        "it": "Supereroi"
+      },
+      "code": "1100",
+      "title": {
+        "en": "Superheroes",
+        "de": "Superhelden",
+        "fr": "Super-héros",
+        "it": "Supereroi"
+      },
+      "featured": false,
+      "broader": "https://data.example.net/categories/1000",
+      "created": "2025-01-15T09:11:58.512Z"
+    },
+    {
+      "id": "https://data.example.net/categories/1110",
+      "type": "https://data.example.net/toys#Category",
+      "label": {
+        "en": "Comic Book Heroes",
+        "de": "Comic-Helden",
+        "fr": "Héros de bande dessinée",
+        "it": "Eroi dei fumetti"
+      },
+      "comment": {
+        "en": "Figures based on characters from comic book universes",
+        "de": "Figuren aus den Universen der Comic-Bücher",
+        "fr": "Figurines inspirées des personnages de bandes dessinées",
+        "it": "Figure ispirate ai personaggi degli universi a fumetti"
+      },
+      "code": "1110",
+      "title": {
+        "en": "Comic Book Heroes",
+        "de": "Comic-Helden",
+        "fr": "Héros de bande dessinée",
+        "it": "Eroi dei fumetti"
+      },
+      "description": {
+        "en": "Figures based on characters from comic book universes",
+        "de": "Figuren aus den Universen der Comic-Bücher",
+        "fr": "Figurines inspirées des personnages de bandes dessinées",
+        "it": "Figure ispirate ai personaggi degli universi a fumetti"
+      },
+      "featured": false,
+      "broader": "https://data.example.net/categories/1100",
+      "created": "2025-01-15T12:15:06.815Z"
+    },
+    {
+      "id": "https://data.example.net/categories/1200",
+      "type": "https://data.example.net/toys#Category",
+      "label": {
+        "en": "Dinosaurs",
+        "de": "Dinosaurier",
+        "fr": "Dinosaures",
+        "it": "Dinosauri"
+      },
+      "code": "1200",
+      "title": {
+        "en": "Dinosaurs",
+        "de": "Dinosaurier",
+        "fr": "Dinosaures",
+        "it": "Dinosauri"
+      },
+      "featured": false,
+      "broader": "https://data.example.net/categories/1000",
+      "created": "2025-01-15T21:27:14.247Z"
+    },
+    {
+      "id": "https://data.example.net/categories/2000",
+      "type": "https://data.example.net/toys#Category",
+      "label": {
+        "en": "Board Games",
+        "de": "Brettspiele",
+        "fr": "Jeux de société",
+        "it": "Giochi da tavolo"
+      },
+      "comment": {
+        "en": "Tabletop games including strategy, trivia and party games",
+        "de": "Brettspiele für Strategie, Wissen und Gesellschaftsrunden",
+        "fr": "Jeux de société incluant stratégie, culture générale et jeux de groupe",
+        "it": "Giochi da tavolo tra strategia, cultura generale e giochi di gruppo"
+      },
+      "code": "2000",
+      "title": {
+        "en": "Board Games",
+        "de": "Brettspiele",
+        "fr": "Jeux de société",
+        "it": "Giochi da tavolo"
+      },
+      "description": {
+        "en": "Tabletop games including strategy, trivia and party games",
+        "de": "Brettspiele für Strategie, Wissen und Gesellschaftsrunden",
+        "fr": "Jeux de société incluant stratégie, culture générale et jeux de groupe",
+        "it": "Giochi da tavolo tra strategia, cultura generale e giochi di gruppo"
+      },
+      "featured": true,
+      "created": "2025-01-15T04:19:06.807Z"
+    },
+    {
+      "id": "https://data.example.net/categories/2100",
+      "type": "https://data.example.net/toys#Category",
+      "label": {
+        "en": "Strategy Games",
+        "de": "Strategiespiele",
+        "fr": "Jeux de stratégie",
+        "it": "Giochi di strategia"
+      },
+      "code": "2100",
+      "title": {
+        "en": "Strategy Games",
+        "de": "Strategiespiele",
+        "fr": "Jeux de stratégie",
+        "it": "Giochi di strategia"
+      },
+      "featured": false,
+      "broader": "https://data.example.net/categories/2000",
+      "created": "2025-01-15T12:50:44.078Z"
+    },
+    {
+      "id": "https://data.example.net/categories/2200",
+      "type": "https://data.example.net/toys#Category",
+      "label": {
+        "en": "Puzzles",
+        "de": "Puzzles",
+        "fr": "Puzzles",
+        "it": "Puzzle"
+      },
+      "comment": {
+        "en": "Jigsaw puzzles, brain teasers and spatial challenges",
+        "de": "Puzzles, Denkspiele und räumliche Herausforderungen",
+        "fr": "Puzzles, casse-têtes et défis spatiaux",
+        "it": "Puzzle, rompicapo e sfide di logica spaziale"
+      },
+      "code": "2200",
+      "title": {
+        "en": "Puzzles",
+        "de": "Puzzles",
+        "fr": "Puzzles",
+        "it": "Puzzle"
+      },
+      "description": {
+        "en": "Jigsaw puzzles, brain teasers and spatial challenges",
+        "de": "Puzzles, Denkspiele und räumliche Herausforderungen",
+        "fr": "Puzzles, casse-têtes et défis spatiaux",
+        "it": "Puzzle, rompicapo e sfide di logica spaziale"
+      },
+      "featured": false,
+      "broader": "https://data.example.net/categories/2000",
+      "created": "2025-01-15T12:07:51.464Z"
+    },
+    {
+      "id": "https://data.example.net/categories/2210",
+      "type": "https://data.example.net/toys#Category",
+      "label": {
+        "en": "3D Puzzles",
+        "de": "3D-Puzzles",
+        "fr": "Puzzles 3D",
+        "it": "Puzzle 3D"
+      },
+      "code": "2210",
+      "title": {
+        "en": "3D Puzzles",
+        "de": "3D-Puzzles",
+        "fr": "Puzzles 3D",
+        "it": "Puzzle 3D"
+      },
+      "featured": false,
+      "broader": "https://data.example.net/categories/2200",
+      "created": "2025-01-15T11:27:14.012Z"
+    },
+    {
+      "id": "https://data.example.net/categories/3000",
+      "type": "https://data.example.net/toys#Category",
+      "label": {
+        "en": "Outdoor Toys",
+        "de": "Outdoor-Spielzeug",
+        "fr": "Jouets d'extérieur",
+        "it": "Giochi da esterno"
+      },
+      "comment": {
+        "en": "Toys and equipment for active outdoor play and sports",
+        "de": "Spielzeug und Ausrüstung für aktives Spielen im Freien",
+        "fr": "Jouets et équipements pour les jeux actifs en plein air",
+        "it": "Giocattoli e attrezzature per il gioco attivo all'aperto"
+      },
+      "code": "3000",
+      "title": {
+        "en": "Outdoor Toys",
+        "de": "Outdoor-Spielzeug",
+        "fr": "Jouets d'extérieur",
+        "it": "Giochi da esterno"
+      },
+      "description": {
+        "en": "Toys and equipment for active outdoor play and sports",
+        "de": "Spielzeug und Ausrüstung für aktives Spielen im Freien",
+        "fr": "Jouets et équipements pour les jeux actifs en plein air",
+        "it": "Giocattoli e attrezzature per il gioco attivo all'aperto"
+      },
+      "featured": false,
+      "created": "2025-01-15T00:59:54.785Z"
+    },
+    {
+      "id": "https://data.example.net/categories/3100",
+      "type": "https://data.example.net/toys#Category",
+      "label": {
+        "en": "Ride-On Toys",
+        "de": "Fahrzeuge zum Reiten",
+        "fr": "Jouets à chevaucher",
+        "it": "Cavalcabili"
+      },
+      "code": "3100",
+      "title": {
+        "en": "Ride-On Toys",
+        "de": "Fahrzeuge zum Reiten",
+        "fr": "Jouets à chevaucher",
+        "it": "Cavalcabili"
+      },
+      "featured": false,
+      "broader": "https://data.example.net/categories/3000",
+      "created": "2025-01-15T13:46:37.344Z"
+    },
+    {
+      "id": "https://data.example.net/categories/4000",
+      "type": "https://data.example.net/toys#Category",
+      "label": {
+        "en": "Building Sets",
+        "de": "Baukästen",
+        "fr": "Jeux de construction",
+        "it": "Set di costruzioni"
+      },
+      "comment": {
+        "en": "Construction toys for creative building and engineering play",
+        "de": "Konstruktionsspielzeug für kreatives Bauen und technisches Spielen",
+        "fr": "Jouets de construction pour le jeu créatif et technique",
+        "it": "Giocattoli di costruzione per il gioco creativo e ingegneristico"
+      },
+      "code": "4000",
+      "title": {
+        "en": "Building Sets",
+        "de": "Baukästen",
+        "fr": "Jeux de construction",
+        "it": "Set di costruzioni"
+      },
+      "description": {
+        "en": "Construction toys for creative building and engineering play",
+        "de": "Konstruktionsspielzeug für kreatives Bauen und technisches Spielen",
+        "fr": "Jouets de construction pour le jeu créatif et technique",
+        "it": "Giocattoli di costruzione per il gioco creativo e ingegneristico"
+      },
+      "featured": true,
+      "created": "2025-01-15T09:16:21.640Z"
+    }
+  ],
+  "vendors": [
+    {
+      "id": "https://data.example.net/vendors/0001",
+      "type": "https://data.example.net/toys#Vendor",
+      "label": {
+        "und": "ToyMaster GmbH"
+      },
+      "code": "0001",
+      "name": "ToyMaster GmbH",
+      "aliases": [
+        "TMG",
+        "ToyMaster Group"
+      ],
+      "email": "info@toymaster.example.net",
+      "homepage": "https://www.toymaster.example.net",
+      "score": 4.5,
+      "certified": true,
+      "audited": "2023-06-15",
+      "founded": "1985",
+      "opens": "09:00:00",
+      "address": {
+        "label": {
+          "und": "Nürnberg, Germany"
+        },
+        "street": "Spielzeugstraße 42",
+        "city": "Nürnberg",
+        "zip": "90403",
+        "country": "Germany"
+      },
+      "contacts": [
+        "info@toymaster.example.net",
+        "sales@toymaster.example.net",
+        "+499115551234",
+        {
+          "label": {
+            "und": "Nürnberg, Germany"
+          },
+          "street": "Spielzeugstraße 42",
+          "city": "Nürnberg",
+          "zip": "90403",
+          "country": "Germany"
+        }
+      ],
+      "created": "2025-01-20T08:03:31.157Z",
+      "updated": "2025-06-10T10:19:11.064Z"
+    },
+    {
+      "id": "https://data.example.net/vendors/0002",
+      "type": "https://data.example.net/toys#Vendor",
+      "label": {
+        "und": "PlayWorks Inc"
+      },
+      "code": "0002",
+      "name": "PlayWorks Inc",
+      "email": "contact@playworks.example.net",
+      "homepage": "https://www.playworks.example.net",
+      "score": "A",
+      "certified": 3.8,
+      "audited": true,
+      "founded": "2010",
+      "address": {
+        "label": {
+          "und": "PlayWorks Times Square"
+        },
+        "latitude": 40.758,
+        "longitude": -73.9855,
+        "opened": "2018-06-01"
+      },
+      "contacts": [
+        "contact@playworks.example.net",
+        "+12125559876"
+      ],
+      "created": "2025-02-01T23:32:05.993Z"
+    },
+    {
+      "id": "https://data.example.net/vendors/0003",
+      "type": "https://data.example.net/toys#Vendor",
+      "label": {
+        "und": "FunZone Ltd"
+      },
+      "code": "0003",
+      "name": "FunZone Ltd",
+      "email": "hello@funzone.example.net",
+      "homepage": "https://www.funzone.example.net",
+      "created": "2025-03-15T10:42:11.543Z"
+    },
+    {
+      "id": "https://data.example.net/vendors/0004",
+      "type": "https://data.example.net/toys#Vendor",
+      "label": {
+        "und": "Piccoli Giochi Srl"
+      },
+      "code": "0004",
+      "name": "Piccoli Giochi Srl",
+      "aliases": [
+        "PGS"
+      ],
+      "email": "bottega@piccoligiochi.example.net",
+      "homepage": "https://www.piccoligiochi.example.net",
+      "score": 3.5,
+      "certified": "B",
+      "founded": "1972",
+      "opens": "08:30:00",
+      "address": {
+        "label": {
+          "und": "Firenze, Italy"
+        },
+        "street": "Via dei Giocattoli 7",
+        "city": "Firenze",
+        "zip": "50123",
+        "country": "Italy"
+      },
+      "contacts": [
+        "+390555554321",
+        {
+          "label": {
+            "und": "Firenze, Italy"
+          },
+          "street": "Via dei Giocattoli 7",
+          "city": "Firenze",
+          "zip": "50123",
+          "country": "Italy"
+        }
+      ],
+      "created": "2025-01-20T23:11:41.399Z"
+    },
+    {
+      "id": "https://data.example.net/vendors/0005",
+      "type": "https://data.example.net/toys#Vendor",
+      "label": {
+        "und": "KidsCraft Co"
+      },
+      "code": "0005",
+      "name": "KidsCraft Co",
+      "email": "support@kidscraft.example.net",
+      "homepage": "https://www.kidscraft.example.net",
+      "score": "B",
+      "certified": "1999",
+      "audited": "2020-03-10",
+      "founded": "2005",
+      "address": "3-7-1 Taito, Taito-ku, Tokyo 110-0016, Japan",
+      "contacts": [
+        "support@kidscraft.example.net",
+        "+81355557890",
+        "+81355557891",
+        {
+          "label": {
+            "und": "KidsCraft Studio, Tokyo"
+          },
+          "latitude": 35.7126,
+          "longitude": 139.7796,
+          "opened": "2020-03-10"
+        }
+      ],
+      "created": "2025-04-01T10:44:10.810Z",
+      "updated": "2025-09-20T19:05:01.133Z"
+    }
+  ],
+  "products": [
+    {
+      "id": "https://data.example.net/products/AF-001",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Thunder Guardian Deluxe",
+        "de": "Donnerwächter Deluxe",
+        "fr": "Gardien du Tonnerre Deluxe",
+        "it": "Guardiano del Tuono Deluxe"
+      },
+      "comment": {
+        "en": "Premium articulated superhero figure with light-up shield and magnetic accessories",
+        "de": "Hochwertige Superhelden-Figur mit leuchtendem Schild und Magnetzubehör"
+      },
+      "sku": "AF-001",
+      "name": {
+        "en": "Thunder Guardian Deluxe",
+        "de": "Donnerwächter Deluxe",
+        "fr": "Gardien du Tonnerre Deluxe",
+        "it": "Guardiano del Tuono Deluxe"
+      },
+      "description": {
+        "en": "Premium articulated superhero figure with light-up shield and magnetic accessories",
+        "de": "Hochwertige Superhelden-Figur mit leuchtendem Schild und Magnetzubehör"
+      },
+      "keywords": {
+        "en": [
+          "superhero",
+          "action",
+          "deluxe"
+        ]
+      },
+      "homepage": "https://data.example.net/products/AF-001",
+      "launched": "2024-03-15",
+      "warranty": "P1Y",
+      "documents": [
+        "https://data.example.net/documents/AF-001-1.pdf",
+        "https://data.example.net/documents/AF-001-2.pdf",
+        "https://data.example.net/documents/AF-001-3.pdf"
+      ],
+      "condition": "new",
+      "price": 29.99,
+      "change": 2.5,
+      "stock": 150,
+      "vendor": "https://data.example.net/vendors/0001",
+      "categories": [
+        "https://data.example.net/categories/1100",
+        "https://data.example.net/categories/1110"
+      ],
+      "media": [
+        "https://data.example.net/media/images/AF-001-1",
+        "https://data.example.net/media/videos/AF-001-1"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-04-10 / Alex K."
+          },
+          "comment": {
+            "en": "Excellent detail and solid build quality for the price"
+          },
+          "author": "Alex K.",
+          "posted": "2025-04-10T15:22:14.506Z",
+          "rating": 5,
+          "content": {
+            "en": "Excellent detail and solid build quality for the price"
+          }
+        },
+        {
+          "label": {
+            "und": "2025-05-02 / Maria S."
+          },
+          "comment": {
+            "en": "Great figure, the light-up shield is a nice touch"
+          },
+          "author": "Maria S.",
+          "posted": "2025-05-02T12:06:59.348Z",
+          "rating": 4,
+          "content": {
+            "en": "Great figure, the light-up shield is a nice touch"
+          }
+        }
+      ],
+      "created": "2025-02-01T18:15:39.915Z"
+    },
+    {
+      "id": "https://data.example.net/products/AF-002",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Nebula Knight",
+        "de": "Nebelritter",
+        "fr": "Chevalier Nébuleux",
+        "it": "Cavaliere Nebulosa"
+      },
+      "sku": "AF-002",
+      "name": {
+        "en": "Nebula Knight",
+        "en-US": "Nebula Knight US Edition",
+        "de": "Nebelritter",
+        "fr": "Chevalier Nébuleux",
+        "it": "Cavaliere Nebulosa"
+      },
+      "launched": "2024-06-01",
+      "documents": [
+        "https://data.example.net/documents/AF-002-1.pdf",
+        "https://data.example.net/documents/AF-002-2.pdf"
+      ],
+      "condition": "new",
+      "price": 24.99,
+      "change": -1,
+      "discount": -3,
+      "stock": 85,
+      "vendor": "https://data.example.net/vendors/0001",
+      "categories": [
+        "https://data.example.net/categories/1110"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-03-20 / Tom B."
+          },
+          "comment": {
+            "en": "Decent figure but the joints feel a bit loose"
+          },
+          "author": "Tom B.",
+          "posted": "2025-03-20T11:26:55.467Z",
+          "rating": 2,
+          "content": {
+            "en": "Decent figure but the joints feel a bit loose"
+          }
+        }
+      ],
+      "created": "2025-02-01T23:19:47.865Z"
+    },
+    {
+      "id": "https://data.example.net/products/AF-003",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "T-Rex Rampage",
+        "de": "T-Rex Randale",
+        "fr": "Furie du T-Rex",
+        "it": "Furia del T-Rex"
+      },
+      "comment": {
+        "en": "Roaring tyrannosaurus with movable jaws and stomp action",
+        "de": "Brüllender Tyrannosaurus mit beweglichen Kiefern und Stampfaktion"
+      },
+      "sku": "AF-003",
+      "name": {
+        "en": "T-Rex Rampage",
+        "de": "T-Rex Randale",
+        "fr": "Furie du T-Rex",
+        "it": "Furia del T-Rex"
+      },
+      "description": {
+        "en": "Roaring tyrannosaurus with movable jaws and stomp action",
+        "de": "Brüllender Tyrannosaurus mit beweglichen Kiefern und Stampfaktion"
+      },
+      "keywords": {
+        "en": [
+          "dinosaur",
+          "t-rex",
+          "action"
+        ],
+        "de": [
+          "Dinosaurier",
+          "T-Rex",
+          "Aktion"
+        ]
+      },
+      "launched": "2023-11-20",
+      "documents": [
+        "https://data.example.net/documents/AF-003-1.pdf",
+        "https://data.example.net/documents/AF-003-2.pdf"
+      ],
+      "condition": "new",
+      "price": 19.99,
+      "stock": 200,
+      "vendor": "https://data.example.net/vendors/0002",
+      "categories": [
+        "https://data.example.net/categories/1200"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-01-15 / Sarah L."
+          },
+          "comment": {
+            "en": "My son absolutely loves this, the roaring sound is amazing"
+          },
+          "author": "Sarah L.",
+          "posted": "2025-01-15T17:33:49.531Z",
+          "rating": 5,
+          "content": {
+            "en": "My son absolutely loves this, the roaring sound is amazing"
+          }
+        },
+        {
+          "label": {
+            "und": "2025-02-28 / Hans W."
+          },
+          "comment": {
+            "de": "Tolles Spielzeug, die Kiefer bewegen sich sehr realistisch"
+          },
+          "author": "Hans W.",
+          "posted": "2025-02-28T07:20:18.446Z",
+          "rating": 4,
+          "content": {
+            "de": "Tolles Spielzeug, die Kiefer bewegen sich sehr realistisch"
+          }
+        },
+        {
+          "label": {
+            "und": "2025-03-15 / Pierre D."
+          },
+          "comment": {
+            "fr": "Fantastique jouet dinosaure avec des détails impressionnants"
+          },
+          "author": "Pierre D.",
+          "posted": "2025-03-15T13:39:03.489Z",
+          "rating": 5,
+          "content": {
+            "fr": "Fantastique jouet dinosaure avec des détails impressionnants"
+          }
+        }
+      ],
+      "created": "2025-01-10T10:00:42.388Z"
+    },
+    {
+      "id": "https://data.example.net/products/AF-004",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Velociraptor Pack",
+        "de": "Velociraptor-Rudel",
+        "fr": "Meute de Vélociraptors",
+        "it": "Branco di Velociraptor"
+      },
+      "comment": {
+        "en": "Set of three poseable velociraptor figures with hunting accessories"
+      },
+      "sku": "AF-004",
+      "name": {
+        "en": "Velociraptor Pack",
+        "de": "Velociraptor-Rudel",
+        "fr": "Meute de Vélociraptors",
+        "it": "Branco di Velociraptor"
+      },
+      "description": {
+        "en": "Set of three poseable velociraptor figures with hunting accessories"
+      },
+      "homepage": "https://data.example.net/products/AF-004",
+      "launched": "2024-01-10",
+      "warranty": "P2Y",
+      "documents": [
+        "https://data.example.net/documents/AF-004-1.pdf",
+        "https://data.example.net/documents/AF-004-2.pdf",
+        "https://data.example.net/documents/AF-004-3.pdf",
+        "https://data.example.net/documents/AF-004-4.pdf"
+      ],
+      "condition": "new",
+      "price": 34.99,
+      "change": 5,
+      "discount": -5,
+      "stock": 45,
+      "vendor": "https://data.example.net/vendors/0002",
+      "categories": [
+        "https://data.example.net/categories/1200",
+        "https://data.example.net/categories/1000"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-04-05 / Emily R."
+          },
+          "comment": {
+            "en": "Good value for a set of three, nice level of detail"
+          },
+          "author": "Emily R.",
+          "posted": "2025-04-05T10:56:07.428Z",
+          "rating": 3,
+          "content": {
+            "en": "Good value for a set of three, nice level of detail"
+          }
+        }
+      ],
+      "created": "2025-01-15T07:24:14.365Z",
+      "updated": "2025-05-20T17:56:01.477Z"
+    },
+    {
+      "id": "https://data.example.net/products/AF-005",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Captain Cosmos Vintage"
+      },
+      "sku": "AF-005",
+      "name": {
+        "en": "Captain Cosmos Vintage"
+      },
+      "launched": "2019-05-01",
+      "documents": [
+        "https://data.example.net/documents/AF-005-1.pdf"
+      ],
+      "condition": "used",
+      "price": 15.99,
+      "change": -4,
+      "stock": 3,
+      "vendor": "https://data.example.net/vendors/0001",
+      "categories": [
+        "https://data.example.net/categories/1100"
+      ],
+      "created": "2025-03-01T19:31:07.400Z"
+    },
+    {
+      "id": "https://data.example.net/products/AF-006",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Iron Phoenix",
+        "de": "Eisenphönix",
+        "fr": "Phénix de Fer",
+        "it": "Fenice di Ferro"
+      },
+      "sku": "AF-006",
+      "name": {
+        "en": "Iron Phoenix",
+        "de": "Eisenphönix",
+        "fr": "Phénix de Fer",
+        "it": "Fenice di Ferro"
+      },
+      "launched": "2024-08-15",
+      "warranty": "P1Y",
+      "documents": [
+        "https://data.example.net/documents/AF-006-1.pdf",
+        "https://data.example.net/documents/AF-006-2.pdf"
+      ],
+      "condition": "new",
+      "price": 22.99,
+      "change": 1.5,
+      "stock": 120,
+      "vendor": "https://data.example.net/vendors/0001",
+      "categories": [
+        "https://data.example.net/categories/1110",
+        "https://data.example.net/categories/1100"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-05-10 / Luca F."
+          },
+          "comment": {
+            "it": "Ottima figura con dettagli molto curati e buona articolazione"
+          },
+          "author": "Luca F.",
+          "posted": "2025-05-10T03:48:23.076Z",
+          "rating": 4,
+          "content": {
+            "it": "Ottima figura con dettagli molto curati e buona articolazione"
+          }
+        }
+      ],
+      "created": "2025-02-15T14:20:15.386Z"
+    },
+    {
+      "id": "https://data.example.net/products/AF-007",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Triceratops Explorer",
+        "it": "Esploratore Triceratopo"
+      },
+      "comment": {
+        "en": "Sturdy triceratops figure with removable explorer saddle and gear",
+        "it": "Robusta figura di triceratopo con sella e attrezzatura rimovibili"
+      },
+      "sku": "AF-007",
+      "name": {
+        "en": "Triceratops Explorer",
+        "it": "Esploratore Triceratopo"
+      },
+      "description": {
+        "en": "Sturdy triceratops figure with removable explorer saddle and gear",
+        "it": "Robusta figura di triceratopo con sella e attrezzatura rimovibili"
+      },
+      "keywords": {
+        "en": [
+          "dinosaur",
+          "triceratops"
+        ],
+        "it": [
+          "dinosauro",
+          "triceratopo"
+        ]
+      },
+      "launched": "2024-04-01",
+      "warranty": "P1Y6M",
+      "documents": [
+        "https://data.example.net/documents/AF-007-1.pdf",
+        "https://data.example.net/documents/AF-007-2.pdf",
+        "https://data.example.net/documents/AF-007-3.pdf"
+      ],
+      "condition": "new",
+      "price": 27.99,
+      "discount": -2,
+      "stock": 60,
+      "vendor": "https://data.example.net/vendors/0004",
+      "categories": [
+        "https://data.example.net/categories/1200"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-03-01 / Giulia M."
+          },
+          "comment": {
+            "it": "Bellissimo giocattolo, la sella si monta facilmente e tiene bene"
+          },
+          "author": "Giulia M.",
+          "posted": "2025-03-01T07:36:12.284Z",
+          "rating": 5,
+          "content": {
+            "it": "Bellissimo giocattolo, la sella si monta facilmente e tiene bene"
+          }
+        },
+        {
+          "label": {
+            "und": "2025-04-18 / James H."
+          },
+          "comment": {
+            "en": "Kids love the saddle feature, well made and durable"
+          },
+          "author": "James H.",
+          "posted": "2025-04-18T23:11:39.514Z",
+          "rating": 4,
+          "content": {
+            "en": "Kids love the saddle feature, well made and durable"
+          }
+        }
+      ],
+      "created": "2025-01-20T18:07:21.222Z"
+    },
+    {
+      "id": "https://data.example.net/products/AF-008",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Shadow Warrior"
+      },
+      "sku": "AF-008",
+      "name": {
+        "en": "Shadow Warrior"
+      },
+      "launched": "2025-01-15",
+      "documents": [
+        "https://data.example.net/documents/AF-008-1.pdf"
+      ],
+      "condition": "new",
+      "price": 18.99,
+      "change": -0.5,
+      "stock": 90,
+      "vendor": "https://data.example.net/vendors/0005",
+      "categories": [
+        "https://data.example.net/categories/1000"
+      ],
+      "created": "2025-04-01T07:10:57.725Z"
+    },
+    {
+      "id": "https://data.example.net/products/AF-009",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Galactic Heroes Set",
+        "de": "Galaktische Helden Set",
+        "fr": "Coffret Héros Galactiques",
+        "it": "Set Eroi Galattici"
+      },
+      "comment": {
+        "en": "Deluxe five-figure set with interchangeable weapons and display stand",
+        "de": "Deluxe-Set mit fünf Figuren, austauschbaren Waffen und Displayständer",
+        "fr": "Coffret de cinq figurines avec armes interchangeables et socle",
+        "it": "Set deluxe di cinque figure con armi intercambiabili e espositore"
+      },
+      "sku": "AF-009",
+      "name": {
+        "en": "Galactic Heroes Set",
+        "de": "Galaktische Helden Set",
+        "fr": "Coffret Héros Galactiques",
+        "it": "Set Eroi Galattici"
+      },
+      "description": {
+        "en": "Deluxe five-figure set with interchangeable weapons and display stand",
+        "de": "Deluxe-Set mit fünf Figuren, austauschbaren Waffen und Displayständer",
+        "fr": "Coffret de cinq figurines avec armes interchangeables et socle",
+        "it": "Set deluxe di cinque figure con armi intercambiabili e espositore"
+      },
+      "keywords": {
+        "en": [
+          "superhero",
+          "galactic",
+          "set",
+          "deluxe"
+        ],
+        "en-US": [
+          "superhero",
+          "action-figure"
+        ],
+        "de": [
+          "Superheld",
+          "galaktisch",
+          "Set",
+          "Deluxe"
+        ],
+        "fr": [
+          "super-héros",
+          "galactique",
+          "coffret"
+        ],
+        "it": [
+          "supereroe",
+          "galattico",
+          "set",
+          "deluxe"
+        ]
+      },
+      "homepage": "https://data.example.net/products/AF-009",
+      "launched": "2024-09-01",
+      "warranty": "P2Y",
+      "documents": [
+        "https://data.example.net/documents/AF-009-1.pdf",
+        "https://data.example.net/documents/AF-009-2.pdf",
+        "https://data.example.net/documents/AF-009-3.pdf",
+        "https://data.example.net/documents/AF-009-4.pdf",
+        "https://data.example.net/documents/AF-009-5.pdf"
+      ],
+      "condition": "new",
+      "price": 49.99,
+      "change": 3,
+      "discount": -8,
+      "stock": 30,
+      "vendor": "https://data.example.net/vendors/0001",
+      "categories": [
+        "https://data.example.net/categories/1100",
+        "https://data.example.net/categories/1110"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-02-14 / Mike T."
+          },
+          "comment": {
+            "en": "Best action figure set I have ever purchased, incredible value"
+          },
+          "author": "Mike T.",
+          "posted": "2025-02-14T14:31:29.365Z",
+          "rating": 5,
+          "content": {
+            "en": "Best action figure set I have ever purchased, incredible value"
+          }
+        },
+        {
+          "label": {
+            "und": "2025-03-22 / Claudia R."
+          },
+          "comment": {
+            "de": "Hervorragendes Set, die Figuren sind wunderschön verarbeitet"
+          },
+          "author": "Claudia R.",
+          "posted": "2025-03-22T07:23:24.429Z",
+          "rating": 5,
+          "content": {
+            "de": "Hervorragendes Set, die Figuren sind wunderschön verarbeitet"
+          }
+        },
+        {
+          "label": {
+            "und": "2025-04-30 / Jean-Luc P."
+          },
+          "comment": {
+            "fr": "Très beau coffret, seul le socle pourrait être plus stable"
+          },
+          "author": "Jean-Luc P.",
+          "posted": "2025-04-30T07:21:06.729Z",
+          "rating": 4,
+          "content": {
+            "fr": "Très beau coffret, seul le socle pourrait être plus stable"
+          }
+        }
+      ],
+      "created": "2025-01-20T09:00:21.536Z",
+      "updated": "2025-06-01T04:52:54.964Z"
+    },
+    {
+      "id": "https://data.example.net/products/AF-010",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Prehistoric Battle Pack"
+      },
+      "comment": {
+        "en": "Refurbished collector set featuring six dinosaur figures in battle poses"
+      },
+      "sku": "AF-010",
+      "name": {
+        "en": "Prehistoric Battle Pack"
+      },
+      "description": {
+        "en": "Refurbished collector set featuring six dinosaur figures in battle poses"
+      },
+      "launched": "2022-06-15",
+      "documents": [
+        "https://data.example.net/documents/AF-010-1.pdf",
+        "https://data.example.net/documents/AF-010-2.pdf",
+        "https://data.example.net/documents/AF-010-3.pdf"
+      ],
+      "condition": "refurbished",
+      "price": 39.99,
+      "change": -2.5,
+      "discount": -10,
+      "stock": 12,
+      "vendor": "https://data.example.net/vendors/0002",
+      "categories": [
+        "https://data.example.net/categories/1200",
+        "https://data.example.net/categories/1000"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-05-01 / Dave C."
+          },
+          "comment": {
+            "en": "Good condition for refurbished but some paint chips on two figures"
+          },
+          "author": "Dave C.",
+          "posted": "2025-05-01T19:13:30.197Z",
+          "rating": 3,
+          "content": {
+            "en": "Good condition for refurbished but some paint chips on two figures"
+          }
+        }
+      ],
+      "created": "2025-02-10T20:48:59.344Z"
+    },
+    {
+      "id": "https://data.example.net/products/AF-011",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Mega Dinosaur Collection",
+        "de": "Mega-Dinosaurier-Sammlung"
+      },
+      "comment": {
+        "en": "Complete set of twelve hand-painted dinosaur figures with field guide booklet"
+      },
+      "sku": "AF-011",
+      "name": {
+        "en": "Mega Dinosaur Collection",
+        "de": "Mega-Dinosaurier-Sammlung"
+      },
+      "description": {
+        "en": "Complete set of twelve hand-painted dinosaur figures with field guide booklet"
+      },
+      "homepage": "https://data.example.net/products/AF-011",
+      "launched": "2024-11-01",
+      "warranty": "P3Y",
+      "documents": [
+        "https://data.example.net/documents/AF-011-1.pdf",
+        "https://data.example.net/documents/AF-011-2.pdf",
+        "https://data.example.net/documents/AF-011-3.pdf",
+        "https://data.example.net/documents/AF-011-4.pdf"
+      ],
+      "condition": "new",
+      "price": 64.99,
+      "change": 8,
+      "stock": 25,
+      "vendor": "https://data.example.net/vendors/0001",
+      "categories": [
+        "https://data.example.net/categories/1200"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-03-10 / Nina K."
+          },
+          "comment": {
+            "en": "Museum quality figures and the field guide is a lovely addition"
+          },
+          "author": "Nina K.",
+          "posted": "2025-03-10T15:40:53.122Z",
+          "rating": 5,
+          "content": {
+            "en": "Museum quality figures and the field guide is a lovely addition"
+          }
+        },
+        {
+          "label": {
+            "und": "2025-04-22 / Bernd S."
+          },
+          "comment": {
+            "de": "Sehr schöne Sammlung, die Bemalung ist detailliert und hochwertig"
+          },
+          "author": "Bernd S.",
+          "posted": "2025-04-22T16:59:58.130Z",
+          "rating": 4,
+          "content": {
+            "de": "Sehr schöne Sammlung, die Bemalung ist detailliert und hochwertig"
+          }
+        }
+      ],
+      "created": "2025-01-25T08:02:32.174Z"
+    },
+    {
+      "id": "https://data.example.net/products/AF-012",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Classic Hero Collection"
+      },
+      "sku": "AF-012",
+      "name": {
+        "en": "Classic Hero Collection"
+      },
+      "launched": "2018-03-01",
+      "documents": [
+        "https://data.example.net/documents/AF-012-1.pdf"
+      ],
+      "condition": "used",
+      "price": 12.99,
+      "change": -6,
+      "stock": 5,
+      "vendor": "https://data.example.net/vendors/0002",
+      "categories": [
+        "https://data.example.net/categories/1110"
+      ],
+      "created": "2025-03-15T12:09:47.250Z"
+    },
+    {
+      "id": "https://data.example.net/products/AF-013",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Cosmic Villain Set"
+      },
+      "sku": "AF-013",
+      "name": {
+        "en": "Cosmic Villain Set"
+      },
+      "launched": "2025-02-01",
+      "warranty": "P1Y",
+      "documents": [
+        "https://data.example.net/documents/AF-013-1.pdf",
+        "https://data.example.net/documents/AF-013-2.pdf"
+      ],
+      "condition": "new",
+      "price": 32.99,
+      "stock": 70,
+      "vendor": "https://data.example.net/vendors/0005",
+      "categories": [
+        "https://data.example.net/categories/1100",
+        "https://data.example.net/categories/1000"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-05-15 / Yuki T."
+          },
+          "comment": {
+            "en": "Cool villain designs with good articulation points"
+          },
+          "author": "Yuki T.",
+          "posted": "2025-05-15T05:20:44.414Z",
+          "rating": 4,
+          "content": {
+            "en": "Cool villain designs with good articulation points"
+          }
+        }
+      ],
+      "created": "2025-04-10T22:34:27.637Z"
+    },
+    {
+      "id": "https://data.example.net/products/BG-001",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Castle Siege",
+        "fr": "Siège du Château",
+        "de": "Burgbelagerung",
+        "it": "Assedio al Castello"
+      },
+      "comment": {
+        "en": "Medieval strategy game for two to four players with modular board tiles",
+        "fr": "Jeu de stratégie médiéval pour deux à quatre joueurs avec tuiles modulaires"
+      },
+      "sku": "BG-001",
+      "name": {
+        "en": "Castle Siege",
+        "fr": "Siège du Château",
+        "de": "Burgbelagerung",
+        "it": "Assedio al Castello"
+      },
+      "description": {
+        "en": "Medieval strategy game for two to four players with modular board tiles",
+        "fr": "Jeu de stratégie médiéval pour deux à quatre joueurs avec tuiles modulaires"
+      },
+      "keywords": {
+        "en": [
+          "strategy",
+          "medieval",
+          "castle"
+        ],
+        "fr": [
+          "stratégie",
+          "médiéval",
+          "château"
+        ]
+      },
+      "launched": "2024-02-01",
+      "documents": [
+        "https://data.example.net/documents/BG-001-1.pdf",
+        "https://data.example.net/documents/BG-001-2.pdf"
+      ],
+      "condition": "new",
+      "price": 44.99,
+      "change": 3.5,
+      "stock": 80,
+      "vendor": "https://data.example.net/vendors/0003",
+      "categories": [
+        "https://data.example.net/categories/2100"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-03-05 / Sophie B."
+          },
+          "comment": {
+            "fr": "Excellent jeu de stratégie avec une très belle composante tactique"
+          },
+          "author": "Sophie B.",
+          "posted": "2025-03-05T22:29:27.085Z",
+          "rating": 5,
+          "content": {
+            "fr": "Excellent jeu de stratégie avec une très belle composante tactique"
+          }
+        },
+        {
+          "label": {
+            "und": "2025-04-12 / Rob W."
+          },
+          "comment": {
+            "en": "Great strategy depth, the modular board adds a lot of replayability"
+          },
+          "author": "Rob W.",
+          "posted": "2025-04-12T18:09:34.606Z",
+          "rating": 4,
+          "content": {
+            "en": "Great strategy depth, the modular board adds a lot of replayability"
+          }
+        }
+      ],
+      "created": "2025-01-20T08:23:13.815Z"
+    },
+    {
+      "id": "https://data.example.net/products/BG-002",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Dragon Quest Adventure"
+      },
+      "comment": {
+        "en": "Cooperative role-playing board game with campaign mode and miniatures"
+      },
+      "sku": "BG-002",
+      "name": {
+        "en": "Dragon Quest Adventure"
+      },
+      "description": {
+        "en": "Cooperative role-playing board game with campaign mode and miniatures"
+      },
+      "launched": "2024-05-15",
+      "documents": [
+        "https://data.example.net/documents/BG-002-1.pdf",
+        "https://data.example.net/documents/BG-002-2.pdf",
+        "https://data.example.net/documents/BG-002-3.pdf"
+      ],
+      "condition": "new",
+      "price": 39.99,
+      "change": -1.5,
+      "discount": -4,
+      "stock": 55,
+      "vendor": "https://data.example.net/vendors/0003",
+      "categories": [
+        "https://data.example.net/categories/2100",
+        "https://data.example.net/categories/2000"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-04-20 / Chen Y."
+          },
+          "comment": {
+            "en": "Engaging campaign mode that keeps the whole family playing"
+          },
+          "author": "Chen Y.",
+          "posted": "2025-04-20T11:38:30.056Z",
+          "rating": 4,
+          "content": {
+            "en": "Engaging campaign mode that keeps the whole family playing"
+          }
+        }
+      ],
+      "created": "2025-02-01T15:40:09.801Z"
+    },
+    {
+      "id": "https://data.example.net/products/BG-003",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "World Wonders 1000pc Puzzle"
+      },
+      "sku": "BG-003",
+      "name": {
+        "en": "World Wonders 1000pc Puzzle"
+      },
+      "launched": "2023-09-01",
+      "documents": [
+        "https://data.example.net/documents/BG-003-1.pdf",
+        "https://data.example.net/documents/BG-003-2.pdf"
+      ],
+      "condition": "new",
+      "price": 19.99,
+      "stock": 180,
+      "vendor": "https://data.example.net/vendors/0004",
+      "categories": [
+        "https://data.example.net/categories/2200"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-01-28 / Anna P."
+          },
+          "comment": {
+            "en": "Beautiful artwork and thick quality pieces that fit well together"
+          },
+          "author": "Anna P.",
+          "posted": "2025-01-28T05:02:27.738Z",
+          "rating": 4,
+          "content": {
+            "en": "Beautiful artwork and thick quality pieces that fit well together"
+          }
+        },
+        {
+          "label": {
+            "und": "2025-03-14 / Marco V."
+          },
+          "comment": {
+            "it": "Puzzle meraviglioso con immagini molto dettagliate e colorate"
+          },
+          "author": "Marco V.",
+          "posted": "2025-03-14T23:32:02.646Z",
+          "rating": 5,
+          "content": {
+            "it": "Puzzle meraviglioso con immagini molto dettagliate e colorate"
+          }
+        }
+      ],
+      "created": "2025-01-10T09:29:22.380Z"
+    },
+    {
+      "id": "https://data.example.net/products/BG-004",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Eiffel Tower 3D",
+        "fr": "Tour Eiffel 3D",
+        "it": "Torre Eiffel 3D"
+      },
+      "comment": {
+        "en": "Detailed 816-piece 3D puzzle replica of the Eiffel Tower standing 60cm tall",
+        "fr": "Réplique détaillée de la Tour Eiffel en puzzle 3D de 816 pièces, hauteur 60cm"
+      },
+      "sku": "BG-004",
+      "name": {
+        "en": "Eiffel Tower 3D",
+        "fr": "Tour Eiffel 3D",
+        "it": "Torre Eiffel 3D"
+      },
+      "description": {
+        "en": "Detailed 816-piece 3D puzzle replica of the Eiffel Tower standing 60cm tall",
+        "fr": "Réplique détaillée de la Tour Eiffel en puzzle 3D de 816 pièces, hauteur 60cm"
+      },
+      "homepage": "https://data.example.net/products/BG-004",
+      "launched": "2024-07-01",
+      "documents": [
+        "https://data.example.net/documents/BG-004-1.pdf",
+        "https://data.example.net/documents/BG-004-2.pdf",
+        "https://data.example.net/documents/BG-004-3.pdf"
+      ],
+      "condition": "new",
+      "price": 34.99,
+      "change": 2,
+      "stock": 40,
+      "vendor": "https://data.example.net/vendors/0004",
+      "categories": [
+        "https://data.example.net/categories/2210"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-02-10 / Claire D."
+          },
+          "comment": {
+            "fr": "Magnifique résultat final, les pièces sont précises et solides"
+          },
+          "author": "Claire D.",
+          "posted": "2025-02-10T20:50:54.553Z",
+          "rating": 5,
+          "content": {
+            "fr": "Magnifique résultat final, les pièces sont précises et solides"
+          }
+        },
+        {
+          "label": {
+            "und": "2025-03-28 / Oliver N."
+          },
+          "comment": {
+            "en": "Impressive when finished, the instructions could be clearer though"
+          },
+          "author": "Oliver N.",
+          "posted": "2025-03-28T01:43:15.615Z",
+          "rating": 3,
+          "content": {
+            "en": "Impressive when finished, the instructions could be clearer though"
+          }
+        },
+        {
+          "label": {
+            "und": "2025-05-05 / Paola G."
+          },
+          "comment": {
+            "it": "Un capolavoro tridimensionale, perfetto come pezzo da esposizione"
+          },
+          "author": "Paola G.",
+          "posted": "2025-05-05T00:28:38.879Z",
+          "rating": 5,
+          "content": {
+            "it": "Un capolavoro tridimensionale, perfetto come pezzo da esposizione"
+          }
+        }
+      ],
+      "created": "2025-01-15T08:53:57.451Z"
+    },
+    {
+      "id": "https://data.example.net/products/BG-005",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Solar System 3D Puzzle"
+      },
+      "comment": {
+        "en": "Glow-in-the-dark 3D puzzle of the solar system with hanging display kit"
+      },
+      "sku": "BG-005",
+      "name": {
+        "en": "Solar System 3D Puzzle"
+      },
+      "description": {
+        "en": "Glow-in-the-dark 3D puzzle of the solar system with hanging display kit"
+      },
+      "keywords": {
+        "en": [
+          "space",
+          "solar system",
+          "glow"
+        ]
+      },
+      "launched": "2024-10-01",
+      "documents": [
+        "https://data.example.net/documents/BG-005-1.pdf",
+        "https://data.example.net/documents/BG-005-2.pdf",
+        "https://data.example.net/documents/BG-005-3.pdf"
+      ],
+      "condition": "new",
+      "price": 29.99,
+      "discount": -3.5,
+      "stock": 65,
+      "vendor": "https://data.example.net/vendors/0005",
+      "categories": [
+        "https://data.example.net/categories/2210",
+        "https://data.example.net/categories/2200"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-04-08 / Kenji A."
+          },
+          "comment": {
+            "en": "The glow effect is stunning and the planets are very realistic"
+          },
+          "author": "Kenji A.",
+          "posted": "2025-04-08T11:53:01.036Z",
+          "rating": 4,
+          "content": {
+            "en": "The glow effect is stunning and the planets are very realistic"
+          }
+        }
+      ],
+      "created": "2025-03-01T11:32:24.544Z"
+    },
+    {
+      "id": "https://data.example.net/products/BG-006",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Ancient Empires"
+      },
+      "sku": "BG-006",
+      "name": {
+        "en": "Ancient Empires"
+      },
+      "launched": "2020-01-15",
+      "documents": [
+        "https://data.example.net/documents/BG-006-1.pdf"
+      ],
+      "condition": "used",
+      "price": 25.99,
+      "change": -3,
+      "stock": 8,
+      "vendor": "https://data.example.net/vendors/0003",
+      "categories": [
+        "https://data.example.net/categories/2100"
+      ],
+      "created": "2025-02-20T15:35:37.129Z"
+    },
+    {
+      "id": "https://data.example.net/products/BG-007",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Ocean Explorer Puzzle"
+      },
+      "sku": "BG-007",
+      "name": {
+        "en": "Ocean Explorer Puzzle"
+      },
+      "launched": "2023-04-01",
+      "documents": [
+        "https://data.example.net/documents/BG-007-1.pdf",
+        "https://data.example.net/documents/BG-007-2.pdf"
+      ],
+      "condition": "new",
+      "price": 14.99,
+      "change": 0.5,
+      "stock": 220,
+      "vendor": "https://data.example.net/vendors/0004",
+      "categories": [
+        "https://data.example.net/categories/2200"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-02-15 / Lisa M."
+          },
+          "comment": {
+            "en": "Nice artwork but the piece quality could be better for the price"
+          },
+          "author": "Lisa M.",
+          "posted": "2025-02-15T18:48:58.432Z",
+          "rating": 3,
+          "content": {
+            "en": "Nice artwork but the piece quality could be better for the price"
+          }
+        }
+      ],
+      "created": "2025-01-05T02:26:58.968Z"
+    },
+    {
+      "id": "https://data.example.net/products/BG-008",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Medieval Kingdom",
+        "de": "Mittelalterliches Königreich"
+      },
+      "comment": {
+        "en": "Epic strategy board game with over 200 cards and expandable kingdom map",
+        "de": "Episches Strategie-Brettspiel mit über 200 Karten und erweiterbarer Königreichskarte"
+      },
+      "sku": "BG-008",
+      "name": {
+        "en": "Medieval Kingdom",
+        "de": "Mittelalterliches Königreich"
+      },
+      "description": {
+        "en": "Epic strategy board game with over 200 cards and expandable kingdom map",
+        "de": "Episches Strategie-Brettspiel mit über 200 Karten und erweiterbarer Königreichskarte"
+      },
+      "keywords": {
+        "en": [
+          "strategy",
+          "medieval",
+          "kingdom"
+        ],
+        "de": [
+          "Strategie",
+          "Mittelalter",
+          "Königreich"
+        ]
+      },
+      "homepage": "https://data.example.net/products/BG-008",
+      "launched": "2024-12-01",
+      "documents": [
+        "https://data.example.net/documents/BG-008-1.pdf",
+        "https://data.example.net/documents/BG-008-2.pdf",
+        "https://data.example.net/documents/BG-008-3.pdf",
+        "https://data.example.net/documents/BG-008-4.pdf"
+      ],
+      "condition": "new",
+      "price": 54.99,
+      "change": 4,
+      "discount": -6,
+      "stock": 35,
+      "vendor": "https://data.example.net/vendors/0001",
+      "categories": [
+        "https://data.example.net/categories/2100",
+        "https://data.example.net/categories/2000"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-03-01 / Fritz G."
+          },
+          "comment": {
+            "de": "Das beste Strategiespiel das ich je gespielt habe, grandios"
+          },
+          "author": "Fritz G.",
+          "posted": "2025-03-01T09:19:59.796Z",
+          "rating": 5,
+          "content": {
+            "de": "Das beste Strategiespiel das ich je gespielt habe, grandios"
+          }
+        },
+        {
+          "label": {
+            "und": "2025-04-15 / Jack S."
+          },
+          "comment": {
+            "en": "Deep gameplay with excellent components, long setup time though"
+          },
+          "author": "Jack S.",
+          "posted": "2025-04-15T08:18:04.929Z",
+          "rating": 3,
+          "content": {
+            "en": "Deep gameplay with excellent components, long setup time though"
+          }
+        }
+      ],
+      "created": "2025-01-30T15:55:44.850Z",
+      "updated": "2025-05-15T03:28:03.295Z"
+    },
+    {
+      "id": "https://data.example.net/products/BG-009",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Crystal Palace 3D Puzzle"
+      },
+      "comment": {
+        "en": "Translucent crystal-effect 3D puzzle that doubles as a LED lamp"
+      },
+      "sku": "BG-009",
+      "name": {
+        "en": "Crystal Palace 3D Puzzle"
+      },
+      "description": {
+        "en": "Translucent crystal-effect 3D puzzle that doubles as a LED lamp"
+      },
+      "launched": "2025-01-01",
+      "documents": [
+        "https://data.example.net/documents/BG-009-1.pdf",
+        "https://data.example.net/documents/BG-009-2.pdf",
+        "https://data.example.net/documents/BG-009-3.pdf"
+      ],
+      "condition": "new",
+      "price": 42.99,
+      "change": -2,
+      "stock": 20,
+      "vendor": "https://data.example.net/vendors/0005",
+      "categories": [
+        "https://data.example.net/categories/2210"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-05-20 / Haruki N."
+          },
+          "comment": {
+            "en": "Beautiful lamp effect when assembled, a real conversation piece"
+          },
+          "author": "Haruki N.",
+          "posted": "2025-05-20T06:25:43.722Z",
+          "rating": 4,
+          "content": {
+            "en": "Beautiful lamp effect when assembled, a real conversation piece"
+          }
+        }
+      ],
+      "created": "2025-04-05T05:25:47.624Z"
+    },
+    {
+      "id": "https://data.example.net/products/BG-010",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Pirate Treasure Hunt"
+      },
+      "sku": "BG-010",
+      "name": {
+        "en": "Pirate Treasure Hunt"
+      },
+      "launched": "2024-04-15",
+      "documents": [
+        "https://data.example.net/documents/BG-010-1.pdf",
+        "https://data.example.net/documents/BG-010-2.pdf"
+      ],
+      "condition": "new",
+      "price": 32.99,
+      "change": 1,
+      "stock": 95,
+      "vendor": "https://data.example.net/vendors/0001",
+      "categories": [
+        "https://data.example.net/categories/2000"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-02-25 / Amy J."
+          },
+          "comment": {
+            "en": "Fun family game with a good balance of luck and strategy"
+          },
+          "author": "Amy J.",
+          "posted": "2025-02-25T11:48:48.268Z",
+          "rating": 4,
+          "content": {
+            "en": "Fun family game with a good balance of luck and strategy"
+          }
+        },
+        {
+          "label": {
+            "und": "2025-05-10 / Paul R."
+          },
+          "comment": {
+            "en": "Entertaining but gets repetitive after many plays"
+          },
+          "author": "Paul R.",
+          "posted": "2025-05-10T05:39:13.380Z",
+          "rating": 3,
+          "content": {
+            "en": "Entertaining but gets repetitive after many plays"
+          }
+        }
+      ],
+      "created": "2025-01-15T05:37:07.604Z"
+    },
+    {
+      "id": "https://data.example.net/products/BG-011",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Quick Strategy Cards"
+      },
+      "sku": "BG-011",
+      "name": {
+        "en": "Quick Strategy Cards"
+      },
+      "launched": "2024-08-01",
+      "documents": [
+        "https://data.example.net/documents/BG-011-1.pdf"
+      ],
+      "condition": "new",
+      "price": 16.99,
+      "stock": 300,
+      "vendor": "https://data.example.net/vendors/0003",
+      "categories": [
+        "https://data.example.net/categories/2100"
+      ],
+      "created": "2025-02-10T08:07:32.388Z"
+    },
+    {
+      "id": "https://data.example.net/products/BG-012",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Animal Puzzle Set",
+        "it": "Set Puzzle Animali"
+      },
+      "sku": "BG-012",
+      "name": {
+        "en": "Animal Puzzle Set",
+        "it": "Set Puzzle Animali"
+      },
+      "launched": "2023-12-01",
+      "documents": [
+        "https://data.example.net/documents/BG-012-1.pdf",
+        "https://data.example.net/documents/BG-012-2.pdf"
+      ],
+      "condition": "new",
+      "price": 22.99,
+      "change": 1.5,
+      "discount": -2.5,
+      "stock": 110,
+      "vendor": "https://data.example.net/vendors/0004",
+      "categories": [
+        "https://data.example.net/categories/2200"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-04-01 / Rosa T."
+          },
+          "comment": {
+            "it": "Bel set di puzzle con illustrazioni vivaci, perfetto per bambini"
+          },
+          "author": "Rosa T.",
+          "posted": "2025-04-01T09:55:01.097Z",
+          "rating": 4,
+          "content": {
+            "it": "Bel set di puzzle con illustrazioni vivaci, perfetto per bambini"
+          }
+        }
+      ],
+      "created": "2025-01-10T06:41:50.525Z"
+    },
+    {
+      "id": "https://data.example.net/products/BG-013",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Rainforest 3D Puzzle"
+      },
+      "comment": {
+        "en": "Educational 3D puzzle depicting a rainforest ecosystem with animal figures"
+      },
+      "sku": "BG-013",
+      "name": {
+        "en": "Rainforest 3D Puzzle"
+      },
+      "description": {
+        "en": "Educational 3D puzzle depicting a rainforest ecosystem with animal figures"
+      },
+      "launched": "2024-06-15",
+      "documents": [
+        "https://data.example.net/documents/BG-013-1.pdf",
+        "https://data.example.net/documents/BG-013-2.pdf",
+        "https://data.example.net/documents/BG-013-3.pdf"
+      ],
+      "condition": "new",
+      "price": 36.99,
+      "stock": 45,
+      "vendor": "https://data.example.net/vendors/0004",
+      "categories": [
+        "https://data.example.net/categories/2210"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-03-18 / Elena B."
+          },
+          "comment": {
+            "en": "Wonderful educational puzzle, kids learn about animals while building"
+          },
+          "author": "Elena B.",
+          "posted": "2025-03-18T00:47:23.129Z",
+          "rating": 5,
+          "content": {
+            "en": "Wonderful educational puzzle, kids learn about animals while building"
+          }
+        },
+        {
+          "label": {
+            "und": "2025-05-08 / Andrea C."
+          },
+          "comment": {
+            "it": "Bellissimo puzzle educativo con animali realistici e ben fatti"
+          },
+          "author": "Andrea C.",
+          "posted": "2025-05-08T03:23:02.272Z",
+          "rating": 3,
+          "content": {
+            "it": "Bellissimo puzzle educativo con animali realistici e ben fatti"
+          }
+        }
+      ],
+      "created": "2025-02-01T16:11:03.701Z"
+    },
+    {
+      "id": "https://data.example.net/products/OT-001",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Turbo Trike"
+      },
+      "comment": {
+        "en": "Pedal-powered tricycle with adjustable seat and parent steering handle"
+      },
+      "sku": "OT-001",
+      "name": {
+        "en": "Turbo Trike"
+      },
+      "description": {
+        "en": "Pedal-powered tricycle with adjustable seat and parent steering handle"
+      },
+      "launched": "2024-03-01",
+      "warranty": "P2Y",
+      "documents": [
+        "https://data.example.net/documents/OT-001-1.pdf",
+        "https://data.example.net/documents/OT-001-2.pdf",
+        "https://data.example.net/documents/OT-001-3.pdf"
+      ],
+      "condition": "new",
+      "price": 89.99,
+      "change": 5,
+      "stock": 40,
+      "vendor": "https://data.example.net/vendors/0002",
+      "categories": [
+        "https://data.example.net/categories/3100"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-04-02 / Jenny L."
+          },
+          "comment": {
+            "en": "Sturdy trike that grows with the child, great steering handle"
+          },
+          "author": "Jenny L.",
+          "posted": "2025-04-02T18:05:52.549Z",
+          "rating": 5,
+          "content": {
+            "en": "Sturdy trike that grows with the child, great steering handle"
+          }
+        },
+        {
+          "label": {
+            "und": "2025-05-18 / Daniel F."
+          },
+          "comment": {
+            "en": "Well built and easy to assemble, good value for money"
+          },
+          "author": "Daniel F.",
+          "posted": "2025-05-18T12:46:59.288Z",
+          "rating": 4,
+          "content": {
+            "en": "Well built and easy to assemble, good value for money"
+          }
+        }
+      ],
+      "created": "2025-01-20T17:17:31.664Z"
+    },
+    {
+      "id": "https://data.example.net/products/OT-002",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Safari Jeep Ride-On",
+        "de": "Safari-Jeep zum Fahren",
+        "fr": "Jeep Safari à Conduire",
+        "it": "Jeep Safari Cavalcabile"
+      },
+      "comment": {
+        "en": "Battery-powered ride-on jeep with realistic safari decals and working horn",
+        "de": "Batteriebetriebener Fahr-Jeep mit Safari-Aufklebern und funktionierender Hupe",
+        "fr": "Jeep à conduire à batterie avec décalcomanies safari et klaxon fonctionnel",
+        "it": "Jeep cavalcabile a batteria con adesivi safari e clacson funzionante"
+      },
+      "sku": "OT-002",
+      "name": {
+        "en": "Safari Jeep Ride-On",
+        "de": "Safari-Jeep zum Fahren",
+        "fr": "Jeep Safari à Conduire",
+        "it": "Jeep Safari Cavalcabile"
+      },
+      "description": {
+        "en": "Battery-powered ride-on jeep with realistic safari decals and working horn",
+        "de": "Batteriebetriebener Fahr-Jeep mit Safari-Aufklebern und funktionierender Hupe",
+        "fr": "Jeep à conduire à batterie avec décalcomanies safari et klaxon fonctionnel",
+        "it": "Jeep cavalcabile a batteria con adesivi safari e clacson funzionante"
+      },
+      "keywords": {
+        "en": [
+          "safari",
+          "jeep",
+          "ride-on",
+          "battery"
+        ],
+        "de": [
+          "Safari",
+          "Jeep",
+          "Fahrzeug",
+          "Batterie"
+        ],
+        "fr": [
+          "safari",
+          "jeep",
+          "véhicule",
+          "batterie"
+        ],
+        "it": [
+          "safari",
+          "jeep",
+          "cavalcabile",
+          "batteria"
+        ]
+      },
+      "homepage": "https://data.example.net/products/OT-002",
+      "launched": "2024-01-15",
+      "warranty": "P3Y",
+      "documents": [
+        "https://data.example.net/documents/OT-002-1.pdf",
+        "https://data.example.net/documents/OT-002-2.pdf",
+        "https://data.example.net/documents/OT-002-3.pdf",
+        "https://data.example.net/documents/OT-002-4.pdf",
+        "https://data.example.net/documents/OT-002-5.pdf"
+      ],
+      "condition": "new",
+      "price": 129.99,
+      "change": 10,
+      "discount": -15,
+      "stock": 15,
+      "vendor": "https://data.example.net/vendors/0001",
+      "categories": [
+        "https://data.example.net/categories/3100",
+        "https://data.example.net/categories/3000"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-02-20 / Kate M."
+          },
+          "comment": {
+            "en": "Our daughter's favourite toy, drives around the garden all day long"
+          },
+          "author": "Kate M.",
+          "posted": "2025-02-20T05:24:35.601Z",
+          "rating": 5,
+          "content": {
+            "en": "Our daughter's favourite toy, drives around the garden all day long"
+          }
+        },
+        {
+          "label": {
+            "und": "2025-03-30 / Stefan H."
+          },
+          "comment": {
+            "de": "Phantastisches Fahrzeug, die Batterie hält überraschend lange"
+          },
+          "author": "Stefan H.",
+          "posted": "2025-03-30T06:40:20.486Z",
+          "rating": 5,
+          "content": {
+            "de": "Phantastisches Fahrzeug, die Batterie hält überraschend lange"
+          }
+        },
+        {
+          "label": {
+            "und": "2025-05-12 / Isabelle C."
+          },
+          "comment": {
+            "fr": "Superbe jeep, les enfants adorent, un peu bruyant cependant"
+          },
+          "author": "Isabelle C.",
+          "posted": "2025-05-12T12:20:43.776Z",
+          "rating": 4,
+          "content": {
+            "fr": "Superbe jeep, les enfants adorent, un peu bruyant cependant"
+          }
+        }
+      ],
+      "created": "2025-01-10T21:26:25.316Z",
+      "updated": "2025-06-05T03:26:45.957Z"
+    },
+    {
+      "id": "https://data.example.net/products/OT-003",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Water Blaster Pro"
+      },
+      "sku": "OT-003",
+      "name": {
+        "en": "Water Blaster Pro"
+      },
+      "launched": "2024-05-01",
+      "warranty": "P6M",
+      "documents": [
+        "https://data.example.net/documents/OT-003-1.pdf",
+        "https://data.example.net/documents/OT-003-2.pdf"
+      ],
+      "condition": "new",
+      "price": 24.99,
+      "change": -0.5,
+      "stock": 250,
+      "vendor": "https://data.example.net/vendors/0003",
+      "categories": [
+        "https://data.example.net/categories/3000"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-05-25 / Sam B."
+          },
+          "comment": {
+            "en": "Powerful water blaster with good range and easy pump action"
+          },
+          "author": "Sam B.",
+          "posted": "2025-05-25T19:37:31.005Z",
+          "rating": 4,
+          "content": {
+            "en": "Powerful water blaster with good range and easy pump action"
+          }
+        }
+      ],
+      "created": "2025-02-01T22:32:11.743Z"
+    },
+    {
+      "id": "https://data.example.net/products/OT-004",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Garden Playset"
+      },
+      "comment": {
+        "en": "All-weather outdoor play station with slide, climbing wall and sandbox"
+      },
+      "sku": "OT-004",
+      "name": {
+        "en": "Garden Playset"
+      },
+      "description": {
+        "en": "All-weather outdoor play station with slide, climbing wall and sandbox"
+      },
+      "launched": "2024-09-15",
+      "warranty": "P1Y",
+      "documents": [
+        "https://data.example.net/documents/OT-004-1.pdf",
+        "https://data.example.net/documents/OT-004-2.pdf",
+        "https://data.example.net/documents/OT-004-3.pdf"
+      ],
+      "condition": "new",
+      "price": 59.99,
+      "stock": 30,
+      "vendor": "https://data.example.net/vendors/0005",
+      "categories": [
+        "https://data.example.net/categories/3000"
+      ],
+      "created": "2025-03-15T08:26:08.141Z"
+    },
+    {
+      "id": "https://data.example.net/products/OT-005",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Vintage Balance Bike"
+      },
+      "sku": "OT-005",
+      "name": {
+        "en": "Vintage Balance Bike"
+      },
+      "launched": "2020-06-01",
+      "documents": [
+        "https://data.example.net/documents/OT-005-1.pdf"
+      ],
+      "condition": "used",
+      "price": 45.99,
+      "change": -8,
+      "stock": 4,
+      "vendor": "https://data.example.net/vendors/0004",
+      "categories": [
+        "https://data.example.net/categories/3100"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-03-12 / Marta Z."
+          },
+          "comment": {
+            "en": "Shows some wear but still functional, a good starter bike"
+          },
+          "author": "Marta Z.",
+          "posted": "2025-03-12T07:55:45.691Z",
+          "rating": 3,
+          "content": {
+            "en": "Shows some wear but still functional, a good starter bike"
+          }
+        }
+      ],
+      "created": "2025-02-15T17:20:27.571Z"
+    },
+    {
+      "id": "https://data.example.net/products/OT-006",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Bubble Machine Deluxe"
+      },
+      "sku": "OT-006",
+      "name": {
+        "en": "Bubble Machine Deluxe"
+      },
+      "launched": "2024-07-01",
+      "documents": [
+        "https://data.example.net/documents/OT-006-1.pdf",
+        "https://data.example.net/documents/OT-006-2.pdf"
+      ],
+      "condition": "new",
+      "price": 19.99,
+      "change": 0.5,
+      "stock": 180,
+      "vendor": "https://data.example.net/vendors/0003",
+      "categories": [
+        "https://data.example.net/categories/3000"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-04-25 / Helen K."
+          },
+          "comment": {
+            "en": "Produces hundreds of bubbles per minute, kids absolutely love it"
+          },
+          "author": "Helen K.",
+          "posted": "2025-04-25T15:13:44.662Z",
+          "rating": 5,
+          "content": {
+            "en": "Produces hundreds of bubbles per minute, kids absolutely love it"
+          }
+        },
+        {
+          "label": {
+            "und": "2025-05-30 / Olga S."
+          },
+          "comment": {
+            "en": "Fun for garden parties, uses a lot of bubble solution though"
+          },
+          "author": "Olga S.",
+          "posted": "2025-05-30T04:10:49.356Z",
+          "rating": 4,
+          "content": {
+            "en": "Fun for garden parties, uses a lot of bubble solution though"
+          }
+        }
+      ],
+      "created": "2025-01-25T20:56:53.360Z"
+    },
+    {
+      "id": "https://data.example.net/products/OT-007",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Racing Kart"
+      },
+      "comment": {
+        "en": "High-performance pedal go-kart with adjustable frame and hand brake"
+      },
+      "sku": "OT-007",
+      "name": {
+        "en": "Racing Kart"
+      },
+      "description": {
+        "en": "High-performance pedal go-kart with adjustable frame and hand brake"
+      },
+      "homepage": "https://data.example.net/products/OT-007",
+      "launched": "2024-11-15",
+      "warranty": "P2Y",
+      "documents": [
+        "https://data.example.net/documents/OT-007-1.pdf",
+        "https://data.example.net/documents/OT-007-2.pdf",
+        "https://data.example.net/documents/OT-007-3.pdf",
+        "https://data.example.net/documents/OT-007-4.pdf"
+      ],
+      "condition": "new",
+      "price": 149.99,
+      "change": 12,
+      "discount": -20,
+      "stock": 10,
+      "vendor": "https://data.example.net/vendors/0002",
+      "categories": [
+        "https://data.example.net/categories/3100"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-03-08 / Chris D."
+          },
+          "comment": {
+            "en": "Premium quality go-kart with smooth pedalling and solid brakes"
+          },
+          "author": "Chris D.",
+          "posted": "2025-03-08T07:15:33.776Z",
+          "rating": 5,
+          "content": {
+            "en": "Premium quality go-kart with smooth pedalling and solid brakes"
+          }
+        },
+        {
+          "label": {
+            "und": "2025-04-28 / Nadia E."
+          },
+          "comment": {
+            "en": "Excellent kart but assembly takes about two hours"
+          },
+          "author": "Nadia E.",
+          "posted": "2025-04-28T19:50:22.064Z",
+          "rating": 4,
+          "content": {
+            "en": "Excellent kart but assembly takes about two hours"
+          }
+        }
+      ],
+      "created": "2025-01-15T04:19:40.791Z"
+    },
+    {
+      "id": "https://data.example.net/products/OT-008",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Sandbox Castle Kit"
+      },
+      "sku": "OT-008",
+      "name": {
+        "en": "Sandbox Castle Kit"
+      },
+      "launched": "2023-03-01",
+      "documents": [
+        "https://data.example.net/documents/OT-008-1.pdf",
+        "https://data.example.net/documents/OT-008-2.pdf"
+      ],
+      "condition": "new",
+      "price": 29.99,
+      "stock": 90,
+      "vendor": "https://data.example.net/vendors/0004",
+      "categories": [
+        "https://data.example.net/categories/3000"
+      ],
+      "created": "2025-01-05T14:46:16.620Z"
+    },
+    {
+      "id": "https://data.example.net/products/OT-009",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Electric Scooter Mini"
+      },
+      "comment": {
+        "en": "Refurbished compact electric scooter for children aged five and up"
+      },
+      "sku": "OT-009",
+      "name": {
+        "en": "Electric Scooter Mini"
+      },
+      "description": {
+        "en": "Refurbished compact electric scooter for children aged five and up"
+      },
+      "homepage": "https://data.example.net/products/OT-009",
+      "launched": "2023-08-01",
+      "warranty": "P1Y",
+      "documents": [
+        "https://data.example.net/documents/OT-009-1.pdf",
+        "https://data.example.net/documents/OT-009-2.pdf"
+      ],
+      "condition": "refurbished",
+      "price": 99.99,
+      "change": -15,
+      "discount": -12,
+      "stock": -5,
+      "vendor": "https://data.example.net/vendors/0005",
+      "categories": [
+        "https://data.example.net/categories/3100",
+        "https://data.example.net/categories/3000"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-04-15 / David W."
+          },
+          "comment": {
+            "en": "Works well for refurbished, battery lasts about 45 minutes"
+          },
+          "author": "David W.",
+          "posted": "2025-04-15T19:01:23.359Z",
+          "rating": 3,
+          "content": {
+            "en": "Works well for refurbished, battery lasts about 45 minutes"
+          }
+        }
+      ],
+      "created": "2025-03-01T21:35:16.321Z"
+    },
+    {
+      "id": "https://data.example.net/products/OT-010",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Classic Swing Set",
+        "de": "Klassisches Schaukelgestell"
+      },
+      "comment": {
+        "en": "Heavy-duty galvanised steel swing set with two seats and trapeze bar"
+      },
+      "sku": "OT-010",
+      "name": {
+        "en": "Classic Swing Set",
+        "de": "Klassisches Schaukelgestell"
+      },
+      "description": {
+        "en": "Heavy-duty galvanised steel swing set with two seats and trapeze bar"
+      },
+      "homepage": "https://data.example.net/products/OT-010",
+      "launched": "2024-02-15",
+      "warranty": "P5Y",
+      "documents": [
+        "https://data.example.net/documents/OT-010-1.pdf",
+        "https://data.example.net/documents/OT-010-2.pdf",
+        "https://data.example.net/documents/OT-010-3.pdf"
+      ],
+      "condition": "new",
+      "price": 199.99,
+      "stock": 8,
+      "vendor": "https://data.example.net/vendors/0001",
+      "categories": [
+        "https://data.example.net/categories/3000"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-05-05 / Laura H."
+          },
+          "comment": {
+            "en": "Built like a tank, this will last for years in the garden"
+          },
+          "author": "Laura H.",
+          "posted": "2025-05-05T23:43:23.474Z",
+          "rating": 5,
+          "content": {
+            "en": "Built like a tank, this will last for years in the garden"
+          }
+        }
+      ],
+      "created": "2025-01-10T03:04:12.839Z"
+    },
+    {
+      "id": "https://data.example.net/products/OT-011",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Kickboard Pro"
+      },
+      "sku": "OT-011",
+      "name": {
+        "en": "Kickboard Pro"
+      },
+      "launched": "2024-10-01",
+      "warranty": "P1Y",
+      "documents": [
+        "https://data.example.net/documents/OT-011-1.pdf",
+        "https://data.example.net/documents/OT-011-2.pdf"
+      ],
+      "condition": "new",
+      "price": 74.99,
+      "change": 3,
+      "discount": -5,
+      "stock": 55,
+      "vendor": "https://data.example.net/vendors/0001",
+      "categories": [
+        "https://data.example.net/categories/3100"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-04-20 / Oscar P."
+          },
+          "comment": {
+            "en": "Smooth ride with responsive steering, great for older kids"
+          },
+          "author": "Oscar P.",
+          "posted": "2025-04-20T18:18:00.014Z",
+          "rating": 4,
+          "content": {
+            "en": "Smooth ride with responsive steering, great for older kids"
+          }
+        }
+      ],
+      "created": "2025-02-01T05:15:36.909Z"
+    },
+    {
+      "id": "https://data.example.net/products/OT-012",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Splash Pad"
+      },
+      "sku": "OT-012",
+      "name": {
+        "en": "Splash Pad"
+      },
+      "launched": "2024-06-01",
+      "documents": [
+        "https://data.example.net/documents/OT-012-1.pdf",
+        "https://data.example.net/documents/OT-012-2.pdf"
+      ],
+      "condition": "new",
+      "price": 49.99,
+      "change": -1,
+      "stock": 70,
+      "vendor": "https://data.example.net/vendors/0003",
+      "categories": [
+        "https://data.example.net/categories/3000"
+      ],
+      "created": "2025-02-10T09:26:46.069Z"
+    },
+    {
+      "id": "https://data.example.net/products/BS-001",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Space Station Builder"
+      },
+      "comment": {
+        "en": "Modular space station construction kit with astronaut figures and LED lights"
+      },
+      "sku": "BS-001",
+      "name": {
+        "en": "Space Station Builder"
+      },
+      "description": {
+        "en": "Modular space station construction kit with astronaut figures and LED lights"
+      },
+      "keywords": {
+        "en": [
+          "space",
+          "construction",
+          "modular"
+        ]
+      },
+      "homepage": "https://data.example.net/products/BS-001",
+      "launched": "2024-04-01",
+      "warranty": "P2Y",
+      "documents": [
+        "https://data.example.net/documents/BS-001-1.pdf",
+        "https://data.example.net/documents/BS-001-2.pdf",
+        "https://data.example.net/documents/BS-001-3.pdf",
+        "https://data.example.net/documents/BS-001-4.pdf"
+      ],
+      "condition": "new",
+      "price": 69.99,
+      "change": 4.5,
+      "stock": 50,
+      "vendor": "https://data.example.net/vendors/0001",
+      "categories": [
+        "https://data.example.net/categories/4000"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-02-18 / Ryan O."
+          },
+          "comment": {
+            "en": "Incredible modular design with endless build combinations"
+          },
+          "author": "Ryan O.",
+          "posted": "2025-02-18T23:13:51.565Z",
+          "rating": 5,
+          "content": {
+            "en": "Incredible modular design with endless build combinations"
+          }
+        },
+        {
+          "label": {
+            "und": "2025-03-25 / Emma B."
+          },
+          "comment": {
+            "en": "The LED lights make the finished station look spectacular"
+          },
+          "author": "Emma B.",
+          "posted": "2025-03-25T04:02:31.523Z",
+          "rating": 5,
+          "content": {
+            "en": "The LED lights make the finished station look spectacular"
+          }
+        },
+        {
+          "label": {
+            "und": "2025-05-01 / Tobias K."
+          },
+          "comment": {
+            "de": "Großartiges Bausystem, die LEDs sind ein tolles Feature"
+          },
+          "author": "Tobias K.",
+          "posted": "2025-05-01T11:08:52.907Z",
+          "rating": 4,
+          "content": {
+            "de": "Großartiges Bausystem, die LEDs sind ein tolles Feature"
+          }
+        }
+      ],
+      "created": "2025-01-15T18:47:31.289Z"
+    },
+    {
+      "id": "https://data.example.net/products/BS-002",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Robot Factory"
+      },
+      "comment": {
+        "en": "Build and program your own robots with snap-together motorised parts"
+      },
+      "sku": "BS-002",
+      "name": {
+        "en": "Robot Factory"
+      },
+      "description": {
+        "en": "Build and program your own robots with snap-together motorised parts"
+      },
+      "homepage": "https://data.example.net/products/BS-002",
+      "launched": "2024-07-15",
+      "warranty": "P1Y",
+      "documents": [
+        "https://data.example.net/documents/BS-002-1.pdf",
+        "https://data.example.net/documents/BS-002-2.pdf",
+        "https://data.example.net/documents/BS-002-3.pdf"
+      ],
+      "condition": "new",
+      "price": 49.99,
+      "change": -1.5,
+      "discount": -5,
+      "stock": 75,
+      "vendor": "https://data.example.net/vendors/0002",
+      "categories": [
+        "https://data.example.net/categories/4000"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-03-10 / Zoe T."
+          },
+          "comment": {
+            "en": "Fun introduction to robotics for kids, clear instructions"
+          },
+          "author": "Zoe T.",
+          "posted": "2025-03-10T05:04:59.200Z",
+          "rating": 4,
+          "content": {
+            "en": "Fun introduction to robotics for kids, clear instructions"
+          }
+        },
+        {
+          "label": {
+            "und": "2025-04-22 / Kevin A."
+          },
+          "comment": {
+            "en": "Good STEM toy but needs four AA batteries not included"
+          },
+          "author": "Kevin A.",
+          "posted": "2025-04-22T22:52:33.822Z",
+          "rating": 4,
+          "content": {
+            "en": "Good STEM toy but needs four AA batteries not included"
+          }
+        }
+      ],
+      "created": "2025-01-20T03:42:16.945Z"
+    },
+    {
+      "id": "https://data.example.net/products/BS-003",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Wooden Castle Blocks",
+        "it": "Blocchi Castello in Legno"
+      },
+      "comment": {
+        "en": "Hand-finished natural wood building blocks in a castle theme with drawbridge",
+        "it": "Blocchi da costruzione in legno naturale a tema castello con ponte levatoio"
+      },
+      "sku": "BS-003",
+      "name": {
+        "en": "Wooden Castle Blocks",
+        "it": "Blocchi Castello in Legno"
+      },
+      "description": {
+        "en": "Hand-finished natural wood building blocks in a castle theme with drawbridge",
+        "it": "Blocchi da costruzione in legno naturale a tema castello con ponte levatoio"
+      },
+      "keywords": {
+        "en": [
+          "wooden",
+          "castle",
+          "blocks"
+        ],
+        "it": [
+          "legno",
+          "castello",
+          "blocchi"
+        ]
+      },
+      "launched": "2023-10-01",
+      "warranty": "P2Y",
+      "documents": [
+        "https://data.example.net/documents/BS-003-1.pdf",
+        "https://data.example.net/documents/BS-003-2.pdf",
+        "https://data.example.net/documents/BS-003-3.pdf"
+      ],
+      "condition": "new",
+      "price": 39.99,
+      "stock": 100,
+      "vendor": "https://data.example.net/vendors/0004",
+      "categories": [
+        "https://data.example.net/categories/4000"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-02-05 / Francesca L."
+          },
+          "comment": {
+            "it": "Qualità artigianale superba, il legno è liscio e profumato"
+          },
+          "author": "Francesca L.",
+          "posted": "2025-02-05T04:58:04.951Z",
+          "rating": 5,
+          "content": {
+            "it": "Qualità artigianale superba, il legno è liscio e profumato"
+          }
+        },
+        {
+          "label": {
+            "und": "2025-04-10 / Mark E."
+          },
+          "comment": {
+            "en": "Beautiful craftsmanship, these blocks will last for generations"
+          },
+          "author": "Mark E.",
+          "posted": "2025-04-10T21:48:46.972Z",
+          "rating": 5,
+          "content": {
+            "en": "Beautiful craftsmanship, these blocks will last for generations"
+          }
+        }
+      ],
+      "created": "2025-01-10T06:23:10.140Z"
+    },
+    {
+      "id": "https://data.example.net/products/BS-004",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Marble Run Extreme"
+      },
+      "comment": {
+        "en": "Gravity-powered marble run with 120 track pieces and 20 glass marbles"
+      },
+      "sku": "BS-004",
+      "name": {
+        "en": "Marble Run Extreme"
+      },
+      "description": {
+        "en": "Gravity-powered marble run with 120 track pieces and 20 glass marbles"
+      },
+      "launched": "2024-08-15",
+      "warranty": "P1Y",
+      "documents": [
+        "https://data.example.net/documents/BS-004-1.pdf",
+        "https://data.example.net/documents/BS-004-2.pdf",
+        "https://data.example.net/documents/BS-004-3.pdf"
+      ],
+      "condition": "new",
+      "price": 54.99,
+      "change": 2.5,
+      "stock": 40,
+      "vendor": "https://data.example.net/vendors/0003",
+      "categories": [
+        "https://data.example.net/categories/4000"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-05-15 / Ines W."
+          },
+          "comment": {
+            "en": "Hours of fun building different tracks, very satisfying to watch"
+          },
+          "author": "Ines W.",
+          "posted": "2025-05-15T11:52:45.120Z",
+          "rating": 4,
+          "content": {
+            "en": "Hours of fun building different tracks, very satisfying to watch"
+          }
+        }
+      ],
+      "created": "2025-02-01T04:52:14.374Z"
+    },
+    {
+      "id": "https://data.example.net/products/BS-005",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "City Builder Set",
+        "de": "Städtebauer-Set"
+      },
+      "comment": {
+        "en": "Urban planning construction set with roads, buildings and vehicles",
+        "de": "Stadtplanungs-Bauset mit Straßen, Gebäuden und Fahrzeugen"
+      },
+      "sku": "BS-005",
+      "name": {
+        "en": "City Builder Set",
+        "de": "Städtebauer-Set"
+      },
+      "description": {
+        "en": "Urban planning construction set with roads, buildings and vehicles",
+        "de": "Stadtplanungs-Bauset mit Straßen, Gebäuden und Fahrzeugen"
+      },
+      "keywords": {
+        "en": [
+          "city",
+          "builder",
+          "construction"
+        ],
+        "de": [
+          "Stadt",
+          "Bau",
+          "Konstruktion"
+        ]
+      },
+      "homepage": "https://data.example.net/products/BS-005",
+      "launched": "2024-12-15",
+      "warranty": "P3Y",
+      "documents": [
+        "https://data.example.net/documents/BS-005-1.pdf",
+        "https://data.example.net/documents/BS-005-2.pdf",
+        "https://data.example.net/documents/BS-005-3.pdf",
+        "https://data.example.net/documents/BS-005-4.pdf",
+        "https://data.example.net/documents/BS-005-5.pdf"
+      ],
+      "condition": "new",
+      "price": 79.99,
+      "change": 6,
+      "discount": -10,
+      "stock": 20,
+      "vendor": "https://data.example.net/vendors/0001",
+      "categories": [
+        "https://data.example.net/categories/4000"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-02-28 / Anja M."
+          },
+          "comment": {
+            "de": "Fantastisches Set, die Kinder bauen immer wieder neue Städte"
+          },
+          "author": "Anja M.",
+          "posted": "2025-02-28T18:18:13.506Z",
+          "rating": 4,
+          "content": {
+            "de": "Fantastisches Set, die Kinder bauen immer wieder neue Städte"
+          }
+        },
+        {
+          "label": {
+            "und": "2025-04-05 / Nathan G."
+          },
+          "comment": {
+            "en": "Most creative building set we own, the road system is brilliant"
+          },
+          "author": "Nathan G.",
+          "posted": "2025-04-05T02:18:59.468Z",
+          "rating": 5,
+          "content": {
+            "en": "Most creative building set we own, the road system is brilliant"
+          }
+        },
+        {
+          "label": {
+            "und": "2025-05-22 / Barbara F."
+          },
+          "comment": {
+            "en": "Excellent set but the box could use better organisation trays"
+          },
+          "author": "Barbara F.",
+          "posted": "2025-05-22T05:37:47.527Z",
+          "rating": 3,
+          "content": {
+            "en": "Excellent set but the box could use better organisation trays"
+          }
+        }
+      ],
+      "created": "2025-01-25T16:18:37.410Z",
+      "updated": "2025-06-15T21:36:26.815Z"
+    },
+    {
+      "id": "https://data.example.net/products/BS-006",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Magnetic Tiles Set"
+      },
+      "sku": "BS-006",
+      "name": {
+        "en": "Magnetic Tiles Set"
+      },
+      "launched": "2024-05-01",
+      "warranty": "P1Y",
+      "documents": [
+        "https://data.example.net/documents/BS-006-1.pdf",
+        "https://data.example.net/documents/BS-006-2.pdf"
+      ],
+      "condition": "new",
+      "price": 44.99,
+      "discount": -4,
+      "stock": 130,
+      "vendor": "https://data.example.net/vendors/0002",
+      "categories": [
+        "https://data.example.net/categories/4000"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-03-18 / Rachel S."
+          },
+          "comment": {
+            "en": "Strong magnets and vibrant colours, our most-used building toy"
+          },
+          "author": "Rachel S.",
+          "posted": "2025-03-18T10:58:15.709Z",
+          "rating": 5,
+          "content": {
+            "en": "Strong magnets and vibrant colours, our most-used building toy"
+          }
+        }
+      ],
+      "created": "2025-01-15T00:48:14.864Z"
+    },
+    {
+      "id": "https://data.example.net/products/BS-007",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Gear Constructor"
+      },
+      "sku": "BS-007",
+      "name": {
+        "en": "Gear Constructor"
+      },
+      "launched": "2024-09-01",
+      "documents": [
+        "https://data.example.net/documents/BS-007-1.pdf",
+        "https://data.example.net/documents/BS-007-2.pdf"
+      ],
+      "condition": "new",
+      "price": 34.99,
+      "change": 1,
+      "stock": 60,
+      "vendor": "https://data.example.net/vendors/0001",
+      "categories": [
+        "https://data.example.net/categories/4000"
+      ],
+      "created": "2025-02-10T08:05:23.753Z"
+    },
+    {
+      "id": "https://data.example.net/products/BS-008",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Eco Blocks Natural"
+      },
+      "sku": "BS-008",
+      "name": {
+        "en": "Eco Blocks Natural"
+      },
+      "keywords": {
+        "en": [
+          "eco",
+          "natural",
+          "wooden"
+        ]
+      },
+      "launched": "2023-06-01",
+      "documents": [
+        "https://data.example.net/documents/BS-008-1.pdf",
+        "https://data.example.net/documents/BS-008-2.pdf"
+      ],
+      "condition": "new",
+      "price": 29.99,
+      "stock": 85,
+      "vendor": "https://data.example.net/vendors/0004",
+      "categories": [
+        "https://data.example.net/categories/4000"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-04-12 / Teresa P."
+          },
+          "comment": {
+            "en": "Lovely sustainable toy, children enjoy the natural wood texture"
+          },
+          "author": "Teresa P.",
+          "posted": "2025-04-12T22:19:51.255Z",
+          "rating": 4,
+          "content": {
+            "en": "Lovely sustainable toy, children enjoy the natural wood texture"
+          }
+        }
+      ],
+      "created": "2025-01-10T13:48:25.744Z"
+    },
+    {
+      "id": "https://data.example.net/products/BS-009",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Bridge Engineer Kit"
+      },
+      "comment": {
+        "en": "STEM-focused kit for building load-bearing bridge models with included stress tester"
+      },
+      "sku": "BS-009",
+      "name": {
+        "en": "Bridge Engineer Kit"
+      },
+      "description": {
+        "en": "STEM-focused kit for building load-bearing bridge models with included stress tester"
+      },
+      "launched": "2024-10-15",
+      "warranty": "P1Y",
+      "documents": [
+        "https://data.example.net/documents/BS-009-1.pdf",
+        "https://data.example.net/documents/BS-009-2.pdf",
+        "https://data.example.net/documents/BS-009-3.pdf"
+      ],
+      "condition": "new",
+      "price": 42.99,
+      "change": 1.5,
+      "stock": 0,
+      "vendor": "https://data.example.net/vendors/0002",
+      "categories": [
+        "https://data.example.net/categories/4000"
+      ],
+      "created": "2025-02-15T14:02:38.820Z"
+    },
+    {
+      "id": "https://data.example.net/products/BS-010",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Tiny Architect House"
+      },
+      "sku": "BS-010",
+      "name": {
+        "en": "Tiny Architect House"
+      },
+      "launched": "2024-03-15",
+      "documents": [
+        "https://data.example.net/documents/BS-010-1.pdf",
+        "https://data.example.net/documents/BS-010-2.pdf"
+      ],
+      "condition": "new",
+      "price": 24.99,
+      "stock": 160,
+      "vendor": "https://data.example.net/vendors/0003",
+      "categories": [
+        "https://data.example.net/categories/4000"
+      ],
+      "created": "2025-01-20T17:13:37.197Z"
+    },
+    {
+      "id": "https://data.example.net/products/XC-001",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Dino Builder Set",
+        "de": "Dino-Bauset"
+      },
+      "comment": {
+        "en": "Snap-together construction set for building poseable dinosaur skeletons"
+      },
+      "sku": "XC-001",
+      "name": {
+        "en": "Dino Builder Set",
+        "de": "Dino-Bauset"
+      },
+      "description": {
+        "en": "Snap-together construction set for building poseable dinosaur skeletons"
+      },
+      "keywords": {
+        "en": [
+          "dinosaur",
+          "building",
+          "skeleton"
+        ],
+        "de": [
+          "Dinosaurier",
+          "Bauen",
+          "Skelett"
+        ]
+      },
+      "launched": "2024-10-15",
+      "warranty": "P2Y",
+      "documents": [
+        "https://data.example.net/documents/XC-001-1.pdf",
+        "https://data.example.net/documents/XC-001-2.pdf",
+        "https://data.example.net/documents/XC-001-3.pdf"
+      ],
+      "condition": "new",
+      "price": 44.99,
+      "change": 2,
+      "stock": 55,
+      "vendor": "https://data.example.net/vendors/0002",
+      "categories": [
+        "https://data.example.net/categories/4000",
+        "https://data.example.net/categories/1200"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-03-22 / Simon R."
+          },
+          "comment": {
+            "en": "Perfect blend of construction play and dinosaur fascination"
+          },
+          "author": "Simon R.",
+          "posted": "2025-03-22T15:28:31.708Z",
+          "rating": 5,
+          "content": {
+            "en": "Perfect blend of construction play and dinosaur fascination"
+          }
+        },
+        {
+          "label": {
+            "und": "2025-05-10 / Katrin B."
+          },
+          "comment": {
+            "de": "Tolles Konzept, die Skelette sehen sehr realistisch aus"
+          },
+          "author": "Katrin B.",
+          "posted": "2025-05-10T22:12:06.723Z",
+          "rating": 4,
+          "content": {
+            "de": "Tolles Konzept, die Skelette sehen sehr realistisch aus"
+          }
+        }
+      ],
+      "created": "2025-02-01T17:25:20.479Z"
+    },
+    {
+      "id": "https://data.example.net/products/XC-002",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Hero Board Game"
+      },
+      "sku": "XC-002",
+      "name": {
+        "en": "Hero Board Game"
+      },
+      "launched": "2024-11-01",
+      "documents": [
+        "https://data.example.net/documents/XC-002-1.pdf",
+        "https://data.example.net/documents/XC-002-2.pdf"
+      ],
+      "condition": "new",
+      "price": 34.99,
+      "change": -0.5,
+      "discount": -3,
+      "stock": 65,
+      "vendor": "https://data.example.net/vendors/0003",
+      "categories": [
+        "https://data.example.net/categories/2000",
+        "https://data.example.net/categories/1100"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-04-08 / Felix H."
+          },
+          "comment": {
+            "en": "Fun theme but the game mechanics are a bit too simple"
+          },
+          "author": "Felix H.",
+          "posted": "2025-04-08T19:44:58.224Z",
+          "rating": 2,
+          "content": {
+            "en": "Fun theme but the game mechanics are a bit too simple"
+          }
+        }
+      ],
+      "created": "2025-02-15T14:50:08.391Z"
+    },
+    {
+      "id": "https://data.example.net/products/XC-003",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Outdoor Fort Builder"
+      },
+      "comment": {
+        "en": "Weatherproof modular panels for building forts, dens and play shelters outdoors"
+      },
+      "sku": "XC-003",
+      "name": {
+        "en": "Outdoor Fort Builder"
+      },
+      "description": {
+        "en": "Weatherproof modular panels for building forts, dens and play shelters outdoors"
+      },
+      "homepage": "https://data.example.net/products/XC-003",
+      "launched": "2022-09-01",
+      "warranty": "P2Y",
+      "documents": [
+        "https://data.example.net/documents/XC-003-1.pdf",
+        "https://data.example.net/documents/XC-003-2.pdf",
+        "https://data.example.net/documents/XC-003-3.pdf"
+      ],
+      "condition": "refurbished",
+      "price": 89.99,
+      "change": -5,
+      "discount": -15,
+      "stock": -3,
+      "vendor": "https://data.example.net/vendors/0001",
+      "categories": [
+        "https://data.example.net/categories/4000",
+        "https://data.example.net/categories/3000"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-05-02 / Tim J."
+          },
+          "comment": {
+            "en": "Panels show some scratches but connect well, fair for refurbished price"
+          },
+          "author": "Tim J.",
+          "posted": "2025-05-02T08:16:26.207Z",
+          "rating": 1,
+          "content": {
+            "en": "Panels show some scratches but connect well, fair for refurbished price"
+          }
+        }
+      ],
+      "created": "2025-03-10T15:06:52.098Z"
+    },
+    {
+      "id": "https://data.example.net/products/XC-004",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Puzzle Heroes"
+      },
+      "sku": "XC-004",
+      "name": {
+        "en": "Puzzle Heroes"
+      },
+      "launched": "2025-01-15",
+      "documents": [
+        "https://data.example.net/documents/XC-004-1.pdf",
+        "https://data.example.net/documents/XC-004-2.pdf"
+      ],
+      "condition": "new",
+      "price": 24.99,
+      "stock": 95,
+      "vendor": "https://data.example.net/vendors/0002",
+      "categories": [
+        "https://data.example.net/categories/2200",
+        "https://data.example.net/categories/1100"
+      ],
+      "created": "2025-04-01T11:42:50.170Z"
+    },
+    {
+      "id": "https://data.example.net/products/XC-005",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Strategy Building Game"
+      },
+      "sku": "XC-005",
+      "name": {
+        "en": "Strategy Building Game"
+      },
+      "launched": "2024-11-15",
+      "documents": [
+        "https://data.example.net/documents/XC-005-1.pdf",
+        "https://data.example.net/documents/XC-005-2.pdf",
+        "https://data.example.net/documents/XC-005-3.pdf"
+      ],
+      "condition": "new",
+      "price": 59.99,
+      "change": 3.5,
+      "stock": 0,
+      "vendor": "https://data.example.net/vendors/0001",
+      "categories": [
+        "https://data.example.net/categories/2100",
+        "https://data.example.net/categories/4000"
+      ],
+      "created": "2025-02-01T09:05:41.152Z"
+    },
+    {
+      "id": "https://data.example.net/products/XC-006",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Dino Water Blaster"
+      },
+      "sku": "XC-006",
+      "name": {
+        "en": "Dino Water Blaster"
+      },
+      "launched": "2024-06-15",
+      "documents": [
+        "https://data.example.net/documents/XC-006-1.pdf",
+        "https://data.example.net/documents/XC-006-2.pdf"
+      ],
+      "condition": "new",
+      "price": 17.99,
+      "stock": 0,
+      "vendor": "https://data.example.net/vendors/0003",
+      "categories": [
+        "https://data.example.net/categories/3000",
+        "https://data.example.net/categories/1200"
+      ],
+      "created": "2025-02-20T02:16:14.885Z"
+    },
+    {
+      "id": "https://data.example.net/products/XC-007",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Superhero Puzzle Collection"
+      },
+      "sku": "XC-007",
+      "name": {
+        "en": "Superhero Puzzle Collection"
+      },
+      "documents": [
+        "https://data.example.net/documents/XC-007-1.pdf",
+        "https://data.example.net/documents/XC-007-2.pdf"
+      ],
+      "condition": "new",
+      "price": 21.99,
+      "change": -0.5,
+      "stock": -8,
+      "vendor": "https://data.example.net/vendors/0002",
+      "categories": [
+        "https://data.example.net/categories/2200",
+        "https://data.example.net/categories/1110"
+      ],
+      "created": "2025-03-01T01:04:24.310Z"
+    },
+    {
+      "id": "https://data.example.net/products/XC-008",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Ride-On Dino Trike"
+      },
+      "sku": "XC-008",
+      "name": {
+        "en": "Ride-On Dino Trike"
+      },
+      "launched": "2024-08-01",
+      "warranty": "P1Y",
+      "documents": [
+        "https://data.example.net/documents/XC-008-1.pdf",
+        "https://data.example.net/documents/XC-008-2.pdf",
+        "https://data.example.net/documents/XC-008-3.pdf"
+      ],
+      "condition": "new",
+      "price": 79.99,
+      "change": -3,
+      "stock": -2,
+      "vendor": "https://data.example.net/vendors/0001",
+      "categories": [
+        "https://data.example.net/categories/3100",
+        "https://data.example.net/categories/1200"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-05-28 / Monica D."
+          },
+          "comment": {
+            "en": "Adorable dinosaur design and very sturdy construction"
+          },
+          "author": "Monica D.",
+          "posted": "2025-05-28T18:24:38.135Z",
+          "rating": 5,
+          "content": {
+            "en": "Adorable dinosaur design and very sturdy construction"
+          }
+        }
+      ],
+      "created": "2025-02-10T04:55:51.846Z"
+    },
+    {
+      "id": "https://data.example.net/products/AF-014",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Dragon Warrior Figure"
+      },
+      "sku": "AF-014",
+      "name": {
+        "en": "Dragon Warrior Figure"
+      },
+      "documents": [
+        "https://data.example.net/documents/AF-014-1.pdf"
+      ],
+      "condition": "used",
+      "price": 9.99,
+      "change": -2,
+      "stock": 2,
+      "vendor": "https://data.example.net/vendors/0003",
+      "categories": [
+        "https://data.example.net/categories/1000"
+      ],
+      "created": "2025-04-15T11:37:25.733Z"
+    },
+    {
+      "id": "https://data.example.net/products/AF-015",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Stegosaurus Deluxe"
+      },
+      "comment": {
+        "en": "Large-scale stegosaurus with realistic skin texture and movable plates"
+      },
+      "sku": "AF-015",
+      "name": {
+        "en": "Stegosaurus Deluxe"
+      },
+      "description": {
+        "en": "Large-scale stegosaurus with realistic skin texture and movable plates"
+      },
+      "launched": "2024-05-01",
+      "warranty": "P1Y",
+      "documents": [
+        "https://data.example.net/documents/AF-015-1.pdf",
+        "https://data.example.net/documents/AF-015-2.pdf"
+      ],
+      "condition": "new",
+      "price": 31.99,
+      "change": 1,
+      "stock": 0,
+      "vendor": "https://data.example.net/vendors/0001",
+      "categories": [
+        "https://data.example.net/categories/1200"
+      ],
+      "created": "2025-01-30T04:27:40.594Z"
+    },
+    {
+      "id": "https://data.example.net/products/BG-014",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Fortress Defense"
+      },
+      "sku": "BG-014",
+      "name": {
+        "en": "Fortress Defense"
+      },
+      "launched": "2024-09-15",
+      "documents": [
+        "https://data.example.net/documents/BG-014-1.pdf",
+        "https://data.example.net/documents/BG-014-2.pdf"
+      ],
+      "condition": "new",
+      "price": 37.99,
+      "stock": 42,
+      "vendor": "https://data.example.net/vendors/0003",
+      "categories": [
+        "https://data.example.net/categories/2100",
+        "https://data.example.net/categories/2000"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-04-30 / Ian C."
+          },
+          "comment": {
+            "en": "Disappointing game balance, one side wins almost every time"
+          },
+          "author": "Ian C.",
+          "posted": "2025-04-30T06:24:41.042Z",
+          "rating": 2,
+          "content": {
+            "en": "Disappointing game balance, one side wins almost every time"
+          }
+        }
+      ],
+      "created": "2025-02-20T12:50:41.534Z"
+    },
+    {
+      "id": "https://data.example.net/products/OT-013",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Mini Trampoline"
+      },
+      "sku": "OT-013",
+      "name": {
+        "en": "Mini Trampoline"
+      },
+      "launched": "2024-04-15",
+      "warranty": "P2Y",
+      "documents": [
+        "https://data.example.net/documents/OT-013-1.pdf",
+        "https://data.example.net/documents/OT-013-2.pdf"
+      ],
+      "condition": "new",
+      "price": 64.99,
+      "change": -2,
+      "stock": 22,
+      "vendor": "https://data.example.net/vendors/0002",
+      "categories": [
+        "https://data.example.net/categories/3000"
+      ],
+      "reviews": [
+        {
+          "label": {
+            "und": "2025-03-15 / Linda B."
+          },
+          "comment": {
+            "en": "Good quality trampoline for indoor and outdoor use, keeps kids active"
+          },
+          "author": "Linda B.",
+          "posted": "2025-03-15T21:44:26.216Z",
+          "rating": 4,
+          "content": {
+            "en": "Good quality trampoline for indoor and outdoor use, keeps kids active"
+          }
+        }
+      ],
+      "created": "2025-01-25T14:48:01.261Z"
+    },
+    {
+      "id": "https://data.example.net/products/OT-014",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Retro Pedal Car"
+      },
+      "sku": "OT-014",
+      "name": {
+        "en": "Retro Pedal Car"
+      },
+      "launched": "2021-11-01",
+      "documents": [
+        "https://data.example.net/documents/OT-014-1.pdf",
+        "https://data.example.net/documents/OT-014-2.pdf",
+        "https://data.example.net/documents/OT-014-3.pdf"
+      ],
+      "condition": "used",
+      "price": 65,
+      "change": -12,
+      "stock": 1,
+      "vendor": "https://data.example.net/vendors/0002",
+      "categories": [
+        "https://data.example.net/categories/3100"
+      ],
+      "created": "2025-03-20T14:44:23.671Z"
+    },
+    {
+      "id": "https://data.example.net/products/BS-011",
+      "type": "https://data.example.net/toys#Product",
+      "label": {
+        "en": "Solar Robot Kit"
+      },
+      "comment": {
+        "en": "Twelve-in-one solar-powered robot construction kit for STEM learning"
+      },
+      "sku": "BS-011",
+      "name": {
+        "en": "Solar Robot Kit"
+      },
+      "description": {
+        "en": "Twelve-in-one solar-powered robot construction kit for STEM learning"
+      },
+      "launched": "2024-02-01",
+      "documents": [
+        "https://data.example.net/documents/BS-011-1.pdf",
+        "https://data.example.net/documents/BS-011-2.pdf"
+      ],
+      "condition": "new",
+      "price": 27.99,
+      "stock": -10,
+      "vendor": "https://data.example.net/vendors/0002",
+      "categories": [
+        "https://data.example.net/categories/4000"
+      ],
+      "created": "2025-01-15T18:59:53.891Z"
+    }
+  ],
+  "images": [
+    {
+      "id": "https://data.example.net/media/images/AF-001-1",
+      "type": "https://data.example.net/toys#Image",
+      "label": {
+        "und": "Thunder Guardian — hero shot"
+      },
+      "url": "https://data.example.net/media/images/AF-001-1.jpg",
+      "width": 1200,
+      "height": 800,
+      "caption": "Thunder Guardian hero shot",
+      "subject": "https://data.example.net/products/AF-002",
+      "created": "2025-02-01T18:15:39.915Z"
+    }
+  ],
+  "videos": [
+    {
+      "id": "https://data.example.net/media/videos/AF-001-1",
+      "type": "https://data.example.net/toys#Video",
+      "label": {
+        "und": "Superheroes — category trailer"
+      },
+      "url": "https://data.example.net/media/videos/AF-001-1.mp4",
+      "duration": "PT2M30S",
+      "caption": {
+        "en": "Superheroes category trailer"
+      },
+      "subject": "https://data.example.net/categories/1100",
+      "created": "2025-02-01T18:15:39.915Z"
+    }
+  ]
+}

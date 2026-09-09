@@ -1,0 +1,22 @@
+{
+  "externalSymbolLinkMappings": {
+    "@metreeca/blue": {
+      "*": "https://metreeca.github.io/blue/"
+    },
+    "@metreeca/blue/resource": {
+      "ResourceShape": "https://metreeca.github.io/blue/interfaces/resource.ResourceShape.html"
+    },
+    "@metreeca/blue/value": {
+      "*": "https://metreeca.github.io/blue/"
+    },
+    "@metreeca/core": {
+      "*": "https://metreeca.github.io/core/"
+    },
+    "@metreeca/qest": {
+      "*": "https://metreeca.github.io/qest/"
+    },
+    "@metreeca/qest/template": {
+      "*": "https://metreeca.github.io/qest/"
+    }
+  }
+}
