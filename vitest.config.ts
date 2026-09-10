@@ -45,7 +45,7 @@ export default defineConfig({
 		passWithNoTests: true,
 
 		typecheck: {
-			include: ["**/src/*.test-d.ts"],
+			include: ["**/src/**/*.test-d.ts"],
 			tsconfig: "packages/components/keep/tsconfig.json"
 		}
 
