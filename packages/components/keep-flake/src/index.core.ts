@@ -25,8 +25,8 @@
  */
 
 import { getShapeTarget } from "@metreeca/blue/reference";
-import { getModelVariants } from "@metreeca/blue/union";
-import { effective, type RangeShape, type Shape, type ValuesShape } from "@metreeca/blue/value";
+import { getModelBranches, getShapeBranches } from "@metreeca/blue/union";
+import { effective, type Range, type Shape } from "@metreeca/blue/value";
 import { type Identifier, isObject, isString, opt } from "@metreeca/core";
 import { TraceError } from "@metreeca/core/trace";
 import { encodeProbe, isVacuous, type Model, type Transform } from "@metreeca/qest/template";
@@ -34,38 +34,38 @@ import type { Branch, Entries } from "./index.js";
 
 
 /**
- * The root node's effective {@link RangeShape}: the driving `shape` enveloped as a range. The only
+ * The root node's effective {@link Range}: the driving `shape` enveloped as a range. The only
  * shape-to-range conversion in a flake — every other node's range is stepped from its parent's range.
  */
-export function getRootRange(shape: Shape): RangeShape {
+export function getRootRange(shape: Shape): Range {
 	return getRange(shape, [], []);
 }
 
 /**
- * The child {@link RangeShape} one property step from a node's `range` (§5.8.1): the value the `property`
+ * The child {@link Range} one property step from a node's `range` (§5.8.1): the value the `property`
  * edge resolves to, composing cardinality across the step (an `id` / `type` marker yielding the IRI range).
  */
-export function getPropertyRange(range: RangeShape, property: Identifier): RangeShape {
+export function getPropertyRange(range: Range, property: Identifier): Range {
 	return getRange(range, [property], []);
 }
 
 /**
- * The {@link RangeShape} a single `transform` produces from a stage's input `range` (§5.8.2): one stage
+ * The {@link Range} a single `transform` produces from a stage's input `range` (§5.8.2): one stage
  * step, the pipe composed by nesting these rather than resolving the whole pipe at once.
  */
-export function getTransformRange(range: RangeShape, transform: Transform): RangeShape {
+export function getTransformRange(range: Range, transform: Transform): Range {
 	return getRange(range, [], [transform]);
 }
 
 
 /**
  * Resolves a probe against a shape or range through blue's {@link @metreeca/blue/value!effective | effective},
- * surfacing a {@link @metreeca/blue!Trace} string (a contract violation, since models are validated at the Keep
+ * surfacing a {@link @metreeca/core!Trace | Trace} string (a contract violation, since models are validated at the Keep
  * boundary) as a {@link @metreeca/core!TraceError}. The shared engine behind {@link getRootRange} /
  * {@link getPropertyRange} / {@link getTransformRange}; every range in a flake is built incrementally through those,
  * never over a multi-step path.
  */
-function getRange(source: Shape | RangeShape, path: readonly Identifier[], pipe: readonly Transform[]): RangeShape {
+function getRange(source: Shape | Range, path: readonly Identifier[], pipe: readonly Transform[]): Range {
 
 	// effective reads only path/pipe; target is required by the Probe guard but ignored, so a placeholder
 	// identifier stands in (the empty string would be rejected as malformed)
@@ -96,7 +96,7 @@ function getRange(source: Shape | RangeShape, path: readonly Identifier[], pipe:
  * {@link @metreeca/qest/template!Query | Query}) holds none (§6.2). `path` accumulates the branch path to this node
  * and is prefixed onto every emitted child branch.
  *
- * @param range The effective {@link RangeShape} of the node whose properties are assembled
+ * @param range The effective {@link Range} of the node whose properties are assembled
  * @param path  The branch path accumulated to this node, prefixed onto every emitted child branch
  * @param model The requested model fragment driving per-property reach
  *
@@ -104,39 +104,41 @@ function getRange(source: Shape | RangeShape, path: readonly Identifier[], pipe:
  * non-object `model`, or a range no variant of which contributes a record (no variant resolves an owned target, or
  * a multi-variant range's alternatives match no variant)
  */
-export function getEntries(range: RangeShape, path: readonly Identifier[], model: Model): Entries | undefined {
+export function getEntries(range: Range, path: readonly Identifier[], model: Model): Entries | undefined {
 
 	// each reachable variant folds its model fragment against its target's declared properties, merged across
 	// variants: a multi-variant range reads the §5.4 keyed union form (each object-valued alternative matched to
 	// the variants it fits by kind), a single-variant range takes the whole model
 
+	const variants = getShapeBranches(range.shape);
+
 	if ( !isObject(model) ) {
 
 		return undefined;
 
-	} else if ( range.variants.length > 1 ) {
+	} else if ( variants.length > 1 ) {
 
 		return mergeEntries(Object.values(model).filter(v => isObject(v)).flatMap(alternative =>
-			getModelVariants(alternative, range.variants)?.flatMap(variant => descend(variant, alternative)) ?? []
+			getModelBranches(alternative, variants)?.flatMap(variant => descend(variant, alternative)) ?? []
 		));
 
 	} else {
 
-		return mergeEntries(range.variants.flatMap(variant =>
+		return mergeEntries(variants.flatMap(variant =>
 			descend(variant, model)
 		));
 
 	}
 
 
-	function descend(shape: ValuesShape, model: Model) {
+	function descend(shape: Shape, model: Model) {
 		return opt(getShapeTarget(shape), target => {
 
 			if ( isObject(model) ) {
 
 				return [Object.fromEntries(Object.entries(model).flatMap<[Identifier, Branch[]]>(([k, v]) => {
 
-					const field = target.entries[k];
+					const field = target.members[k];
 					const lower: readonly Identifier[] = [...path, k];
 
 					if ( isVacuous(v) || field === undefined ) {

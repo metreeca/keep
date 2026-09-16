@@ -14,10 +14,9 @@
  * limitations under the License.
  */
 
-import { sh } from "@metreeca/blue";
 import { getShapeClass, getShapeId, type Property } from "@metreeca/blue/resource";
-import { getBoundVariant, getStateVariant } from "@metreeca/blue/union";
-import type { RangeShape, ValuesShape } from "@metreeca/blue/value";
+import { getBoundBranch, getShapeBranches, getStateBranch } from "@metreeca/blue/union";
+import { type Range, sh, type Shape } from "@metreeca/blue/value";
 import { error, isBoolean, isNumber, isObject, isString, opt } from "@metreeca/core";
 import { some } from "@metreeca/core/arrays";
 import { xsd } from "@metreeca/core/datatype";
@@ -66,17 +65,19 @@ import {
 
 
 /**
- * The RDF {@link Term} of a comparison bound (`<` / `>` / `<=` / `>=`), typed against the {@link RangeShape |
- * shape} variant it resolves to so the comparison resolves in the target's processing type (§5.7.1).
- * {@link getBoundVariant} routes the bound, relaxing the value-domain facets a bound need not satisfy. A
+ * The RDF {@link Term} of a comparison bound (`<` / `>` / `<=` / `>=`), typed against the {@link Range |
+ * range} variant it resolves to so the comparison resolves in the target's processing type (§5.7.1).
+ * {@link getBoundBranch} routes the bound, relaxing the value-domain facets a bound need not satisfy. A
  * string variant carrying the `sh:IRI` datatype (an id / type entry, or a reference-ranged property) renders
  * an IRI node rather than a literal, told apart from an IRI-shaped literal (a `url`) by datatype alone.
  */
-export function boundToTerm(value: Literal, shape: RangeShape): Term {
+export function boundToTerm(value: Literal, range: Range): Term {
+
+	const variants = getShapeBranches(range.shape);
 
 	return valueToTerm(value,
-		getBoundVariant(value, shape.variants)
-		?? (isString(value) ? shape.variants.find(variant => variant.kind === "dictionary") : undefined)
+		getBoundBranch(value, variants)
+		?? (isString(value) ? variants.find(variant => variant.kind === "dictionary") : undefined)
 		?? error(new RangeError(`unresolved range variant for value <${String(value)}>`))
 	);
 
@@ -85,11 +86,13 @@ export function boundToTerm(value: Literal, shape: RangeShape): Term {
 /**
  * Flattens the options of a set-matching or focus constraint to individual match {@link Term | terms}: a
  * localised dictionary set expands to one language-tagged term per language tag (its value, or every element of
- * its value array), a scalar option maps to its term typed by the {@link RangeShape | shape} variant it
+ * its value array), a scalar option maps to its term typed by the {@link Range | range} variant it
  * fits, and an option array maps element-wise. A `null` scalar survives as the absent-value option
  * (§5.7.3).
  */
-export function optionsToTerms(value: Options, shape: RangeShape): readonly (null | Term)[] {
+export function optionsToTerms(value: Options, range: Range): readonly (null | Term)[] {
+
+	const variants = getShapeBranches(range.shape);
 
 	if ( isObject(value) ) {
 
@@ -104,8 +107,8 @@ export function optionsToTerms(value: Options, shape: RangeShape): readonly (nul
 
 		return some(value).map(option =>
 			option === null ? null : valueToTerm(option,
-				getStateVariant(option, shape.variants)
-				?? (isString(option) ? shape.variants.find(variant => variant.kind === "dictionary") : undefined)
+				getStateBranch(option, variants)
+				?? (isString(option) ? variants.find(variant => variant.kind === "dictionary") : undefined)
 				?? error(new RangeError(`unresolved range variant for value <${String(option)}>`)))
 		);
 
@@ -114,11 +117,11 @@ export function optionsToTerms(value: Options, shape: RangeShape): readonly (nul
 }
 
 /**
- * Types an operand against its resolved {@link ValuesShape | shape} (§5.7.1). A string shape carrying the
+ * Types an operand against its resolved {@link Shape | shape} (§5.7.1). A string shape carrying the
  * `sh:IRI` datatype (an id / type entry, or a reference-ranged property) renders an IRI node rather than a
  * literal, told apart from an IRI-shaped literal (a `url`) by datatype alone.
  */
-export function valueToTerm(value: Value, shape: ValuesShape): Term {
+export function valueToTerm(value: Value, shape: Shape): Term {
 	switch ( shape.kind ) {
 
 		case "boolean":
@@ -147,12 +150,16 @@ export function valueToTerm(value: Value, shape: ValuesShape): Term {
 
 			throw new RangeError(`unsupported embedded resource variant for value <${String(value)}>`);
 
+		case "union": // a range variant is always a flattened branch, never a union
+
+			throw new RangeError(`unsupported union variant for value <${String(value)}>`);
+
 	}
 }
 
 /**
  * Types a property's write value(s) to the RDF {@link Term | terms} to store, flattening a single value or
- * a value set against the resolved {@link ValuesShape | shape} variant (§5.7.1).
+ * a value set against the resolved {@link Shape | shape} variant (§5.7.1).
  *
  * Each element is typed by the variant it fits: a boolean, number, or string operand to its datatype-typed
  * literal (a string shape carrying the `sh:IRI` datatype renders an IRI node instead, as in
@@ -161,7 +168,7 @@ export function valueToTerm(value: Value, shape: ValuesShape): Term {
  * identity), else a freshly skolemised IRI addressing the embedded sub-resource. Values not fitting the
  * variant are dropped.
  */
-export function valuesToTerms(values: Values, shape: ValuesShape): readonly Term[] {
+export function valuesToTerms(values: Values, shape: Shape): readonly Term[] {
 	switch ( shape.kind ) {
 
 		case "boolean":
@@ -214,6 +221,10 @@ export function valuesToTerms(values: Values, shape: ValuesShape): readonly Term
 				return isReference(node) ? named(node) : named();
 			});
 
+		case "union": // a range variant is always a flattened branch, never a union
+
+			throw new RangeError(`unsupported union variant`);
+
 	}
 }
 
@@ -228,8 +239,11 @@ export function valuesToTerms(values: Values, shape: ValuesShape): readonly Term
  */
 export function link([source, property, target]: readonly [Variable | Term, Property, Variable | Term]): SPARQL {
 
-	return property.forward !== undefined && isAnchor(source) ? pattern([source, named(property.forward), target])
-		: property.reverse !== undefined && isAnchor(target) ? pattern([target, named(property.reverse), source])
+	const forward = property.forward;
+	const reverse = property.reverse;
+
+	return forward !== undefined && isAnchor(source) ? pattern([source, named(forward), target])
+		: reverse !== undefined && isAnchor(target) ? pattern([target, named(reverse), source])
 			: nil();
 
 	function isAnchor(value: Variable | Term): value is Variable | Blank | Named {
@@ -255,7 +269,7 @@ export function link([source, property, target]: readonly [Variable | Term, Prop
 export function forward(
 	[subject, property, object]: readonly [Variable | Blank | Named, Property, Variable | Term]
 ): SPARQL {
-	return property.forward !== undefined ? pattern([subject, named(property.forward), object]) : nil();
+	return opt(property.forward, forward => pattern([subject, named(forward), object]), nil());
 }
 
 /**
@@ -276,7 +290,7 @@ export function forward(
 export function reverse(
 	[object, property, subject]: readonly [Variable | Term, Property, Variable | Blank | Named]
 ): SPARQL {
-	return property.reverse !== undefined ? pattern([subject, named(property.reverse), object]) : nil();
+	return opt(property.reverse, reverse => pattern([subject, named(reverse), object]), nil());
 }
 
 
@@ -294,7 +308,7 @@ export function reverse(
  *
  * @returns The gating triple pattern or `filter`
  */
-export function membership(anchor: Variable, shape: ValuesShape): SPARQL {
+export function membership(anchor: Variable, shape: Shape): SPARQL {
 
 	const value = variable(anchor);
 
@@ -334,6 +348,10 @@ export function membership(anchor: Variable, shape: ValuesShape): SPARQL {
 				clazz => pattern([anchor, named(rdf.type), named(clazz)]),
 				() => filter(isIRI(value))
 			);
+
+		case "union": // a range variant is always a flattened branch, never a union
+
+			throw new RangeError(`unsupported union variant`);
 
 	}
 

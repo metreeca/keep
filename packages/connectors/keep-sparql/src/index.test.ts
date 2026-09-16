@@ -17,7 +17,7 @@
 
 import { getShapeClass, getShapeClasses, getShapeType, type ResourceShape } from "@metreeca/blue/resource";
 import type { StringShape } from "@metreeca/blue/string";
-import { eager, type Shape, type State } from "@metreeca/blue/value";
+import { eager, type Instance, type Shape } from "@metreeca/blue/value";
 import { error, isBoolean, isNumber, isString, type Lazy, map, type Scalar } from "@metreeca/core";
 import { xsd } from "@metreeca/core/datatype";
 import { createNamespace } from "@metreeca/core/resource";
@@ -42,7 +42,6 @@ import {
 	Video
 } from "@metreeca/keep-suite/toys";
 import { type Reference, type Resource } from "@metreeca/qest/resource";
-import type { Instance, Template } from "@metreeca/qest/template";
 import { log } from "@metreeca/tape";
 import { blank, skolemize, type Triple, typed } from "@metreeca/trio";
 import { data, description as resource, link, property, resource as about, term, text } from "@metreeca/trio/builder";
@@ -810,9 +809,9 @@ const rdf = createNamespace("http://www.w3.org/1999/02/22-rdf-syntax-ns#", ["typ
 
 
 /**
- * A deeply-partial {@link State} of a toys resource shape, the input form accepted by the `encode*` encoders.
+ * A deeply-partial {@link Instance} of a toys resource shape, the input form accepted by the `encode*` encoders.
  */
-type Fragment<T extends Lazy<Shape>> = Partial<State<T>>;
+type Fragment<T extends Lazy<Shape>> = Partial<Instance<T>>;
 
 
 /**
@@ -848,9 +847,9 @@ const encoders = (() => {
 	]));
 
 
-	function encoder<T extends Template>(
-		shape: Lazy<ResourceShape & { model: T }>,
-		encode: (resource: Partial<Instance<T>>) => readonly Triple[]
+	function encoder<S extends Lazy<ResourceShape>>(
+		shape: S,
+		encode: (resource: Fragment<S>) => readonly Triple[]
 	): readonly [Reference, (resource: Resource) => readonly Triple[]] {
 
 		const clazz = getShapeClass(shape);
@@ -874,67 +873,14 @@ const encoders = (() => {
 })();
 
 /**
- * Clone generators keyed by resolved shape class, minting isolated test fixtures via {@link clone} for the `generate`
- * callback.
- */
-const generators = (() => {
-
-	return immutable(Object.fromEntries([
-
-		generator(Category, encodeCategory),
-		generator(Vendor, encodeVendor),
-		generator(PostalAddress, encodePostalAddress),
-		generator(Place, encodePlace),
-		generator(Product, encodeProduct),
-		generator(Image, encodeImage),
-		generator(Video, encodeVideo),
-		generator(Review, encodeReview)
-
-	]));
-
-
-	function generator<T extends Template>(
-		shape: Lazy<ResourceShape & { model: T }>,
-		encoder: (resource: Partial<Instance<T>>) => readonly Triple[]
-	): readonly [Reference, <S extends Lazy<ResourceShape>>(sample: State<S>) => {
-
-		entry: State<S>;
-		state: readonly Triple[]
-
-	}] {
-
-		const clazz = getShapeClass(shape);
-
-		if ( clazz === undefined ) {
-			throw new Error(`undefined class in shape`);
-		}
-
-		return [clazz, <S extends Lazy<ResourceShape>>(sample: State<S>) => {
-
-			if ( !isInstance(shape, sample) ) {
-				throw new Error(`mismatched sample for shape <${clazz}>`);
-			}
-
-			const entry = clone(sample, shape);
-
-			return { entry, state: encoder(entry) };
-
-		}];
-
-	}
-
-})();
-
-
-/**
  * Tests whether a resource is consistent with a shape's class.
  *
  * Accepts a resource that omits the type discriminator (a partial probe) and rejects only an explicit class mismatch.
  */
-function isInstance<T extends Template>(
-	shape: Lazy<ResourceShape & { model: T }>,
+function isInstance<S extends Lazy<ResourceShape>>(
+	shape: S,
 	resource: Resource
-): resource is Instance<T> {
+): resource is Instance<S> & Resource {
 
 	return map(eager(shape), shape =>
 		(resource[getShapeType(shape) ?? ""] ?? shape.class) === shape.class
@@ -1049,18 +995,18 @@ function testSPARQLStore(factory: () => Repository, {
 
 		},
 
-		async generate<S extends Lazy<ResourceShape>>(sample: State<S>, shape: S) {
+		async generate<S extends Lazy<ResourceShape>>(sample: Instance<S> & Resource, shape: S) {
 
 			const clazz = map(eager(shape), shape => shape.class);
-			const generator = generators[clazz ?? ""];
+			const encoder = encoders[clazz ?? ""];
 
-			if ( generator === undefined ) {
+			if ( encoder === undefined ) {
 				throw new Error(`unsupported shape class <${clazz}>`);
 			}
 
-			const { entry, state } = generator<S>(sample);
+			const entry = clone(sample, shape);
 
-			await insert(state);
+			await insert(encoder(entry));
 
 			return entry;
 

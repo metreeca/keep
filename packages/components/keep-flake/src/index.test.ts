@@ -17,10 +17,10 @@
 import { dictionary } from "@metreeca/blue/dictionary";
 import { decimal, integer } from "@metreeca/blue/number";
 import { getShapeTarget, reference } from "@metreeca/blue/reference";
-import { id, resource, type } from "@metreeca/blue/resource";
+import { id, multiple, optional, required, resource, type } from "@metreeca/blue/resource";
 import { string } from "@metreeca/blue/string";
-import { union, type UnionShape } from "@metreeca/blue/union";
-import { effective, multiple, optional, type RangeShape, required } from "@metreeca/blue/value";
+import { getShapeBranches, union, type UnionShape } from "@metreeca/blue/union";
+import { eager, effective, type Range } from "@metreeca/blue/value";
 import type { Identifier } from "@metreeca/core";
 import { createNamespace } from "@metreeca/core/resource";
 import { PostalAddress, Product, Vendor } from "@metreeca/keep-suite/toys";
@@ -63,12 +63,12 @@ function props(node: Flake | Branch): Entries {
  * branch's union range read alike.
  */
 function variant(node: Flake | Branch, index: number): Record<Identifier, Branch> {
-	const variants = node.range.variants;
+	const variants = getShapeBranches(node.range.shape);
 	if ( variants.length <= 1 ) { throw new Error("not a union coordinate"); }
 	const target = getShapeTarget(variants[index]);
 	return Object.fromEntries(
 		Object.entries(node.entries ?? {}).flatMap(([name, branches]) => {
-			const kept = branches.filter(branch => target?.entries[name] === branch.entry);
+			const kept = branches.filter(branch => target?.members[name] === branch.entry);
 			return kept.length === 0 ? [] : [[name, kept[0]] as const];
 		})
 	);
@@ -110,7 +110,7 @@ describe("createFlake", () => {
 	function Thing() {
 		return resource({
 
-			namespace: ns,
+			space: ns,
 			class: ns.Thing
 
 		}, {
@@ -120,15 +120,15 @@ describe("createFlake", () => {
 
 			label: required(string),
 			description: optional(dictionary()),
-			info: optional(dictionary({ en: "", de: "" })),
+			info: optional(dictionary({ languageIn: ["en", "de"] })),
 
 			count: required(integer),
 
 			tags: multiple(Tag),
 			keywords: multiple(dictionary()),
-			archived: optional(reference(Tag, { captive: true })),
+			archived: optional(reference(Tag), { captive: true }),
 			parent: optional(reference(Thing)),
-			children: multiple(reference(Thing, { foreign: true })),
+			children: multiple(reference(Thing), { foreign: true }),
 
 			address: optional(union(string(), Postal))
 
@@ -138,7 +138,7 @@ describe("createFlake", () => {
 	function Tag() {
 		return resource({
 
-			namespace: ns
+			space: ns
 
 		}, {
 
@@ -150,7 +150,7 @@ describe("createFlake", () => {
 	function Postal() {
 		return resource({
 
-			namespace: ns,
+			space: ns,
 			class: ns.Postal
 
 		}, {
@@ -466,7 +466,7 @@ describe("createFlake", () => {
 				if ( field.kind !== "property" ) { throw new Error("expected a property entry"); }
 
 				expect(keywords.drain).toEqual({ mould: [""] });
-				expect(field.range.shape.kind).toBe("dictionary");
+				expect(eager(field.range.shape).kind).toBe("dictionary");
 				expect(keywords.entries).toBeUndefined();
 
 			});
@@ -834,7 +834,7 @@ describe("createFlake", () => {
 				const subject = at(flake, "media", "subject");
 
 				expect(props(at(flake, "media"))["subject"]).toHaveLength(1);          // one binding, one branch
-				expect(subject.range.variants).toHaveLength(2);                        // disjunction [Product,
+				expect(getShapeBranches(subject.range.shape)).toHaveLength(2);         // disjunction [Product,
 			                                                                           // Category]
 				expect(subject.drain?.alias).toBe("s");
 
@@ -854,7 +854,7 @@ describe("createFlake", () => {
 				const caption = at(flake, "media", "caption");
 
 				expect(props(at(flake, "media"))["caption"]).toHaveLength(1);          // one binding, one branch
-				expect(caption.range.variants.map(v => v.kind)).toEqual(["string", "dictionary"]);
+				expect(getShapeBranches(caption.range.shape).map(v => v.kind)).toEqual(["string", "dictionary"]);
 				expect(caption.drain?.alias).toBe("cap");
 
 			});
@@ -970,10 +970,8 @@ describe("createFlake", () => {
 				const flake = createFlake(Product, [{ "<count:": 100 }] as Query);
 				const value = flake.transforms?.["count"]?.range;
 
-				if ( value?.kind !== "range" ) { throw new Error("expected a range shape"); }
-
-				expect(value.maxCount).toBe(1);
-				expect(value.minCount).toBe(1);
+				expect(value?.maxCount).toBe(1);
+				expect(value?.minCount).toBe(1);
 
 			});
 
@@ -982,15 +980,13 @@ describe("createFlake", () => {
 				const flake = createFlake(Product, [{ ">=avg:price": 0 }] as Query);
 				const value = at(flake, "price").transforms?.["avg"]?.range;
 
-				if ( value?.kind !== "range" ) { throw new Error("expected a range shape"); }
+				if ( value === undefined ) { throw new Error("expected a range"); }
 
 				expect(value.maxCount).toBe(1);
 				expect(value.minCount).toBeUndefined();
 
 				// a non-union range resolves to a single value shape, not a multi-variant disjunction
-				if ( value.variants.length !== 1 ) { throw new Error("expected a single value shape, not a union"); }
-
-				expect(value.variants[0].kind).toBe("number");
+				expect(getShapeBranches(value.shape).map(branch => branch.kind)).toEqual(["number"]);
 
 			});
 
@@ -1001,10 +997,8 @@ describe("createFlake", () => {
 				const flake = createFlake(Product, [{ "y=year:launched": 0 }] as Query);
 				const value = at(flake, "launched").transforms?.["year"]?.range;
 
-				if ( value?.kind !== "range" ) { throw new Error("expected a range shape"); }
-
-				expect(value.maxCount).toBe(1);
-				expect(value.minCount).toBeUndefined();
+				expect(value?.maxCount).toBe(1);
+				expect(value?.minCount).toBeUndefined();
 
 			});
 
@@ -1015,11 +1009,8 @@ describe("createFlake", () => {
 				const avg = at(flake, "price").transforms?.["avg"]?.range;
 				const round = at(flake, "price").transforms?.["avg"]?.transforms?.["round"]?.range;
 
-				if ( avg?.kind !== "range" ) { throw new Error("expected a range shape for avg"); }
-				if ( round?.kind !== "range" ) { throw new Error("expected a range shape for round"); }
-
-				expect(avg.maxCount).toBe(1);
-				expect(round.maxCount).toBe(1);
+				expect(avg?.maxCount).toBe(1);
+				expect(round?.maxCount).toBe(1);
 
 			});
 
@@ -1041,18 +1032,14 @@ describe("createFlake", () => {
 
 				const name = at(createFlake(Vendor), "name");
 
-				if ( name.range.kind !== "range" ) { throw new Error("expected a range shape"); }
-
 				expect(name.range.maxCount).toBe(1);
-				expect(name.range.variants[0].kind).toBe("string");
+				expect(getShapeBranches(name.range.shape)[0].kind).toBe("string");
 
 			});
 
 			it("carries the multi-valued cardinality of a repeatable property", async () => {
 
 				const aliases = at(createFlake(Vendor), "aliases");
-
-				if ( aliases.range.kind !== "range" ) { throw new Error("expected a range shape"); }
 
 				expect(aliases.range.maxCount).toBeUndefined();
 
@@ -1062,9 +1049,7 @@ describe("createFlake", () => {
 
 				const audited = at(createFlake(Vendor), "audited");
 
-				if ( audited.range.kind !== "range" ) { throw new Error("expected a range shape"); }
-
-				expect(audited.range.variants.length).toBe(2);
+				expect(getShapeBranches(audited.range.shape).length).toBe(2);
 
 			});
 
@@ -1072,10 +1057,8 @@ describe("createFlake", () => {
 
 				const marker = at(createFlake(Vendor), "id");
 
-				if ( marker.range.kind !== "range" ) { throw new Error("expected a range shape"); }
-
 				expect(marker.range.maxCount).toBe(1);
-				expect(marker.range.variants[0].kind).toBe("string");
+				expect(getShapeBranches(marker.range.shape)[0].kind).toBe("string");
 
 			});
 
@@ -1278,7 +1261,7 @@ describe("flake methods", () => {
 	const marker = id();
 
 	// a throwaway effective range the locus-method helpers ignore
-	const range: RangeShape = { kind: "range", variants: [] };
+	const range: Range = { minCount: undefined, maxCount: undefined, shape: string() };
 
 
 	/**
@@ -1404,7 +1387,7 @@ describe("branch methods", () => {
 	 * The union shape borne by a coordinate, throwing when it is not a union.
 	 */
 	function asUnion(node: Branch): UnionShape {
-		const shape = node.entry.kind === "property" ? node.entry.range.shape : undefined;
+		const shape = node.entry.kind === "property" ? eager(node.entry.range.shape) : undefined;
 		if ( shape === undefined || shape.kind !== "union" ) { throw new Error("expected a union coordinate"); }
 		return shape;
 	}
@@ -1481,19 +1464,19 @@ describe("branch methods", () => {
 		it("keeps the branches the given variant declares", async () => {
 			const address = addressBranch();
 
-			expect(getFlakeVariant(address, asUnion(address).variants[1]).map(leafName)).toEqual(["city"]);
+			expect(getFlakeVariant(address, getShapeBranches(asUnion(address))[1]).map(leafName)).toEqual(["city"]);
 		});
 
 		it("slices along the shape axis, isolating each variant's branches", async () => {
 			const address = addressBranch();
 
-			expect(getFlakeVariant(address, asUnion(address).variants[2]).map(leafName)).toEqual(["latitude"]);
+			expect(getFlakeVariant(address, getShapeBranches(asUnion(address))[2]).map(leafName)).toEqual(["latitude"]);
 		});
 
 		it("is empty for a variant that declares no reached property", async () => {
 			const address = addressBranch();
 
-			expect(getFlakeVariant(address, asUnion(address).variants[0])).toEqual([]);
+			expect(getFlakeVariant(address, getShapeBranches(asUnion(address))[0])).toEqual([]);
 		});
 
 		it("returns every branch of a non-union resource node", async () => {
@@ -1502,7 +1485,7 @@ describe("branch methods", () => {
 
 			if ( field.kind !== "property" ) { throw new Error("expected a property entry"); }
 
-			expect(getFlakeVariant(vendor, field.range.shape).map(leafName).sort()).toEqual(["code", "name"]);
+			expect(getFlakeVariant(vendor, eager(field.range.shape)).map(leafName).sort()).toEqual(["code", "name"]);
 		});
 
 		it("attributes a union-crossing branch to every variant declaring its predicate", async () => {
@@ -1511,10 +1494,10 @@ describe("branch methods", () => {
 			// branch belongs to both media variants, not only the first one whose entry it carries
 
 			const media = at(createFlake(Product, [{ "cap=media.caption": "" }] as Query), "media");
-			const union = asUnion(media);
+			const branches = getShapeBranches(asUnion(media));
 
-			expect(getFlakeVariant(media, union.variants[0]).map(leafName)).toEqual(["caption"]);  // Image
-			expect(getFlakeVariant(media, union.variants[1]).map(leafName)).toEqual(["caption"]);  // Video
+			expect(getFlakeVariant(media, branches[0]).map(leafName)).toEqual(["caption"]);  // Image
+			expect(getFlakeVariant(media, branches[1]).map(leafName)).toEqual(["caption"]);  // Video
 		});
 
 	});

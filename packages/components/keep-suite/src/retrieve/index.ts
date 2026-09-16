@@ -20,9 +20,10 @@
  * @module retrieve/index
  */
 
-import { model, type Schema, type Shape } from "@metreeca/blue/value";
+import { type Shape } from "@metreeca/blue/value";
 import { isLazy, isObject, type Lazy } from "@metreeca/core";
 import type { Selection } from "@metreeca/qest/template";
+import { model, type Schema } from "../_model.js";
 
 
 /**

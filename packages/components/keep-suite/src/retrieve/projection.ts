@@ -18,10 +18,9 @@ import { boolean } from "@metreeca/blue/boolean";
 import { dictionary } from "@metreeca/blue/dictionary";
 import { decimal, integer } from "@metreeca/blue/number";
 import { reference } from "@metreeca/blue/reference";
-import { id, type Member, resource } from "@metreeca/blue/resource";
+import { id, type Member, multiple, optional, required, resource } from "@metreeca/blue/resource";
 import { string, url } from "@metreeca/blue/string";
 import { union } from "@metreeca/blue/union";
-import { multiple, optional, required } from "@metreeca/blue/value";
 import { isObject } from "@metreeca/core";
 import { ascending, by, compound, descending } from "@metreeca/core/order";
 import type { Resource } from "@metreeca/qest/resource";
@@ -767,7 +766,7 @@ export function testRetrieveProjection(factory: TestFactory): void {
 			it("should project a union-crossing path mixing string and dictionary kinds", factory(async ({ store }) => {
 
 				// §P6 linchpin: a path crossing the Media union to the divergent `caption` property resolves
-				// to a heterogeneous [string, dictionary] range (value.ts RangeShape note). Each media member's
+				// to a heterogeneous [string, dictionary] range (blue `Range` note). Each media member's
 				// caption must surface under its own kind in the same composite cell across the fanned rows:
 				// the plain-string Image.caption as a bare string, the localised Video.caption as a Dictionary map.
 				// The mix is requested through the keyed form (a string alternative and a Locales alternative),
@@ -858,8 +857,8 @@ export function testRetrieveProjection(factory: TestFactory): void {
 					model: catalogue(resource({
 						"id=id": id(),
 						"subj=media.subject": optional(union(
-							resource({ name: required(dictionary({ en: "" })) }),
-							resource({ title: required(dictionary({ en: "" })) })
+							resource({ name: required(dictionary({ uniqueLang: true, languageIn: ["en"] })) }),
+							resource({ title: required(dictionary({ uniqueLang: true, languageIn: ["en"] })) })
 						))
 					}))
 				})) ?? [];
@@ -1160,7 +1159,7 @@ export function testRetrieveProjection(factory: TestFactory): void {
 					entry: Catalogue,
 					shape: Products,
 					model: catalogue(resource({
-						"label=name": required(dictionary({ "*": "" }))
+						"label=name": required(dictionary({ uniqueLang: true }))
 					}))
 				}));
 
@@ -1183,7 +1182,7 @@ export function testRetrieveProjection(factory: TestFactory): void {
 					entry: Catalogue,
 					shape: Products,
 					model: catalogue(resource({
-						"label=name": required(dictionary({ "en": "" }))
+						"label=name": required(dictionary({ uniqueLang: true, languageIn: ["en"] }))
 					}))
 				}));
 
@@ -1203,7 +1202,7 @@ export function testRetrieveProjection(factory: TestFactory): void {
 					entry: Catalogue,
 					shape: Products,
 					model: catalogue(resource({
-						"label=name": required(dictionary({ "en": "", "fr": "" }))
+						"label=name": required(dictionary({ uniqueLang: true, languageIn: ["en", "fr"] }))
 					}))
 				}));
 
@@ -1228,7 +1227,7 @@ export function testRetrieveProjection(factory: TestFactory): void {
 					shape: Products,
 					model: catalogue(resource({
 						"sku=sku": required(string()),
-						"desc=description": optional(dictionary({ "en": "" }))
+						"desc=description": optional(dictionary({ uniqueLang: true, languageIn: ["en"] }))
 					}))
 				}));
 
@@ -1312,7 +1311,7 @@ export function testRetrieveProjection(factory: TestFactory): void {
 					shape: Products,
 					model: catalogue(resource({
 						"sku=sku": required(string()),
-						"label=name": required(dictionary({ "*": "" }))
+						"label=name": required(dictionary({ uniqueLang: true }))
 					}))
 				}));
 

@@ -15,8 +15,8 @@
  */
 
 import { type Property, type ResourceShape } from "@metreeca/blue/resource";
-import { getShapeVariants, type UnionShape } from "@metreeca/blue/union";
-import { eager, type ValueShape } from "@metreeca/blue/value";
+import { getShapeBranches, type UnionShape } from "@metreeca/blue/union";
+import { eager, type Shape } from "@metreeca/blue/value";
 import { type Identifier, isAny, isArray, isObject } from "@metreeca/core";
 import { unique } from "@metreeca/core/arrays";
 import { matchTag, type Tag } from "@metreeca/core/language";
@@ -80,7 +80,7 @@ export function decode(
 
 	function decodeResource(entry: Reference, flake: Flake, locale: readonly Tag[]): Promise<Resource> {
 
-		return Promise.all(flake.range.variants.flatMap(variant =>
+		return Promise.all(getShapeBranches(flake.range.shape).flatMap(variant =>
 			variant.kind !== "resource" ? [] : [decodeVariant(entry, variant, locale, getFlakeVariant(flake, variant))]
 		)).then(resources => resources.reduce<Resource>(
 			(merged, resource) => ({ ...merged, ...resource }),
@@ -134,7 +134,7 @@ export function decode(
 		branch: Branch & { readonly entry: Property }
 	): Values | Promise<Resource> | undefined {
 
-		const rangeShape = branch.entry.range.shape;
+		const rangeShape = eager(branch.entry.range.shape);
 
 		const model = branch.drain?.mould;
 
@@ -237,11 +237,11 @@ export function decode(
 		placeholder: unknown
 	): readonly (Value | Promise<Resource>)[] {
 
-		const variants = getShapeVariants(shape);
+		const variants = getShapeBranches(shape);
 
 		const requested = getUnionPlaceholders(variants, placeholder);
 
-		const present = variants.find((variant): variant is ValueShape =>
+		const present = variants.find(variant =>
 			variant.kind !== "dictionary" && requested.has(variant) && unique(column(scope.resolve(variant), tuples), equals).length > 0
 		);
 
@@ -255,7 +255,7 @@ export function decode(
 	 * expands them as nested resources when the placeholder is a template; a `resource` always expands.
 	 */
 	function decodeValue(
-		shape: ValueShape,
+		shape: Shape,
 		locale: readonly Tag[],
 		branches: readonly Branch[],
 		placeholder: unknown,
@@ -279,12 +279,20 @@ export function decode(
 			case "reference":
 
 				return isTemplate(placeholder)
-					? entries().map(entry => decodeVariant(entry, eager(shape.shape), locale, branches))
+					? entries().map(entry => decodeVariant(entry, eager(shape.target), locale, branches))
 					: entries();
 
 			case "resource":
 
 				return entries().map(entry => decodeVariant(entry, shape, locale, branches));
+
+			case "dictionary": // a localised variant is decoded from its tagged columns, never from a bound column
+
+				throw new RangeError(`unsupported dictionary variant`);
+
+			case "union": // a range variant is always a flattened branch, never a union
+
+				throw new RangeError(`unsupported union variant`);
 
 		}
 

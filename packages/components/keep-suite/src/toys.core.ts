@@ -16,12 +16,11 @@
 
 import { validate } from "@metreeca/blue";
 import { getShapeId, type ResourceShape } from "@metreeca/blue/resource";
-import { eager, type State } from "@metreeca/blue/value";
+import { eager, type Instance } from "@metreeca/blue/value";
 import { error, isString, type Lazy, map } from "@metreeca/core";
 import { immutable } from "@metreeca/core/structures";
 import { TraceError } from "@metreeca/core/trace";
 import { isReference, type Reference, type Resource } from "@metreeca/qest/resource";
-import type { Instance, Template } from "@metreeca/qest/template";
 import { base, Category, Image, Product, toys, Vendor, Video } from "./toys.js";
 import json from "./toys.json" with { type: "json" };
 
@@ -36,11 +35,11 @@ import json from "./toys.json" with { type: "json" };
  */
 export const collections: {
 
-	readonly categories: readonly State<typeof Category>[];
-	readonly vendors: readonly State<typeof Vendor>[];
-	readonly products: readonly State<typeof Product>[];
-	readonly images: readonly State<typeof Image>[];
-	readonly videos: readonly State<typeof Video>[];
+	readonly categories: readonly Instance<typeof Category>[];
+	readonly vendors: readonly Instance<typeof Vendor>[];
+	readonly products: readonly Instance<typeof Product>[];
+	readonly images: readonly Instance<typeof Image>[];
+	readonly videos: readonly Instance<typeof Video>[];
 
 } = (() => {
 
@@ -69,9 +68,9 @@ export const collections: {
 		});
 	}
 
-	function verify<T extends Lazy<ResourceShape>>(resources: readonly unknown[], shape: T): readonly State<T>[] {
+	function verify<T extends Lazy<ResourceShape>>(resources: readonly unknown[], shape: T): readonly Instance<T>[] {
 		return resources.map(resource => validate(resource, { shape, depth: 0 })({
-			value: v => v as State<T>,
+			value: v => v as Instance<T>,
 			trace: t => error(new TraceError("failed validation", t ?? []))
 		}));
 	}
@@ -150,7 +149,7 @@ export function identify<V>(entry: Resource, shape: Lazy<ResourceShape>, mapper?
  * Lets conformance tests mint isolated fixtures whose identifiers collide neither with the sample dataset nor with
  * other generated fixtures sharing the same store.
  *
- * @typeParam T - The shape's template model
+ * @typeParam R - The resource type of the sample, carried through to the clone
  *
  * @param sample - The resource to clone; an instance of `shape`
  * @param shape - The resource shape whose id entry and id pattern drive identity derivation
@@ -160,7 +159,7 @@ export function identify<V>(entry: Resource, shape: Lazy<ResourceShape>, mapper?
  * @throws Error When `shape` declares no id entry or id pattern, the id pattern has no trailing slot, or `sample` is
  *     missing its identifier or code value
  */
-export function clone<T extends Template>(sample: Instance<T>, shape: Lazy<ResourceShape & { model: T }>): Instance<T> {
+export function clone<R extends Resource>(sample: R, shape: Lazy<ResourceShape>): R {
 
 	const resolved = eager(shape);
 
@@ -205,7 +204,7 @@ export function clone<T extends Template>(sample: Instance<T>, shape: Lazy<Resou
 
 	}).join("");
 
-	const clone: Resource = {
+	const clone = {
 
 		...sample,
 
@@ -219,8 +218,8 @@ export function clone<T extends Template>(sample: Instance<T>, shape: Lazy<Resou
 
 	return validate(clone, { shape })({
 
-		value: v => v,
-		trace: t => error<Instance<T>>(new TraceError("failed validation", t ?? []))
+		value: () => clone,
+		trace: t => error<R>(new TraceError("failed validation", t ?? []))
 
 	});
 
@@ -239,7 +238,11 @@ export function clone<T extends Template>(sample: Instance<T>, shape: Lazy<Resou
  * @param name - The english product name, used for `label` and `name`
  * @param overrides - Optional property overrides merged into the resource
  */
-export function testProduct(sku: string, name: string, overrides?: Partial<State<typeof Product>>) {
+export function testProduct(
+	sku: string,
+	name: string,
+	overrides?: Partial<Instance<typeof Product>>
+): Instance<typeof Product> {
 	return {
 
 		id: `${base}products/${sku}`,

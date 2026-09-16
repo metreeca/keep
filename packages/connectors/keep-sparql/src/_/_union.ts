@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import { getModelVariants } from "@metreeca/blue/union";
-import type { ValuesShape } from "@metreeca/blue/value";
+import { getModelBranches } from "@metreeca/blue/union";
+import type { Shape } from "@metreeca/blue/value";
 import { isObject } from "@metreeca/core";
 import { isBranch } from "@metreeca/qest/template";
 
@@ -27,7 +27,7 @@ import { isBranch } from "@metreeca/qest/template";
  *
  *  - a **keyed** placeholder (an object whose keys are opaque `${number}` strings) supplies one
  *    alternative per entry. Each alternative is matched independently against the variants by kind and
- *    structure ({@link @metreeca/blue/union!getModelVariants | getModelVariants}), so one alternative may
+ *    structure ({@link @metreeca/blue/union!getModelBranches | getModelBranches}), so one alternative may
  *    reach several variants and one variant may be reached by several alternatives.
  *  - any **other** placeholder is itself a single alternative, reaching every variant its kind fits.
  *
@@ -44,7 +44,7 @@ import { isBranch } from "@metreeca/qest/template";
  * @returns Each requested variant mapped to its projecting alternative; empty when the placeholder
  * requests no variant
  */
-export function getUnionPlaceholders<V extends ValuesShape>(
+export function getUnionPlaceholders<V extends Shape>(
 	variants: readonly V[],
 	placeholder: unknown
 ): ReadonlyMap<V, unknown> {
@@ -54,7 +54,7 @@ export function getUnionPlaceholders<V extends ValuesShape>(
 		: [placeholder];
 
 	return new Map(placeholders.flatMap(alternative =>
-		(getModelVariants(alternative, variants) ?? []).map(variant => [variant, alternative])
+		(getModelBranches(alternative, variants) ?? []).map(variant => [variant, alternative])
 	));
 
 }

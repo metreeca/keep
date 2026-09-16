@@ -31,6 +31,7 @@
  */
 
 import { getShapeClass, type Property } from "@metreeca/blue/resource";
+import { getShapeBranches } from "@metreeca/blue/union";
 import { eager } from "@metreeca/blue/value";
 import { isNumber, isObject, map } from "@metreeca/core";
 import { xsd } from "@metreeca/core/datatype";
@@ -162,8 +163,10 @@ export function encode(
 
 
 	function columns(cell: Flake): readonly SPARQL[] {
-		return cell.range.variants.length > 1 // !!! why?
-			? cell.range.variants.map(variant => variable(scope.resolve(cell, variant)))
+		const variants = getShapeBranches(cell.range.shape);
+
+		return variants.length > 1 // !!! why?
+			? variants.map(variant => variable(scope.resolve(cell, variant)))
 			: [variable(scope.resolve(cell))];
 	}
 
@@ -250,7 +253,7 @@ export function encode(
 			const forward = field.forward;
 
 
-			const variants = flake.range.variants;
+			const variants = getShapeBranches(flake.range.shape);
 
 			// a single-variant member carries its own class / kind; a union member (multiple variants) has no
 			// item class and is not a localised leaf
@@ -281,7 +284,9 @@ export function encode(
 			// threaded) so `anchor` stays in scope for the gate's filter: bare filter-only optionals leave outer
 			// variables unbound on some backends
 
-			if ( flake.range.variants.length > 1 && crossing(flake) ) {
+			const variants = getShapeBranches(flake.range.shape);
+
+			if ( variants.length > 1 && crossing(flake) ) {
 
 				// a crossing intermediate union (a path step under a shared predicate, never itself surfaced) holds
 				// only branches every variant declares; traverse it like a resource, descending the shared branches
@@ -289,16 +294,14 @@ export function encode(
 
 				return entries(getFlakeEntries(flake), anchor, undefined);
 
-			} else if ( flake.range.variants.length > 1 ) {
+			} else if ( variants.length > 1 ) {
 
 				// a requested variant contributes a gated arm: membership filter, shard bind, subtree. A
 				// non-requested variant carrying a surfacing (constrained/ordered) path still binds it ungated —
 				// the path's existence is the variant shard (state rule), so a value-implying constraint
 				// through a variant selects exactly the resources resolving through it
 
-				const requested = getUnionPlaceholders(flake.range.variants, placeholder);
-
-				const variants = flake.range.variants;
+				const requested = getUnionPlaceholders(variants, placeholder);
 
 				const retrievedVariants = variants.filter(variant => requested.has(variant) || getFlakeVariant(flake, variant).some(isDrainedFlake));
 
@@ -336,9 +339,9 @@ export function encode(
 
 				return fragment(...arms, gate);
 
-			} else if ( flake.range.variants[0].kind === "resource" || flake.range.variants[0].kind === "reference" ) {
+			} else if ( variants[0].kind === "resource" || variants[0].kind === "reference" ) {
 
-				return entries(getFlakeEntries(flake), anchor, getShapeClass(flake.range.variants[0]));
+				return entries(getFlakeEntries(flake), anchor, getShapeClass(variants[0]));
 
 			} else {
 
@@ -356,7 +359,7 @@ export function encode(
 
 			return fragment(...branches.map(branch => {
 
-				if ( isPropertyBranch(branch) && branch.entry.range.shape.kind === "dictionary" ) {
+				if ( isPropertyBranch(branch) && eager(branch.entry.range.shape).kind === "dictionary" ) {
 
 					// a structurally-addressed localised property binds its raw edge here (tagged-literal match,
 					// §5.7.3); a coalesced one is bound by the coalesce pass instead (§6.2)
@@ -448,7 +451,7 @@ export function encode(
 
 				if ( !isPropertyBranch(branch) || !(grouped ? isXComputed(branch) : isXScalar(branch)) ) { return nil(); }
 
-				const range = branch.entry.range.shape;
+				const range = eager(branch.entry.range.shape);
 
 				// a structural localised property (a tag-range map) is expanded by the broker in the decoder, so the
 				// cell carries the owning reference (the anchor): bind it, no edge, so the tags never fan the row. A
@@ -546,7 +549,8 @@ export function encode(
 			// bound's typed term, so a union bound resolves in its own variant and excludes the rest by type
 			// mismatch (§5.7.1)
 
-			const single = flake.range.variants.length === 1 ? flake.range.variants[0] : undefined; // !!! why?
+			const variants = getShapeBranches(flake.range.shape);
+			const single = variants.length === 1 ? variants[0] : undefined; // !!! why?
 
 			function compare(relate: (x: SPARQL, y: SPARQL) => SPARQL, limit: Literal): SPARQL { // !!! vs having?
 

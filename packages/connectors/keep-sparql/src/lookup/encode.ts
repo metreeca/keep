@@ -41,6 +41,8 @@
  * @module
  */
 
+import { getShapeBranches } from "@metreeca/blue/union";
+import { eager } from "@metreeca/blue/value";
 import type { Scope } from "@metreeca/core/scope";
 import { type Branch, type Flake, getFlakeEntries, getFlakeVariant, isModelBranch } from "@metreeca/keep-flake";
 import type { Lookup } from "@metreeca/keep/batching";
@@ -108,7 +110,7 @@ export function encode(
 
 			return entries.filter(isModelBranch).flatMap(branch => {
 
-				const shape = branch.entry.range.shape;
+				const shape = eager(branch.entry.range.shape);
 
 				if ( shape.kind === "dictionary" || shape.kind === "union" ) { return []; } else {
 
@@ -137,11 +139,11 @@ export function encode(
 
 		return entries.filter(isModelBranch).flatMap(branch => {
 
-			const shape = branch.entry.range.shape;
+			const shape = eager(branch.entry.range.shape);
 
 			if ( shape.kind === "union" ) {
 
-				return [...getUnionPlaceholders(shape.variants, branch.drain?.mould).keys()].flatMap(variant => {
+				return [...getUnionPlaceholders(getShapeBranches(shape), branch.drain?.mould).keys()].flatMap(variant => {
 
 					const target = scope.resolve(variant);
 

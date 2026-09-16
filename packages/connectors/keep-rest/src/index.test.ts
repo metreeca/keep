@@ -14,9 +14,8 @@
  * limitations under the License.
  */
 
-import { id, resource } from "@metreeca/blue/resource";
+import { id, required, resource } from "@metreeca/blue/resource";
 import { string } from "@metreeca/blue/string";
-import { required } from "@metreeca/blue/value";
 import { decodeBase64 } from "@metreeca/core/base64";
 import { TraceError } from "@metreeca/core/trace";
 import { type StoreClient, type StoreObserver } from "@metreeca/keep";

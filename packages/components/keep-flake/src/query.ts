@@ -35,8 +35,8 @@
  */
 
 import { getShapeProperties } from "@metreeca/blue/resource";
-import { type UnionShape } from "@metreeca/blue/union";
-import { type RangeShape, type Shape } from "@metreeca/blue/value";
+import { getShapeBranches, type UnionShape } from "@metreeca/blue/union";
+import { type Range, type Shape } from "@metreeca/blue/value";
 import { type Identifier, isArray, isIdentifier, isObject } from "@metreeca/core";
 import { immutable } from "@metreeca/core/structures";
 import {
@@ -199,7 +199,7 @@ function queryProbeOf(key: string): Probe {
  */
 function queryVariantEntriesOf(shape: UnionShape, key: `${number}`, value: unknown): readonly Entry[] {
 
-	return isObject(value) ? queryObjectEntriesOf(shape.variants[key], value) : [];
+	return isObject(value) ? queryObjectEntriesOf(getShapeBranches(shape)[key], value) : [];
 
 }
 
@@ -212,7 +212,7 @@ function queryVariantEntriesOf(shape: UnionShape, key: `${number}`, value: unkno
  * (a multi-variant range, or a resource or reference variant, resolved through its target). Scalars and
  * localised ranges carry none.
  */
-function queryNodeOf(range: RangeShape, path: readonly Identifier[], entries: readonly Entry[]): Flake {
+function queryNodeOf(range: Range, path: readonly Identifier[], entries: readonly Entry[]): Flake {
 
 	const local = entries.filter(e => e.path.length === path.length);
 	const deeper = entries.filter(e => e.path.length > path.length);
@@ -220,8 +220,10 @@ function queryNodeOf(range: RangeShape, path: readonly Identifier[], entries: re
 	// a node admits properties when its range carries a resource or reference variant, or is a union (whose
 	// scalar-only variants still yield an empty record, matching the shape-driven walk)
 
-	const descends = range.variants.length > 1
-		|| range.variants.some(variant => variant.kind === "resource" || variant.kind === "reference");
+	const variants = getShapeBranches(range.shape);
+
+	const descends = variants.length > 1
+		|| variants.some(variant => variant.kind === "resource" || variant.kind === "reference");
 
 	const base = queryLocusOf(range, path, [], [], local);
 
@@ -254,9 +256,9 @@ function queryNodeOf(range: RangeShape, path: readonly Identifier[], entries: re
  * union-typed) and every non-union model pass straight through to {@link getEntries}, which pairs a keyed
  * union model only with a multi-variant range.
  */
-function queryFoldOf(range: RangeShape, path: readonly Identifier[], model: Model): undefined | Entries {
+function queryFoldOf(range: Range, path: readonly Identifier[], model: Model): undefined | Entries {
 
-	return range.variants.length > 1 || !isUnion(model)
+	return getShapeBranches(range.shape).length > 1 || !isUnion(model)
 		? getEntries(range, path, model)
 		: mergeEntries(Object.values(model).flatMap(alternative => {
 
@@ -275,7 +277,7 @@ function queryFoldOf(range: RangeShape, path: readonly Identifier[], model: Mode
  * {@link Transforms} tree under the `recorded` breadcrumb.
  */
 function queryLocusOf(
-	range: RangeShape,
+	range: Range,
 	path: readonly Identifier[],
 	pipe: readonly Transform[],
 	recorded: readonly Transform[],
@@ -338,7 +340,7 @@ function queryProjectionOf(entries: readonly Entry[]): {
  * entry, growing innermost-first so it matches the right-to-left functional-composition order.
  */
 function queryTransformsOf(
-	range: RangeShape,
+	range: Range,
 	path: readonly Identifier[],
 	recorded: readonly Transform[],
 	entries: readonly Entry[]
@@ -357,7 +359,7 @@ function queryTransformsOf(
  * {@link Flake}: its inline slots and nested {@link Transforms} are assembled by {@link queryLocusOf}.
  */
 function queryStageOf(
-	range: RangeShape,
+	range: Range,
 	path: readonly Identifier[],
 	pipe: readonly Transform[],
 	entries: readonly Entry[]
@@ -387,7 +389,7 @@ function peelPipe(head: Transform, entries: readonly Entry[]): readonly Entry[] 
  * so it yields a single branch whose range is the disjunction its child step resolves, never a branch per
  * variant.
  */
-function queryDescentOf(range: RangeShape, path: readonly Identifier[], entries: readonly Entry[]): Entries {
+function queryDescentOf(range: Range, path: readonly Identifier[], entries: readonly Entry[]): Entries {
 
 	return Object.fromEntries(
 		queryUniq(entries.map(e => e.path[path.length]))
@@ -408,13 +410,15 @@ function queryDescentOf(range: RangeShape, path: readonly Identifier[], entries:
  * Keep validates models at the API boundary, so this only fires on contract violations.
  */
 function queryBranchOf(
-	range: RangeShape,
+	range: Range,
 	path: readonly Identifier[],
 	head: Identifier,
 	entries: readonly Entry[]
 ): undefined | Branch {
 
-	const property = range.variants.map(variant => getShapeProperties(variant)[head]).find(field => field !== undefined);
+	const property = getShapeBranches(range.shape)
+		.map(variant => getShapeProperties(variant)[head])
+		.find(field => field !== undefined);
 
 	if ( property === undefined ) {
 

@@ -15,6 +15,8 @@
  */
 
 import { getShapeProperties } from "@metreeca/blue/resource";
+import { getShapeBranches } from "@metreeca/blue/union";
+import { eager } from "@metreeca/blue/value";
 import {
 	type Branch,
 	type Flake,
@@ -78,7 +80,7 @@ export function crossing(flake: Flake): boolean {
 
 		const branches = getFlakeEntries(flake);
 
-		return branches.length > 0 && branches.every(branch => flake.range.variants.every(variant =>
+		return branches.length > 0 && branches.every(branch => getShapeBranches(flake.range.shape).every(variant =>
 			getShapeProperties(variant)[branch.path[branch.path.length-1]] !== undefined
 		));
 	}
@@ -87,6 +89,6 @@ export function crossing(flake: Flake): boolean {
 
 export function references(branch: Branch): boolean {
 	return branch.entry.kind === "id" || branch.entry.kind === "type" ? true
-		: isPropertyBranch(branch) ? branch.entry.range.shape.kind === "reference"
+		: isPropertyBranch(branch) ? eager(branch.entry.range.shape).kind === "reference"
 			: false;
 }

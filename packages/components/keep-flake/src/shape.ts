@@ -29,7 +29,9 @@
  */
 
 import { getShapeTarget } from "@metreeca/blue/reference";
-import { type RangeShape, type Shape } from "@metreeca/blue/value";
+import type { Member } from "@metreeca/blue/resource";
+import { getShapeBranches } from "@metreeca/blue/union";
+import { type Range, type Shape } from "@metreeca/blue/value";
 import type { Identifier } from "@metreeca/core";
 import { immutable } from "@metreeca/core/structures";
 import { getPropertyRange, getRootRange, mergeEntries } from "./index.core.js";
@@ -64,31 +66,36 @@ export function createShapeFlake(shape: Shape): Flake {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /**
- * Builds the property-major {@link Entries} of a node from its effective {@link RangeShape}.
+ * Builds the property-major {@link Entries} of a node from its effective {@link Range}.
  *
  * Each owned variant of the range — an embedded resource or a captive reference — contributes its target's
  * declared properties, merged across variants; plain and foreign references keep their independent identity
  * and contribute none. Every declared entry becomes a single-element `[Branch]` carrying its range (stepped
  * one property from the node range) and recursing into that child's own owned structure. Cyclic captive
  * shapes are unsupported: the walk performs no cycle detection.
+ *
+ * `owner` is the member the node's range was stepped from, carrying the captive flag that decides whether a
+ * reference variant is owned; the root node is stepped from none.
  */
-function shapeEntriesOf(path: readonly Identifier[], range: RangeShape): undefined | Entries {
+function shapeEntriesOf(path: readonly Identifier[], range: Range, owner?: Member): undefined | Entries {
 
-	return mergeEntries(range.variants.flatMap(variant => {
+	const captive = owner?.kind === "property" && owner.captive === true;
+
+	return mergeEntries(getShapeBranches(range.shape).flatMap(variant => {
 
 		// shape-mode reaches a variant's structure only through ownership: an embedded resource or a
 		// captive reference; plain and foreign references stay leaves
 
 		const owned = variant.kind === "resource"
-			|| (variant.kind === "reference" && variant.captive === true);
+			|| (variant.kind === "reference" && captive);
 
 		const target = owned ? getShapeTarget(variant) : undefined;
 
-		return target === undefined ? [] : [Object.fromEntries(Object.entries(target.entries).map(([key, entry]) => {
+		return target === undefined ? [] : [Object.fromEntries(Object.entries(target.members).map(([key, entry]) => {
 
 			const branchPath: readonly Identifier[] = [...path, key];
 			const child = getPropertyRange(range, key);
-			const entries = shapeEntriesOf(branchPath, child);
+			const entries = shapeEntriesOf(branchPath, child, entry);
 
 			return [key, [{
 				entry,

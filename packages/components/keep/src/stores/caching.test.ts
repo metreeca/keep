@@ -28,7 +28,7 @@ describe("createCachingStore", () => {
 	// minimal placeholder shape: MockStore does not exercise shape validation, so a structurally
 	// valid but empty ResourceShape is sufficient — no cast required
 
-	const shape: Lazy<ResourceShape> = () => ({ kind: "resource", model: {}, entries: {} });
+	const shape: Lazy<ResourceShape> = () => ({ kind: "resource", classes: [], parents: [], members: {} });
 
 
 	// time constants used by the TTL eviction suite — siblings expressed in terms of TTL
@@ -220,7 +220,7 @@ describe("createCachingStore", () => {
 
 			// shape is intentionally excluded from the cache key — see the IMPORTANT note on createCachingStore
 
-			const shape2: Lazy<ResourceShape> = () => ({ kind: "resource", model: {}, entries: {} });
+			const shape2: Lazy<ResourceShape> = () => ({ kind: "resource", classes: [], parents: [], members: {} });
 			const mock = MockStore();
 			const store = createCachingStore(mock);
 

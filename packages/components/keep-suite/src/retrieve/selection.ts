@@ -17,9 +17,8 @@
 import { boolean } from "@metreeca/blue/boolean";
 import { decimal } from "@metreeca/blue/number";
 import { reference } from "@metreeca/blue/reference";
-import { id, resource } from "@metreeca/blue/resource";
+import { id, multiple, nonempty, optional, required, resource } from "@metreeca/blue/resource";
 import { date, string, url } from "@metreeca/blue/string";
-import { multiple, optional, repeatable, required } from "@metreeca/blue/value";
 import { isObject } from "@metreeca/core";
 import { ascending, by, compound, descending, reverse } from "@metreeca/core/order";
 import type { Selection } from "@metreeca/qest/template";
@@ -562,7 +561,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						shape: Products,
 						model: catalogue(resource({
 							id: id(),
-							categories: repeatable(reference(Category))
+							categories: nonempty(reference(Category))
 						}), {
 							"!categories": [category1100.id, category1110.id]
 						})
@@ -614,7 +613,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						shape: Products,
 						model: catalogue(resource({
 							id: id(),
-							categories: repeatable(reference(Category))
+							categories: nonempty(reference(Category))
 						}), {
 							"!categories": []
 						})
@@ -1296,7 +1295,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 			// member into a variant sub-property (`address.city` / `address.latitude` / `address.label`),
 			// or landing on a union-typed leaf through an intermediate reference step (`vendor.score` /
 			// `vendor.certified`). Both route the operand off a nested-branch anchor carrying the crossed
-			// variant's own RangeShape — the arm the direct-leaf matching/order suites, which anchor the
+			// variant's own `Range` — the arm the direct-leaf matching/order suites, which anchor the
 			// union owner as the entry resource, never reach. Each option operator is exercised across
 			// every feasible option type and both single- and multi-valued option sets (§5.7.3).
 
@@ -1667,7 +1666,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 			describe("onto a union leaf", () => {
 
 				// The path steps through the required `vendor` reference and lands on the union-typed
-				// `score` / `certified` leaf — a genuine union RangeShape reached off a nested-branch
+				// `score` / `certified` leaf — a genuine union `Range` reached off a nested-branch
 				// anchor, with no transform to collapse it (unlike expression.ts "path traversing a
 				// union", which always carries a pipe). §5.7 per-branch semantics then apply: a typed
 				// bound or option resolves in its own variant, other branches contributing no match.

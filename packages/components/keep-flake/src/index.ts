@@ -50,8 +50,8 @@
  * @module index
  */
 
-import { type Entry, getShapeProperties, type Id, type Property, type Type } from "@metreeca/blue/resource";
-import { eager, type RangeShape, type Shape } from "@metreeca/blue/value";
+import { getShapeProperties, type Id, type Member, type Property, type Type } from "@metreeca/blue/resource";
+import { eager, type Range, type Shape } from "@metreeca/blue/value";
 import { type Identifier, isArray, isObject, type Lazy } from "@metreeca/core";
 import { some } from "@metreeca/core/arrays";
 import { by } from "@metreeca/core/order";
@@ -92,7 +92,7 @@ export type Flake = {
 
 
 	/**
-	 * The effective value {@link RangeShape} this node resolves to against the flake's driving shape.
+	 * The effective value {@link Range} this node resolves to against the flake's driving shape.
 	 *
 	 * The type and cardinality the node's {@link Flake.path | path} and {@link Flake.pipe | pipe} yield,
 	 * composed across the steps from the root, so a single-valued property under a multi-valued ancestor
@@ -101,7 +101,7 @@ export type Flake = {
 	 * the enveloped driving shape on the root {@link Flake}. Precomputed so consumers read it directly
 	 * instead of re-resolving through blue's {@link @metreeca/blue/value!effective | effective}.
 	 */
-	readonly range: RangeShape;
+	readonly range: Range;
 
 	/**
 	 * The retrieval requested at this node, in a model- or query-mode flake.
@@ -194,9 +194,9 @@ export type Flake = {
 export type Branch = Flake & {
 
 	/**
-	 * The shape entry this branch steps through.
+	 * The shape member this branch steps through.
 	 */
-	readonly entry: Entry;
+	readonly entry: Member;
 
 }
 
@@ -768,7 +768,7 @@ export function getFlakeOrdering(flake: Flake): readonly (Flake & { readonly ord
  *
  * @param flake The node whose branch index to slice: any {@link Flake}, a collection flake root as well as a
  * {@link Branch}
- * @param shape One of the range {@link @metreeca/blue/value!getShapeVariants | variants} to slice by
+ * @param shape One of the range {@link @metreeca/blue/union!getShapeBranches | branches} to slice by
  *
  * @returns The branches `shape` contributes, in property declaration order
  */

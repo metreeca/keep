@@ -339,8 +339,8 @@ export interface StoreClient {
 	 * > [!NOTE]
 	 * > `shape` and `model` are kept distinct so that a single `shape` can serve many retrieval templates —
 	 * > for example, a server wiring one `shape` at startup and accepting any admissible `model` decoded
-	 * > from the client request on each call. Callers wanting the shape's own model as template MUST pass
-	 * > it explicitly via {@link @metreeca/blue/value!model}.
+	 * > from the client request on each call. Callers wanting a template addressing every slot the shape
+	 * > declares MUST author it explicitly.
 	 *
 	 * > [!CAUTION]
 	 * > By default, `model` templates support the full query language, including aggregate transforms and nested
@@ -397,10 +397,10 @@ export interface StoreClient {
 	 * as follows:
 	 *
 	 * - {@link ResourceShape | embedded references} — cascades recursively with the same semantics
-	 * - {@link @metreeca/blue/reference!ReferenceConstraints.captive | captive references} — accepted only as bare
+	 * - {@link @metreeca/blue/resource!PropertyConstraints.captive | captive references} — accepted only as bare
 	 * IRI references; inline captive batches are rejected, as `state` is always validated at depth `0`. Use
 	 * {@link StoreClient.insert insert} to embed a captive tree in a single batch
-	 * - {@link @metreeca/blue/reference!ReferenceConstraints.foreign | foreign references} — skipped, as their
+	 * - {@link @metreeca/blue/resource!PropertyConstraints.foreign | foreign references} — skipped, as their
 	 * data is owned by the defining resource
 	 *
 	 * @param request - Creation specifications
@@ -432,10 +432,10 @@ export interface StoreClient {
 	 * embedded data. Specific reference kinds are handled as follows:
 	 *
 	 * - {@link ResourceShape | embedded references} — cascades recursively with the same semantics
-	 * - {@link @metreeca/blue/reference!ReferenceConstraints.captive | captive references} — accepted only as bare
+	 * - {@link @metreeca/blue/resource!PropertyConstraints.captive | captive references} — accepted only as bare
 	 * IRI references; inline captive batches are rejected, as `state` is always validated at depth `0`. Use
 	 * {@link StoreClient.insert insert} to embed a captive tree in a single batch
-	 * - {@link @metreeca/blue/reference!ReferenceConstraints.foreign | foreign references} — skipped, as their
+	 * - {@link @metreeca/blue/resource!PropertyConstraints.foreign | foreign references} — skipped, as their
 	 * data is owned by the defining resource
 	 *
 	 * @param request - Update specifications
@@ -467,7 +467,7 @@ export interface StoreClient {
 	 * Specific reference kinds are handled as follows:
 	 *
 	 * - {@link ResourceShape | embedded references} — cascades recursively with the same semantics
-	 * - {@link @metreeca/blue/reference!ReferenceConstraints.captive | captive references} — cascade-deleted with
+	 * - {@link @metreeca/blue/resource!PropertyConstraints.captive | captive references} — cascade-deleted with
 	 * the same semantics
 	 *
 	 * @param request - Deletion specifications
@@ -497,9 +497,9 @@ export interface StoreClient {
 	 * data. Specific reference kinds are handled as follows:
 	 *
 	 * - {@link ResourceShape | embedded references} — cascades recursively with the same semantics
-	 * - {@link @metreeca/blue/reference!ReferenceConstraints.captive | captive references} — accepted as bare IRI
+	 * - {@link @metreeca/blue/resource!PropertyConstraints.captive | captive references} — accepted as bare IRI
 	 * references or, up to `opts.depth` nesting levels, as inline batches creating or updating the captive tree
-	 * - {@link @metreeca/blue/reference!ReferenceConstraints.foreign | foreign references} — skipped, as their
+	 * - {@link @metreeca/blue/resource!PropertyConstraints.foreign | foreign references} — skipped, as their
 	 * data is owned by the defining resource
 	 *
 	 * > [!CAUTION]
@@ -545,7 +545,7 @@ export interface StoreClient {
 	 * reference kinds are handled as follows:
 	 *
 	 * - {@link ResourceShape | embedded references} — cascades recursively with the same semantics
-	 * - {@link @metreeca/blue/reference!ReferenceConstraints.captive | captive references} — cascade-removed with
+	 * - {@link @metreeca/blue/resource!PropertyConstraints.captive | captive references} — cascade-removed with
 	 * the same semantics
 	 *
 	 * @param request - Removal specifications

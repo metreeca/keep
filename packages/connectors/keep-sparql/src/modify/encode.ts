@@ -33,8 +33,8 @@
  */
 
 import { type Property, type ResourceShape } from "@metreeca/blue/resource";
-import { getShapeVariants, getStateVariant } from "@metreeca/blue/union";
-import type { Shape, ValuesShape } from "@metreeca/blue/value";
+import { getShapeBranches, getStateBranch } from "@metreeca/blue/union";
+import { eager, type Shape } from "@metreeca/blue/value";
 import { isObject, opt } from "@metreeca/core";
 import { some } from "@metreeca/core/arrays";
 import type { Scope } from "@metreeca/core/scope";
@@ -95,14 +95,14 @@ export function encode(
 
 
 		function triples(entry: Variable | Named, flake: Flake): SPARQL {
-			return fragment(...flake.range.variants.flatMap(shape =>
+			return fragment(...getShapeBranches(flake.range.shape).flatMap(shape =>
 				shape.kind !== "resource" ? [] : [fragment(
 					isTyped(shape) ? pattern([entry, named(rdf.type), scope.resolve(shape)]) : nil(),
 					...getFlakeVariant(flake, shape).flatMap(branch => {
 
 						const property = branch.entry;
 
-						if ( property.kind === "property" && isOwn(property.range.shape) ) {
+						if ( property.kind === "property" && isOwn(property) ) {
 
 							const v = scope.resolve(branch);
 
@@ -124,14 +124,14 @@ export function encode(
 		}
 
 		function matches(entry: Variable | Named, flake: Flake): SPARQL {
-			return fragment(...flake.range.variants.flatMap(shape =>
+			return fragment(...getShapeBranches(flake.range.shape).flatMap(shape =>
 				shape.kind !== "resource" ? [] : [fragment(
 					isTyped(shape) ? optional(pattern([entry, named(rdf.type), scope.resolve(shape)])) : nil(),
 					...getFlakeVariant(flake, shape).flatMap(branch => {
 
 						const property = branch.entry;
 
-						if ( property.kind === "property" && isOwn(property.range.shape) ) {
+						if ( property.kind === "property" && isOwn(property) ) {
 
 							const v = scope.resolve(branch);
 
@@ -141,11 +141,11 @@ export function encode(
 							);
 
 							return [
-								...(getShapeVariants(property.range.shape).some(variant => variant.kind === "resource")
+								...(getShapeBranches(property.range.shape).some(variant => variant.kind === "resource")
 										? [optional(edges, matches(v, branch))] // only embedded resources recurse
 										: []
 								),
-								...(isLeaf(property.range.shape)
+								...(isLeaf(property)
 										? [optional(edges)]
 										: []
 								)
@@ -164,7 +164,7 @@ export function encode(
 
 		function data(entry: Reference, flake: Flake, state: Resource): SPARQL {
 
-			const shape = getStateVariant(state, flake.range.variants);
+			const shape = getStateBranch(state, getShapeBranches(flake.range.shape));
 
 			return shape === undefined || shape.kind !== "resource" ? nil() : record(named(entry), shape, state);
 
@@ -177,17 +177,17 @@ export function encode(
 				return fragment(
 					shape.class !== undefined ? pattern([entry, named(rdf.type), named(shape.class)]) : nil(),
 					...(shape.classes ?? []).map(clazz => pattern([entry, named(rdf.type), named(clazz)])),
-					...Object.entries(shape.entries).flatMap(([label, property]) => {
+					...Object.entries(shape.members).flatMap(([label, property]) => {
 
 						const values = state[label];
 
 						if ( property.kind === "property" && values !== undefined ) {
 
-							const variants = getShapeVariants(property.range.shape);
+							const variants = getShapeBranches(property.range.shape);
 
 							return some(values)
 								.filter(value => !isVacuous(value))
-								.flatMap(value => opt(getStateVariant(value, variants),
+								.flatMap(value => opt(getStateBranch(value, variants),
 									variant => triples(property, value, variant),
 									[]
 								));
@@ -201,7 +201,7 @@ export function encode(
 					})
 				);
 
-				function triples(property: Property, values: Values, shape: ValuesShape): readonly SPARQL[] {
+				function triples(property: Property, values: Values, shape: Shape): readonly SPARQL[] {
 					switch ( shape.kind ) {
 
 						case "boolean":
@@ -215,7 +215,7 @@ export function encode(
 
 						case "reference":
 
-							if ( shape.foreign === true ) { return []; } else {
+							if ( property.foreign === true ) { return []; } else {
 
 								return valuesToTerms(values, shape).filter(node => node.kind === "named").flatMap(node => [
 									forward([entry, property, node]),
@@ -235,6 +235,10 @@ export function encode(
 								]);
 
 							}
+
+						case "union": // a range variant is always a flattened branch, never a union
+
+							throw new RangeError(`unsupported union variant`);
 
 					}
 				}
@@ -271,7 +275,7 @@ export function encode(
 		function matches(anchor: Variable | Named, prefix: readonly SPARQL[], level: readonly Branch[]): readonly SPARQL[] {
 			return level.flatMap(branch => {
 
-				if ( branch.entry.kind === "property" && isCascading(branch.entry.range.shape) ) {
+				if ( branch.entry.kind === "property" && isCascading(branch.entry) ) {
 
 					const property = branch.entry;
 
@@ -281,7 +285,7 @@ export function encode(
 						reverse([anchor, property, root])
 					);
 
-					const perVariant = getShapeVariants(property.range.shape)
+					const perVariant = getShapeBranches(property.range.shape)
 						.map(variant => getFlakeVariant(branch, variant))
 						.filter(bs => bs.length > 0);
 
@@ -315,24 +319,42 @@ export function encode(
 	}
 
 
+	/**
+	 * Reports whether a shape owns the `rdf:type` triples of the resources it describes.
+	 *
+	 * A `type` member activates only on a shape declaring its own target class, so a common supershape may factor the
+	 * member without contributing a type: the class-less shapes inheriting it carry no type of their own and their
+	 * stored `rdf:type` triples are left to whichever shape declared them.
+	 */
 	function isTyped(shape: Shape): boolean {
-		return shape.kind === "union" ? shape.variants.some(isTyped)
-			: shape.kind === "resource" && Object.values(shape.entries).some(p => p.kind === "type");
+		return shape.kind === "union" ? getShapeBranches(shape).some(isTyped)
+			: shape.kind === "resource" && shape.class !== undefined;
 	}
 
-	function isLeaf(shape: Shape): boolean {
-		return shape.kind === "union" ? shape.variants.some(isLeaf)
-			: shape.kind !== "resource" && (shape.kind !== "reference" || shape.foreign !== true);
+	function isLeaf(property: Property): boolean {
+
+		return property.foreign !== true && leaf(eager(property.range.shape));
+
+		function leaf(shape: Shape): boolean {
+			return shape.kind === "union" ? getShapeBranches(shape).some(leaf) : shape.kind !== "resource";
+		}
+
 	}
 
-	function isOwn(shape: Shape): boolean {
-		return shape.kind === "union" ? shape.variants.some(isOwn)
-			: shape.kind !== "reference" || shape.foreign !== true;
+	function isOwn(property: Property): boolean {
+
+		return property.foreign !== true;
+
 	}
 
-	function isCascading(shape: Shape): boolean {
-		return shape.kind === "union" ? shape.variants.some(isCascading)
-			: shape.kind === "reference" && shape.captive === true || shape.kind === "resource";
+	function isCascading(property: Property): boolean {
+
+		return property.captive === true || embedded(eager(property.range.shape));
+
+		function embedded(shape: Shape): boolean {
+			return shape.kind === "union" ? getShapeBranches(shape).some(embedded) : shape.kind === "resource";
+		}
+
 	}
 
 }

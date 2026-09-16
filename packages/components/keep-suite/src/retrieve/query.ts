@@ -35,12 +35,12 @@
 
 import { dictionary } from "@metreeca/blue/dictionary";
 import { reference } from "@metreeca/blue/reference";
-import { id, resource } from "@metreeca/blue/resource";
+import { id, multiple, required, resource } from "@metreeca/blue/resource";
 import { string, url } from "@metreeca/blue/string";
 import { union } from "@metreeca/blue/union";
-import { model, multiple, required } from "@metreeca/blue/value";
 import { isObject } from "@metreeca/core";
 import { beforeAll, describe, expect, it } from "vitest";
+import { model } from "../_model.js";
 import { lookup, type TestFactory } from "../index.core.js";
 import { collections } from "../toys.core.js";
 import { Category, Contacts, Image, Media, Product, Products, Vendor, Video } from "../toys.js";
@@ -75,7 +75,7 @@ export function testRetrieveQuery(factory: TestFactory): void {
 				const result = await store.lookup({
 					entry: target.id,
 					shape: Product,
-					model: model(resource({ keywords: multiple(dictionary({ en: "" })) }))
+					model: model(resource({ keywords: multiple(dictionary({ languageIn: ["en"] })) }))
 				});
 
 				expect(result?.keywords).toBeDefined();
@@ -91,7 +91,7 @@ export function testRetrieveQuery(factory: TestFactory): void {
 				const result = await store.lookup({
 					entry: target.id,
 					shape: Product,
-					model: model(resource({ keywords: multiple(dictionary({ en: "" })) }))
+					model: model(resource({ keywords: multiple(dictionary({ languageIn: ["en"] })) }))
 				});
 
 				expect(Object.keys(result?.keywords ?? {})).toEqual(["en"]);
@@ -407,7 +407,7 @@ export function testRetrieveQuery(factory: TestFactory): void {
 					shape: Product,
 					model: model(resource({
 						sku: required(string()),
-						keywords: multiple(dictionary({ en: "" }))
+						keywords: multiple(dictionary({ languageIn: ["en"] }))
 					}))
 				});
 

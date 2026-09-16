@@ -16,9 +16,8 @@
 
 import { number } from "@metreeca/blue/number";
 import { reference } from "@metreeca/blue/reference";
-import { id, resource } from "@metreeca/blue/resource";
+import { id, multiple, optional, required, resource } from "@metreeca/blue/resource";
 import { string } from "@metreeca/blue/string";
-import { multiple, optional, required } from "@metreeca/blue/value";
 import { TraceError } from "@metreeca/core/trace";
 import { describe, expect, it, vi } from "vitest";
 import type { StoreClient } from "../index.js";
@@ -43,7 +42,7 @@ describe("createValidatingStore", () => {
 	const nested = resource({ items: multiple(reference(Target)) });
 
 	const Captive = resource({ id: id(), label: required(string()) });
-	const captor = resource({ child: optional(reference(Captive, { captive: true })) });
+	const captor = resource({ child: optional(reference(Captive), { captive: true }) });
 	const captiveBatch = { child: { id: "http://example.com/inner/1", label: "x" } };
 
 

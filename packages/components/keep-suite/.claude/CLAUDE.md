@@ -58,10 +58,12 @@ encodings diverge (see below). Test files group tests under nested `describe` bl
 
 ## Primary Axis
 
-Undefined entry values and empty structures — `undefined`, `{}` (empty nested resource or empty union payload), `[]`
-(empty array or empty shorthand), `{ und: [] }` (empty language map) — MUST be ignored at every leaf as if the owning
-property were omitted; when an empty nested resource appears as an element of a multi-valued slot, the element itself
-MUST be dropped.
+Undefined entry values and empty structures — `undefined`, `{}` (empty nested resource, empty language map or empty
+union payload), `[]` (empty array or empty shorthand) — MUST be ignored at every leaf as if the owning property were
+omitted; when an empty nested resource appears as an element of a multi-valued slot, the element itself MUST be
+dropped. An empty tag entry (`{ en: [] }`) is ignored the same way, but only on a property whose per-tag shape is an
+array per tag: a property fixing a single string per tag holds the entry malformed and MUST reject it, the empty map
+being the form a localised value carrying no content is stated in whatever the per-tag shape.
 
 - **root resources**
 	- **special fields** — `id`, `type`
@@ -73,7 +75,8 @@ MUST be dropped.
 	- **array properties** — multi-valued slots, element content as per scalar (including captive references via cascading
 	  captive writes, deferred), set semantics
 	  (duplicate elision, order immaterial); empty `[]` ignored
-	- **localised properties** — `Localised` value sets; empty map `{}` and empty shorthand `[]` ignored
+	- **localised properties** — `Localised` value sets; empty map `{}` and empty shorthand `[]` ignored, and an empty
+	  tag entry ignored on an array-per-tag property and rejected on a single-string-per-tag one
 		- plain string shorthand (`und` tag)
 		- plain string-array shorthand (`und` tag)
 		- single-valued language map

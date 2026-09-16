@@ -15,6 +15,7 @@
  */
 
 import type { ResourceShape } from "@metreeca/blue/resource";
+import type { Instance } from "@metreeca/blue/value";
 import type { Lazy } from "@metreeca/core";
 import { TraceError } from "@metreeca/core/trace";
 import type { Reference, Resource } from "@metreeca/qest/resource";
@@ -262,7 +263,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 
 					const existing = await generate(products[0], Product);
 
-					const state = {
+					const state: Instance<typeof Product> = {
 						...existing,
 						name: { en: "Completely Updated Name" },
 						price: 55.55,
@@ -385,7 +386,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 
 					// inline literal (not testProduct) so the embedded review can carry an `und` plain-string label
 
-					const state = {
+					const state: Instance<typeof Product> = {
 
 						id: "https://data.example.net/products/NEW-003",
 						type: "https://data.example.net/toys#Product",
@@ -696,13 +697,28 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 
 			}));
 
+			it("should reject an empty tag entry on a single-string-per-tag map (§4.3)", factory(async ({ store }) => {
+
+				// §4: an empty array stands as a tag's value only where the per-tag shape is an array per tag;
+				// a property fixing a single string per tag holds the entry malformed, the empty map being the
+				// form a localised value carrying no content is stated in
+
+				const code = { create: "TAG-001", update: "TAG-002", insert: "TAG-003" }[op];
+				const sample = testProduct(code, "Empty Entry Product");
+
+				const state: Resource = { ...sample, description: { en: [] } };
+
+				await expect(store[op]({ entry: sample.id, shape: Product, state }))
+					.rejects.toBeInstanceOf(TraceError);
+
+			}));
+
 			if ( applies("update", "insert") ) {
 
 				const verb = op === "insert" ? "inserted" : "updated";
 
 				it.each([
 					[`${verb} as undefined`, undefined],
-					[`${verb} as empty language map`, { und: [] as readonly string[] }],
 					[`${verb} as empty object`, {}],
 					[`${verb} as empty ${op === "insert" ? "array shorthand" : "array"}`, [] as readonly string[]]
 				])("should remove localised slot when %s", (_form, empty) => factory(async ({
@@ -729,6 +745,31 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 					}, Product)).toBeTruthy();
 
 				})());
+
+				it(`should remove array-per-tag localised slot when ${verb} as empty tag entries (§4.3)`, factory(async ({
+					store,
+					generate,
+					includes,
+					excludes
+				}) => {
+
+					// §4: an empty array is dropped where it stands as a tag's value, so a map whose every entry
+					// is empty carries no content and leaves the owning property omitted
+
+					const withKeywords = lookup(products, p => !!p.keywords?.length);
+
+					if ( !withKeywords ) { return; }
+
+					const existing = await generate(withKeywords, Product);
+
+					const state: Resource = { ...existing, keywords: { en: [] } };
+
+					await store[op]({ entry: existing.id, shape: Product, state });
+
+					expect(await includes({ ...existing, keywords: undefined }, Product)).toBeTruthy();
+					expect(await excludes({ id: existing.id, keywords: existing.keywords }, Product)).toBeTruthy();
+
+				}));
 
 			}
 

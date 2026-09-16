@@ -73,7 +73,7 @@
  * (`model` on {@link Store.lookup lookup}, `state` on every mutation) against the shape before the network
  * call. Because the remote endpoint is untrusted, {@link Store.lookup lookup} responses are re-validated
  * locally against the shape narrowed by the caller's `model`. Failures reject with a
- * {@link @metreeca/blue!TraceError | TraceError} carrying `"invalid model"`, `"invalid state"`, or
+ * {@link @metreeca/core!TraceError | TraceError} carrying `"invalid model"`, `"invalid state"`, or
  * `"invalid response"`, per the unified {@link Store} error channel.
  *
  * @see {@link https://www.rfc-editor.org/rfc/rfc3986 RFC 3986 — URI Generic Syntax}

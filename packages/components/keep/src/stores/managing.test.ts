@@ -15,9 +15,8 @@
  */
 
 import { number } from "@metreeca/blue/number";
-import { id, resource } from "@metreeca/blue/resource";
+import { id, required, resource } from "@metreeca/blue/resource";
 import { string } from "@metreeca/blue/string";
-import { required } from "@metreeca/blue/value";
 import { describe, expect, it, vi } from "vitest";
 import type { StoreClient, StoreObserver } from "../index.js";
 import { createManagingStore } from "./managing.js";

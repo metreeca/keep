@@ -7,6 +7,25 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unpublished](https://github.com/metreeca/keep/compare/v0.10.0...HEAD)
 
+### Added
+
+- `@metreeca/keep-suite` — `Probe`, the fact probe type accepted by `StoreTestOptions.includes` and
+  `StoreTestOptions.excludes`, holding each asserted slot to its declared type where the shape is concrete and
+  admitting any resource where the shape is left abstract
+
+### Changed
+
+- Align every package to the reworked `@metreeca/blue` shape API: `Flake.range` carries a `Range`, `Branch.entry` a
+  `Member`, and the `captive` and `foreign` flags are read from `PropertyConstraints` on the property rather than from
+  a reference-specific constraint set
+- `@metreeca/keep-suite` — `StoreTestOptions.includes` and `StoreTestOptions.excludes` take a `Probe` in place of a
+  partial state, and `StoreTestOptions.generate` takes and returns a shape `Instance`
+
+### Fixed
+
+- `@metreeca/keep-sparql` — retain stored `rdf:type` triples where the resource shape declares no class of its own, so
+  a class-less shape factored under a common supershape no longer retracts types it never wrote
+
 ## [0.10.0](https://github.com/metreeca/keep/releases/tag/v0.10.0) - 2026-09-09
 
 ### Added

@@ -16,16 +16,14 @@
       "foreign": "https://metreeca.github.io/blue/functions/resource.foreign.html",
       "resource": "https://metreeca.github.io/blue/functions/resource.resource.html",
       "Property": "https://metreeca.github.io/blue/interfaces/resource.Property.html",
+      "PropertyConstraints": "https://metreeca.github.io/blue/interfaces/resource.PropertyConstraints.html",
+      "PropertyConstraints.foreign": "https://metreeca.github.io/blue/interfaces/resource.PropertyConstraints.html#foreign",
+      "PropertyConstraints.captive": "https://metreeca.github.io/blue/interfaces/resource.PropertyConstraints.html#captive",
       "ResourceShape": "https://metreeca.github.io/blue/interfaces/resource.ResourceShape.html"
     },
     "@metreeca/blue/value": {
       "model": "https://metreeca.github.io/blue/functions/value.model.html",
       "getShapeModel": "https://metreeca.github.io/blue/functions/value.getShapeModel.html"
-    },
-    "@metreeca/blue/reference": {
-      "ReferenceConstraints": "https://metreeca.github.io/blue/interfaces/reference.ReferenceConstraints.html",
-      "ReferenceConstraints.foreign": "https://metreeca.github.io/blue/interfaces/reference.ReferenceConstraints.html#foreign",
-      "ReferenceConstraints.captive": "https://metreeca.github.io/blue/interfaces/reference.ReferenceConstraints.html#captive"
     },
     "@metreeca/core": {
       "*": "https://metreeca.github.io/core/",

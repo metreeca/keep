@@ -36,10 +36,19 @@ import { boolean } from "@metreeca/blue/boolean";
 import { dictionary } from "@metreeca/blue/dictionary";
 import { byte, decimal, integer } from "@metreeca/blue/number";
 import { reference } from "@metreeca/blue/reference";
-import { id, property, resource, type ResourceShape, type } from "@metreeca/blue/resource";
+import {
+	id,
+	multiple,
+	nonempty,
+	optional,
+	property,
+	required,
+	resource,
+	type ResourceShape,
+	type
+} from "@metreeca/blue/resource";
 import { date, duration, email, instant, phone, string, time, timestamp, url, year } from "@metreeca/blue/string";
 import { union } from "@metreeca/blue/union";
-import { cardinality, multiple, optional, repeatable, required } from "@metreeca/blue/value";
 import type { Lazy } from "@metreeca/core";
 import { createNamespace } from "@metreeca/core/resource";
 
@@ -184,18 +193,38 @@ export const languages = [
 export function Entity() {
 	return resource({
 
-		namespace: toys,
+		space: toys,
 		class: toys.Entity
 
 	}, {
 
-		label: property({ forward: rdfs.label },
-			required(dictionary({ languageIn: ["und", ...languages], minLength: 1, maxLength: 80 }))
-		),
+		label: required(dictionary({
 
-		comment: property({ forward: rdfs.comment },
-			optional(dictionary({ languageIn: languages, minLength: 10, maxLength: 500 }))
-		)
+				uniqueLang: true,
+				languageIn: ["und", ...languages],
+
+				minLength: 1,
+				maxLength: 80
+
+		}), {
+
+			forward: rdfs.label
+
+		}),
+
+		comment: optional(dictionary({
+
+				uniqueLang: true,
+				languageIn: languages,
+
+				minLength: 10,
+				maxLength: 500
+
+		}), {
+
+			forward: rdfs.comment
+
+		})
 
 	});
 }
@@ -206,17 +235,15 @@ export function Entity() {
  * @param member - The resource shape factory for collection members
  */
 export function Catalogue(member: Lazy<ResourceShape>) {
-	return resource({
+	return resource(Resource,{
 
 		virtual: true,
-
-		extends: Resource,
 
 		class: toys.Collection
 
 	}, {
 
-		members: property({ forward: rdfs.member }, multiple(reference(member)))
+		members: multiple(reference(member), { forward: rdfs.member })
 
 	});
 }
@@ -232,20 +259,13 @@ export function Catalogue(member: Lazy<ResourceShape>) {
  * subtype matching through the denormalised class lineage.
  */
 export function Resources() {
-	return resource({
-
-		extends: Catalogue(Resource),
+	return resource(Catalogue(Resource),{
 
 		class: toys.Collection
 
 	}, {
 
-		label: required(dictionary({
-			en: "Resources",
-			de: "Ressourcen",
-			fr: "Ressources",
-			it: "Risorse"
-		}))
+		label: required(dictionary({ uniqueLang: true, languageIn: languages }))
 
 	});
 }
@@ -256,9 +276,7 @@ export function Resources() {
  * Provides identity, type classification, and audit timestamps.
  */
 export function Resource() {
-	return resource({
-
-		extends: Entity,
+	return resource(Entity,{
 
 		class: toys.Resource
 
@@ -267,8 +285,8 @@ export function Resource() {
 		id: id(),
 		type: type(),
 
-		created: property({ hidden: true }, required(timestamp)),
-		updated: property({ hidden: true }, optional(timestamp))
+		created: required(timestamp, { hidden: true }),
+		updated: optional(timestamp, { hidden: true })
 
 	});
 }
@@ -280,20 +298,13 @@ export function Resource() {
  * Collection endpoint for {@link Category} resources.
  */
 export function Categories() {
-	return resource({
-
-		extends: Catalogue(Category),
+	return resource(Catalogue(Category),{
 
 		class: toys.Collection
 
 	}, {
 
-		label: required(dictionary({ // !!! migrate labels
-			en: "Categories",
-			de: "Kategorienkatalog",
-			fr: "Catalogue de catégories",
-			it: "Catalogo categorie"
-		}))
+		label: required(dictionary({ uniqueLang: true, languageIn: languages }))
 
 	});
 }
@@ -305,33 +316,32 @@ export function Categories() {
  * `narrower` foreign reference provides the inverse view without write access.
  */
 export function Category() {
-	return resource({
-
-		extends: Resource,
+	return resource(Resource,{
 
 		class: toys.Category,
+
 		pattern: "/categories/{code}"
 
 	}, {
 
-		label: required(dictionary),
-		comment: optional(dictionary),
+		label: required(dictionary({ uniqueLang: true })),
+		comment: optional(dictionary({ uniqueLang: true })),
 
 		featured: required(boolean),
 
 		code: required(string({ pattern: /^\d{4}$/ })),
-		title: required(dictionary({ languageIn: languages })),
-		description: optional(dictionary({ languageIn: languages, minLength: 10, maxLength: 500 })),
+		title: required(dictionary({ uniqueLang: true, languageIn: languages })),
+		description: optional(dictionary({ uniqueLang: true, languageIn: languages, minLength: 10, maxLength: 500 })),
 
 		// bidirectional linking
 
-		broader: property({ forward: toys.broader, reverse: toys.narrower }, optional(reference(Category))),
-		narrower: multiple(reference(Category, { foreign: true })),
+		broader: optional(reference(Category), { forward: toys.broader, reverse: toys.narrower }),
+		narrower: multiple(reference(Category), { foreign: true }),
 
 		// monodirectional linking
 
 		upper: optional(reference(Category)),
-		lower: property({ reverse: toys.upper }, multiple(reference(Category, { foreign: true })))
+		lower: multiple(reference(Category), { foreign: true, reverse: toys.upper })
 
 	});
 }
@@ -343,20 +353,13 @@ export function Category() {
  * Collection endpoint for {@link Vendor} resources.
  */
 export function Vendors() {
-	return resource({
-
-		extends: Catalogue(Vendor),
+	return resource(Catalogue(Vendor),{
 
 		class: toys.Collection
 
 	}, {
 
-		label: required(dictionary({ // !!! migrate labels
-			en: "Vendors",
-			de: "Lieferanten",
-			fr: "Fournisseurs",
-			it: "Fornitori"
-		}))
+		label: required(dictionary({ uniqueLang: true, languageIn: languages }))
 
 	});
 }
@@ -367,16 +370,16 @@ export function Vendors() {
  * `products` foreign reference provides read-only access to the vendor's product catalogue.
  */
 export function Vendor() {
-	return resource({
-
-		extends: Resource,
+	return resource(Resource,{
 
 		class: toys.Vendor,
+
 		pattern: "/vendors/{code}"
 
 	}, {
 
 		label: required(dictionary({
+			uniqueLang: true,
 			languageIn: ["und", ...languages],
 			minLength: 1,
 			maxLength: 80
@@ -399,7 +402,7 @@ export function Vendor() {
 		address: optional(Address),
 		contacts: multiple(Contacts),
 
-		products: multiple(reference(Product, { foreign: true, captive: true }))
+		products: multiple(reference(Product), { foreign: true, captive: true })
 
 	});
 }
@@ -456,15 +459,14 @@ export function Address() {
  * structurally disjoint from its sibling {@link Place} variant.
  */
 export function PostalAddress() {
-	return resource({
-
-		extends: Entity,
+	return resource(Entity,{
 
 		class: toys.PostalAddress
 
 	}, {
 
 		label: required(dictionary({
+			uniqueLang: true,
 			languageIn: ["und", ...languages],
 			minLength: 1,
 			maxLength: 80
@@ -485,15 +487,13 @@ export function PostalAddress() {
  * structurally disjoint from its sibling {@link PostalAddress} variant.
  */
 export function Place() {
-	return resource({
-
-		extends: Entity,
+	return resource(Entity,{
 
 		class: toys.Place
 
 	}, {
 
-		label: required(dictionary({ languageIn: ["und", ...languages], minLength: 1, maxLength: 80 })),
+		label: required(dictionary({ uniqueLang: true, languageIn: ["und", ...languages], minLength: 1, maxLength: 80 })),
 
 		latitude: required(decimal({ minInclusive: -90, maxInclusive: 90 })),
 		longitude: required(decimal({ minInclusive: -180, maxInclusive: 180 })),
@@ -526,19 +526,13 @@ export function Contacts() {
  * Collection endpoint for {@link Product} resources.
  */
 export function Products() {
-	return resource({
+	return resource(Catalogue(Product),{
 
-		extends: Catalogue(Product),
 		class: toys.Collection
 
 	}, {
 
-		label: required(dictionary({ // !!! migrate labels
-			en: "Products",
-			de: "Produkte",
-			fr: "Produits",
-			it: "Prodotti"
-		}))
+		label: required(dictionary({ uniqueLang: true, languageIn: languages }))
 
 	});
 }
@@ -549,27 +543,26 @@ export function Products() {
  * Includes structured `reviews`, a required {@link Vendor} reference, and repeatable {@link Category} classifications.
  */
 export function Product() {
-	return resource({
-
-		extends: Resource,
+	return resource(Resource,{
 
 		class: toys.Product,
+
 		pattern: "/products/{sku}"
 
 	}, {
 
-		label: required(dictionary),
-		comment: optional(dictionary),
+		label: required(dictionary({ uniqueLang: true })),
+		comment: optional(dictionary({ uniqueLang: true })),
 
 		sku: required(string({ pattern: /^[A-Z0-9-]+$/ })),
-		name: required(dictionary({ languageIn: languages, minLength: 1, maxLength: 200 })),
-		description: optional(dictionary({ languageIn: languages, minLength: 10, maxLength: 2000 })),
+		name: required(dictionary({ uniqueLang: true, languageIn: languages, minLength: 1, maxLength: 200 })),
+		description: optional(dictionary({ uniqueLang: true, languageIn: languages, minLength: 10, maxLength: 2000 })),
 		keywords: multiple(dictionary({ languageIn: languages })),
 
 		homepage: optional(url),
 		launched: optional(date),
 		warranty: optional(duration),
-		documents: cardinality(1, 5)(url),
+		documents: property(url, { minCount: 1, maxCount: 5 }),
 
 		condition: required(string({ in: ["new", "used", "refurbished"] })),
 		price: required(decimal({ minExclusive: 0 })),
@@ -577,10 +570,10 @@ export function Product() {
 		discount: optional(decimal({ maxExclusive: 0 })),
 		stock: required(integer), // 0: not available; < 0: more coming
 
-		vendor: property({ forward: toys.vendor, reverse: toys.products }, required(reference(Vendor))),
-		categories: repeatable(reference(Category)),
+		vendor: required(reference(Vendor), { forward: toys.vendor, reverse: toys.products }),
+		categories: nonempty(reference(Category)),
 
-		media: multiple(Media),
+		media: multiple(Media, { captive: true }),
 		reviews: multiple(Review)
 
 	});
@@ -590,13 +583,13 @@ export function Product() {
  * Media union for `Product.media`: a captive {@link Image} or {@link Video} reference.
  *
  * Both variants share the reference storage class but carry disjoint IRI patterns, so a stored reference
- * singles out its branch by target-identifier pattern (§5.4). Both are captive, so they are cascade-deleted
- * with the owning {@link Product}.
+ * singles out its branch by target-identifier pattern (§5.4). The declaring {@link Product} `media` property
+ * marks them captive, so they are cascade-deleted with the owning product.
  */
 export function Media() {
 	return union(
-		reference(Image, { captive: true }),
-		reference(Video, { captive: true })
+		reference(Image),
+		reference(Video)
 	);
 }
 
@@ -609,16 +602,15 @@ export function Media() {
  * shared `subject` predicate.
  */
 export function Image() {
-	return resource({
-
-		extends: Resource,
+	return resource(Resource,{
 
 		class: toys.Image,
+
 		pattern: "/media/images/{code}"
 
 	}, {
 
-		label: required(dictionary({ languageIn: ["und", ...languages], minLength: 1, maxLength: 80 })),
+		label: required(dictionary({ uniqueLang: true, languageIn: ["und", ...languages], minLength: 1, maxLength: 80 })),
 
 		url: required(url),
 		width: required(integer),
@@ -626,7 +618,7 @@ export function Image() {
 
 		// `caption` is a plain string here but a localised text on the sibling Video variant, so a path
 		// crossing the Media union (`media.caption`) resolves to a heterogeneous `[string, dictionary]` range —
-		// the range-level string/dictionary mix a declared property cannot express (value.ts RangeShape note)
+		// the range-level string/dictionary mix a declared property cannot express (blue `Range` note)
 
 		caption: optional(string({ maxLength: 200 })),
 		subject: optional(reference(Product))
@@ -643,16 +635,15 @@ export function Image() {
  * shared `subject` predicate.
  */
 export function Video() {
-	return resource({
-
-		extends: Resource,
+	return resource(Resource,{
 
 		class: toys.Video,
+
 		pattern: "/media/videos/{code}"
 
 	}, {
 
-		label: required(dictionary({ languageIn: ["und", ...languages], minLength: 1, maxLength: 80 })),
+		label: required(dictionary({ uniqueLang: true, languageIn: ["und", ...languages], minLength: 1, maxLength: 80 })),
 
 		url: required(url),
 		duration: required(duration),
@@ -660,7 +651,7 @@ export function Video() {
 		// localised counterpart of the plain-string `Image.caption`, diverging string vs dictionary under the
 		// shared `caption` predicate so `media.caption` reaches both kinds across the Media union
 
-		caption: optional(dictionary({ languageIn: languages })),
+		caption: optional(dictionary({ uniqueLang: true, languageIn: languages })),
 		subject: optional(reference(Category))
 
 	});
@@ -672,27 +663,26 @@ export function Video() {
  * Embedded resource within {@link Product} capturing author, rating, and localised review text.
  */
 export function Review() {
-	return resource({
-
-		extends: Entity,
+	return resource(Entity,{
 
 		class: toys.Review
 
 	}, {
 
 		label: required(dictionary({
+			uniqueLang: true,
 			languageIn: ["und", ...languages],
 			minLength: 1,
 			maxLength: 80
 		})),
 
-		comment: optional(dictionary),
+		comment: optional(dictionary({ uniqueLang: true })),
 
 		author: required(string({ minLength: 1, maxLength: 100 })),
 		posted: required(instant),
 
 		rating: required(byte({ minInclusive: 1, maxInclusive: 5 })),
-		content: required(dictionary({ languageIn: languages, minLength: 10, maxLength: 5000 }))
+		content: required(dictionary({ uniqueLang: true, languageIn: languages, minLength: 10, maxLength: 5000 }))
 
 	});
 }

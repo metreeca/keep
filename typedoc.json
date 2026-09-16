@@ -49,10 +49,13 @@
     "@metreeca/blue/value": {
       "model": "https://metreeca.github.io/blue/functions/value.model.html"
     },
-    "@metreeca/blue/reference": {
-      "ReferenceConstraints": "https://metreeca.github.io/blue/interfaces/reference.ReferenceConstraints.html",
-      "ReferenceConstraints.foreign": "https://metreeca.github.io/blue/interfaces/reference.ReferenceConstraints.html#foreign",
-      "ReferenceConstraints.captive": "https://metreeca.github.io/blue/interfaces/reference.ReferenceConstraints.html#captive"
+    "@metreeca/blue/union": {
+      "getShapeBranches": "https://metreeca.github.io/blue/functions/union.getShapeBranches.html"
+    },
+    "@metreeca/blue/resource": {
+      "PropertyConstraints": "https://metreeca.github.io/blue/interfaces/resource.PropertyConstraints.html",
+      "PropertyConstraints.foreign": "https://metreeca.github.io/blue/interfaces/resource.PropertyConstraints.html#foreign",
+      "PropertyConstraints.captive": "https://metreeca.github.io/blue/interfaces/resource.PropertyConstraints.html#captive"
     },
     "@metreeca/core": {
       "isNestedIRI": "https://metreeca.github.io/core/functions/resource.isNestedIRI.html"

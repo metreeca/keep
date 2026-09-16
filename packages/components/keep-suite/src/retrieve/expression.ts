@@ -27,15 +27,14 @@
 import { boolean } from "@metreeca/blue/boolean";
 import { decimal } from "@metreeca/blue/number";
 import { reference } from "@metreeca/blue/reference";
-import { id, resource } from "@metreeca/blue/resource";
+import { id, multiple, optional, required, resource } from "@metreeca/blue/resource";
 import { date, string, url } from "@metreeca/blue/string";
-import { multiple, optional, required } from "@metreeca/blue/value";
 import { ascending, by } from "@metreeca/core/order";
 import type { Selection } from "@metreeca/qest/template";
 import { beforeAll, describe, expect, it } from "vitest";
 import { lookup, type TestFactory } from "../index.core.js";
 import { collections } from "../toys.core.js";
-import { Categories, Products, Vendor, Vendors } from "../toys.js";
+import { Categories, Products, toys, Vendor, Vendors } from "../toys.js";
 import { catalogue, collection, members } from "./index.js";
 
 
@@ -110,7 +109,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 					model: catalogue(resource({
 						id: id()
 					}), {
-						"?vendor.type": [vendors[0].type]
+						"?vendor.type": [toys.Vendor]
 					})
 				}));
 
@@ -546,7 +545,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 		describe("transformed-entry constraint typing — §5.7 × §5.8", () => {
 
 			// Every selection operator targets a possibly-probed expression, so a constraint value MUST be
-			// typed against the transform's EFFECTIVE range (blue `effective()`, a RangeShape) — not the
+			// typed against the transform's EFFECTIVE range (blue `effective()`, a `Range`) — not the
 			// declared property type. These cases apply each operator to a transformed value whose effective
 			// type is non-numeric or multi-variant, where the value-driven typing exercised by the numeric
 			// bound/sort cases above (masked by SPARQL numeric value-equality) breaks. A transform across a

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import type { State } from "@metreeca/blue/value";
+import type { Instance } from "@metreeca/blue/value";
 import type { Store, StoreClient, StoreObserver } from "@metreeca/keep";
 import type { Reference } from "@metreeca/qest/resource";
 import { describe, expect, it } from "vitest";
@@ -70,21 +70,21 @@ export function testManageObserve(factory: TestFactory<Store>): void {
 
 			it.each([
 				["update", true,
-					(s: StoreClient, e: State<typeof Product>) => s.update({
+					(s: StoreClient, e: Instance<typeof Product>) => s.update({
 						entry: e.id,
 						shape: Product,
 						state: { ...e, price: 55.55 }
 					})],
 				["insert", true,
-					(s: StoreClient, e: State<typeof Product>) => s.insert({
+					(s: StoreClient, e: Instance<typeof Product>) => s.insert({
 						entry: e.id,
 						shape: Product,
 						state: { ...e, price: 66.66 }
 					})],
 				["delete", false,
-					(s: StoreClient, e: State<typeof Product>) => s.delete({ entry: e.id, shape: Product })],
+					(s: StoreClient, e: Instance<typeof Product>) => s.delete({ entry: e.id, shape: Product })],
 				["remove", false,
-					(s: StoreClient, e: State<typeof Product>) => s.remove({ entry: e.id, shape: Product })]
+					(s: StoreClient, e: Instance<typeof Product>) => s.remove({ entry: e.id, shape: Product })]
 			] as const)("should notify on %s of an existing resource", (_op, flag, mutate) => factory(async ({
 				store,
 				generate

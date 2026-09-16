@@ -17,14 +17,14 @@
 import { dictionary } from "@metreeca/blue/dictionary";
 import { byte, decimal, integer } from "@metreeca/blue/number";
 import { reference } from "@metreeca/blue/reference";
-import { id, resource, type } from "@metreeca/blue/resource";
+import { id, multiple, optional, required, resource, type } from "@metreeca/blue/resource";
 import { date, instant, string, url } from "@metreeca/blue/string";
 import { union } from "@metreeca/blue/union";
-import { model, multiple, optional, required } from "@metreeca/blue/value";
 import { isObject, isString } from "@metreeca/core";
 import type { Resource } from "@metreeca/qest/resource";
 import type { Instance, Template } from "@metreeca/qest/template";
 import { beforeAll, describe, expect, it } from "vitest";
+import { model } from "../_model.js";
 import { lookup, type TestFactory } from "../index.core.js";
 import { collections } from "../toys.core.js";
 import {
@@ -390,7 +390,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 						model: model(resource({
 							broader: optional(resource({
 								code: required(string()),
-								title: required(dictionary({ en: "" }))
+								title: required(dictionary({ uniqueLang: true, languageIn: ["en"] }))
 							}))
 						}))
 					});
@@ -410,11 +410,11 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 						entry: leaf.id,
 						shape: Category,
 						model: model(resource({
-							title: required(dictionary({ en: "" })),
+							title: required(dictionary({ uniqueLang: true, languageIn: ["en"] })),
 							broader: optional(resource({
-								title: required(dictionary({ en: "" })),
+								title: required(dictionary({ uniqueLang: true, languageIn: ["en"] })),
 								broader: optional(resource({
-									title: required(dictionary({ en: "" }))
+									title: required(dictionary({ uniqueLang: true, languageIn: ["en"] }))
 								}))
 							}))
 						}))
@@ -527,7 +527,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 						model: model(resource({
 							categories: multiple(resource({
 								code: required(string()),
-								title: required(dictionary({ en: "" }))
+								title: required(dictionary({ uniqueLang: true, languageIn: ["en"] }))
 							}))
 						}))
 					});
@@ -579,7 +579,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 								author: required(string()),
 								posted: required(instant()),
 								rating: required(byte({ minInclusive: 1, maxInclusive: 5 })),
-								content: required(dictionary({ en: "" }))
+								content: required(dictionary({ uniqueLang: true, languageIn: ["en"] }))
 							}))
 						}))
 					});
@@ -630,7 +630,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 						entry: AF001.id,
 						shape: Product,
 						model: model(resource({
-							name: required(dictionary({ en: "" }))
+							name: required(dictionary({ uniqueLang: true, languageIn: ["en"] }))
 						}))
 					});
 
@@ -648,7 +648,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 						entry: multiTag.id,
 						shape: Product,
 						model: model(resource({
-							name: required(dictionary({ en: "" }))
+							name: required(dictionary({ uniqueLang: true, languageIn: ["en"] }))
 						}))
 					});
 
@@ -666,7 +666,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 						entry: enDe.id,
 						shape: Product,
 						model: model(resource({
-							name: required(dictionary({ en: "", de: "" }))
+							name: required(dictionary({ uniqueLang: true, languageIn: ["en", "de"] }))
 						}))
 					});
 
@@ -696,7 +696,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 						entry: regional.id,
 						shape: Product,
 						model: model(resource({
-							name: required(dictionary({ en: "" }))
+							name: required(dictionary({ uniqueLang: true, languageIn: ["en"] }))
 						}))
 					});
 
@@ -718,7 +718,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 						entry: AF001.id,
 						shape: Product,
 						model: model(resource({
-							keywords: multiple(dictionary({ en: "" }))
+							keywords: multiple(dictionary({ languageIn: ["en"] }))
 						}))
 					});
 
@@ -746,7 +746,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 						entry: regional.id,
 						shape: Product,
 						model: model(resource({
-							keywords: multiple(dictionary({ en: "" }))
+							keywords: multiple(dictionary({ languageIn: ["en"] }))
 						}))
 					});
 
@@ -767,7 +767,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 						entry: AF001.id,
 						shape: Product,
 						model: model(resource({
-							name: required(dictionary())
+							name: required(dictionary({ uniqueLang: true }))
 						}))
 					});
 
@@ -809,7 +809,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 						entry: noDescription.id,
 						shape: Product,
 						model: model(resource({
-							description: optional(dictionary({ en: "" }))
+							description: optional(dictionary({ uniqueLang: true, languageIn: ["en"] }))
 						}))
 					});
 
@@ -1400,7 +1400,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 						model: model(resource({
 							narrower: multiple(resource({
 								code: required(string()),
-								title: required(dictionary({ en: "" }))
+								title: required(dictionary({ uniqueLang: true, languageIn: ["en"] }))
 							}))
 						}))
 					});

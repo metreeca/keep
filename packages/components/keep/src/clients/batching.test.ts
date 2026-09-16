@@ -15,8 +15,8 @@
  */
 
 import { reference } from "@metreeca/blue/reference";
-import { type Property, resource, type ResourceShape } from "@metreeca/blue/resource";
-import { eager, optional } from "@metreeca/blue/value";
+import { optional, type Property, resource, type ResourceShape } from "@metreeca/blue/resource";
+import { eager } from "@metreeca/blue/value";
 import type { Lazy } from "@metreeca/core";
 import type { Reference } from "@metreeca/qest/resource";
 import type { Query, Template } from "@metreeca/qest/template";
@@ -33,8 +33,8 @@ declare const process: {
 
 describe("createBatchingStore", () => {
 
-	const shape: Lazy<ResourceShape> = () => ({ kind: "resource", model: {}, entries: {} });
-	const virtualShape: Lazy<ResourceShape> = () => ({ kind: "resource", model: {}, entries: {}, virtual: true });
+	const shape: Lazy<ResourceShape> = () => ({ kind: "resource", classes: [], parents: [], members: {} });
+	const virtualShape: Lazy<ResourceShape> = () => ({ kind: "resource", classes: [], parents: [], members: {}, virtual: true });
 
 	const entry: Reference = "http://example.com/r";
 
@@ -307,7 +307,7 @@ describe("createBroker", () => {
 
 	const shape: Lazy<ResourceShape> = Node;
 
-	const broaderEntry = eager(Node).entries["broader"];
+	const broaderEntry = eager(Node).members["broader"];
 	if ( broaderEntry.kind !== "property" ) {
 		throw new Error("expected <broader> to be a property entry");
 	}

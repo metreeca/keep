@@ -30,7 +30,8 @@
 
 import { getShapeTarget } from "@metreeca/blue/reference";
 import { type ResourceShape } from "@metreeca/blue/resource";
-import { type RangeShape, type ValuesShape } from "@metreeca/blue/value";
+import { getShapeBranches } from "@metreeca/blue/union";
+import { type Range, type Shape } from "@metreeca/blue/value";
 import { type Identifier, isObject } from "@metreeca/core";
 import type { Tag } from "@metreeca/core/language";
 import type { Scope } from "@metreeca/core/scope";
@@ -139,7 +140,7 @@ export function decode(
 		 * to follow).
 		 */
 		function cell(
-			host: RangeShape,
+			host: Range,
 			flake: Flake
 		): Promise<undefined | Value> {
 
@@ -148,14 +149,15 @@ export function decode(
 
 			// the cell's effective resolved range (never empty), the same source the encoder projects and binds by
 
-			const variants = flake.range.variants;
+			const variants = getShapeBranches(flake.range.shape);
 			const single = variants.length === 1 ? variants[0] : undefined;
 
-			const [enclosing] = host.variants;
+			const hosts = getShapeBranches(host.shape);
+			const [enclosing] = hosts;
 
 			if ( branch !== undefined && single?.kind === "dictionary"
 				&& isObject(placeholder)
-				&& host.variants.length === 1
+				&& hosts.length === 1
 				&& (enclosing.kind === "resource" || enclosing.kind === "reference") ) {
 
 				const owner = tuple[scope.resolve(branch)];
@@ -252,7 +254,7 @@ export function decode(
 		locale: readonly Tag[]
 	): Promise<undefined | Value> {
 
-		const variants = flake.range.variants;
+		const variants = getShapeBranches(flake.range.shape);
 		const single = variants[0];
 
 		if ( variants.length > 1 ) {
@@ -300,7 +302,7 @@ export function decode(
 		 * element reference.
 		 */
 		function variant(
-			variant: ValuesShape,
+			variant: Shape,
 			flake: Flake,
 			placeholder: unknown,
 			element: Term

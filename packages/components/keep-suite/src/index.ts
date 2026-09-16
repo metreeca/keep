@@ -46,10 +46,10 @@
  */
 
 import type { ResourceShape } from "@metreeca/blue/resource";
-import type { State } from "@metreeca/blue/value";
-import type { Lazy } from "@metreeca/core";
+import type { Instance } from "@metreeca/blue/value";
+import type { Eager, Lazy } from "@metreeca/core";
 import type { Store, StoreClient } from "@metreeca/keep";
-import type { Reference } from "@metreeca/qest/resource";
+import type { Reference, Resource } from "@metreeca/qest/resource";
 import type { Awaitable } from "@vitest/utils";
 import { afterAll, beforeAll, describe } from "vitest";
 import type { TestFactory, TestFixture } from "./index.core.js";
@@ -84,6 +84,18 @@ export type DeepPartial<T> =
 		: T extends readonly unknown[] ? { readonly [K in keyof T]: DeepPartial<T[K]> }
 			: T extends object ? { readonly [K in keyof T]?: DeepPartial<T[K]> }
 				: T;
+
+/**
+ * Fact probe accepted for a resource shape.
+ *
+ * A {@link DeepPartial} instance of the shape where the shape is concrete, so a probe spells out only the slots it
+ * asserts and each slot is held to its declared type; any resource where the shape is left abstract, as a helper
+ * probing a slot by name against whichever shape it is handed can state no more than that.
+ *
+ * @typeParam S The resource shape the probe conforms to
+ */
+export type Probe<S extends Lazy<ResourceShape>> =
+	ResourceShape extends Eager<S> ? Resource : DeepPartial<Instance<S>> & Resource;
 
 /**
  * Sub-suite or test selector pattern accepted by {@link StoreTestOptions.target | target} and
@@ -199,7 +211,7 @@ export interface StoreTestOptions<S extends StoreClient = StoreClient> extends S
 	 * @param entry - A resource (possibly partial) whose specified facts must all be present
 	 * @param shape - The resource shape describing the resource structure
 	 */
-	readonly includes: <S extends Lazy<ResourceShape>>(entry: DeepPartial<State<S>>, shape: S) => Awaitable<boolean>;
+	readonly includes: <S extends Lazy<ResourceShape>>(entry: Probe<S>, shape: S) => Awaitable<boolean>;
 
 	/**
 	 * Checks whether every fact described by a resource is absent from the store.
@@ -218,7 +230,7 @@ export interface StoreTestOptions<S extends StoreClient = StoreClient> extends S
 	 * @param entry - A resource (typically partial) whose specified facts must all be absent
 	 * @param shape - The resource shape describing the resource structure
 	 */
-	readonly excludes: <S extends Lazy<ResourceShape>>(entry: DeepPartial<State<S>>, shape: S) => Awaitable<boolean>;
+	readonly excludes: <S extends Lazy<ResourceShape>>(entry: Probe<S>, shape: S) => Awaitable<boolean>;
 
 
 	/**
@@ -241,7 +253,7 @@ export interface StoreTestOptions<S extends StoreClient = StoreClient> extends S
 	 *
 	 * @returns The inserted copy with a unique `id`
 	 */
-	readonly generate: <S extends Lazy<ResourceShape>>(sample: State<S>, shape: S) => Awaitable<State<S>>;
+	readonly generate: <S extends Lazy<ResourceShape>>(sample: Instance<S> & Resource, shape: S) => Awaitable<Instance<S>>;
 
 }
 

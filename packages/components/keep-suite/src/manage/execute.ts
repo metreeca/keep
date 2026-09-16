@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import type { State } from "@metreeca/blue/value";
+import type { Instance } from "@metreeca/blue/value";
 import type { Store, StoreClient } from "@metreeca/keep";
 import { describe, expect, it } from "vitest";
 import { collect, type TestFactory } from "../index.core.js";
@@ -350,17 +350,17 @@ export function testManageExecuteIsolation(factory: TestFactory<Store>): void {
 		}));
 
 		it.each([
-			["update", (s: StoreClient, e: State<typeof Product>) => s.update({
+			["update", (s: StoreClient, e: Instance<typeof Product>) => s.update({
 				entry: e.id,
 				shape: Product,
 				state: { ...e, price: 0.01 }
 			})],
-			["insert", (s: StoreClient, e: State<typeof Product>) => s.insert({
+			["insert", (s: StoreClient, e: Instance<typeof Product>) => s.insert({
 				entry: e.id,
 				shape: Product,
 				state: { ...e, price: 0.02 }
 			})],
-			["delete", (s: StoreClient, e: State<typeof Product>) => s.delete({ entry: e.id, shape: Product })]
+			["delete", (s: StoreClient, e: Instance<typeof Product>) => s.delete({ entry: e.id, shape: Product })]
 		] as const)("should not observe an own buffered %s within the transaction", (_op, mutate) => factory(async ({
 			store,
 			generate
