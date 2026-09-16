@@ -93,7 +93,7 @@ export type Response<R extends Request> =
  */
 export type Detect = {
 
-	readonly entry: Reference; // !!! rename to avoid ambiguity with Entry
+	readonly entry: Reference;
 
 };
 
@@ -108,7 +108,7 @@ export type Detect = {
  */
 export type Lookup<T extends Template = Template> = {
 
-	readonly entry: Reference; // !!! rename to avoid ambiguity with Entry
+	readonly entry: Reference;
 	readonly shape: Lazy<ResourceShape>;
 	readonly model: T;
 
@@ -127,12 +127,9 @@ export type Lookup<T extends Template = Template> = {
  */
 export type Select<T extends Query = Query> = {
 
-	// !!! replace field: Property with a field name keyed in shape
-	// as soon as https://github.com/metreeca/blue/issues/22 is resolved
-
-	readonly entry: Reference; // !!! rename to avoid ambiguity with Entry
+	readonly entry: Reference;
 	readonly shape: Lazy<ResourceShape>;
-	readonly field: Property; // !!! rename to entry
+	readonly field: Property;
 	readonly query: T;
 
 	readonly locale: readonly Tag[];
@@ -148,7 +145,7 @@ export type Select<T extends Query = Query> = {
  */
 export type Modify = {
 
-	readonly entry: Reference; // !!! rename to avoid ambiguity with Entry
+	readonly entry: Reference;
 	readonly shape: Lazy<ResourceShape>;
 	readonly state?: Resource
 
