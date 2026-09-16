@@ -58,7 +58,14 @@
       "PropertyConstraints.captive": "https://metreeca.github.io/blue/interfaces/resource.PropertyConstraints.html#captive"
     },
     "@metreeca/core": {
-      "isNestedIRI": "https://metreeca.github.io/core/functions/resource.isNestedIRI.html"
+      "isNestedIRI": "https://metreeca.github.io/core/functions/resource.isNestedIRI.html",
+      "Optional": "https://metreeca.github.io/core/types/index.Optional.html"
+    },
+    "@metreeca/core/arrays": {
+      "Some": "https://metreeca.github.io/core/types/arrays.Some.html"
+    },
+    "@metreeca/core/async": {
+      "Awaitable": "https://metreeca.github.io/core/types/async.Awaitable.html"
     },
     "@metreeca/http": {
       "createFetch": "https://metreeca.github.io/http/functions/index.createFetch.html",

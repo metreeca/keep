@@ -137,7 +137,7 @@ export function createSPARQLStore(repository: Repository): Store {
 
 	return createManagingStore(store(buffering), {
 
-		execute: task => buffering.execute(repository => task(store(repository))),
+		execute: task => buffering.execute(async repository => task(store(repository))),
 		close: () => buffering.close()
 
 	});

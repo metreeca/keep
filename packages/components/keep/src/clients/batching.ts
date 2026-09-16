@@ -50,7 +50,7 @@
 
 import type { Property, ResourceShape } from "@metreeca/blue/resource";
 import { eager } from "@metreeca/blue/value";
-import type { Lazy } from "@metreeca/core";
+import type { Lazy, Optional } from "@metreeca/core";
 import type { Tag } from "@metreeca/core/language";
 import { immutable } from "@metreeca/core/structures";
 import type { Reference, Resource } from "@metreeca/qest/resource";
@@ -348,7 +348,7 @@ export function createBatchingStore(handlers: {
 
 			locale?: readonly Tag[]
 
-		} = {}): Promise<undefined | Instance<T>> {
+		} = {}): Promise<Optional<Instance<T>>> {
 
 			// virtual resources have no stored state of their own: their members are derived from
 			// selection constraints rather than from stored content, so the existence probe is skipped.

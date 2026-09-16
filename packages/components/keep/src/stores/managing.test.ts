@@ -257,7 +257,16 @@ describe("createManagingStore", () => {
 			const observer = vi.fn<StoreObserver>();
 			const resources = "http://example.com/products/";
 			store.observe(observer, resources);
-			expect(innerObserve).toHaveBeenCalledWith(observer, resources);
+			expect(innerObserve).toHaveBeenCalledWith(observer, [resources]);
+		});
+
+		it("should forward a normalised filter, leaving single-pass iterables intact for the delegate", () => {
+			const innerObserve = vi.fn(() => () => {});
+			const store = createManagingStore(stubStore(), { observe: innerObserve });
+			const observer = vi.fn<StoreObserver>();
+			const resources = new Set(["http://example.com/products/", "http://example.com/vendors/"]);
+			store.observe(observer, resources.values());
+			expect(innerObserve).toHaveBeenCalledWith(observer, [...resources]);
 		});
 
 		it("should also call the inner unsubscribe when the wrapper's unsubscribe is invoked", () => {

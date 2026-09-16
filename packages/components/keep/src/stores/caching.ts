@@ -25,7 +25,7 @@
  * @module
  */
 
-import { isArray, isObject } from "@metreeca/core";
+import { isArray, isObject, type Optional } from "@metreeca/core";
 import type { Tag } from "@metreeca/core/language";
 import { immutable } from "@metreeca/core/structures";
 import type { Reference } from "@metreeca/qest/resource";
@@ -257,8 +257,8 @@ export function createCachingStore(store: Store, {
 		entry: Reference,
 		model: T,
 		vary: { readonly locale?: readonly Tag[]; readonly limit?: number } = {},
-		miss: () => Promise<undefined | Instance<T>>
-	): Promise<undefined | Instance<T>> {
+		miss: () => Promise<Optional<Instance<T>>>
+	): Promise<Optional<Instance<T>>> {
 
 		// Bypass the cache while a write to this entry is in flight: still query the delegate so the caller
 		// gets a value, but do not store the result — it is liable to be the pre-commit snapshot that the
@@ -291,7 +291,7 @@ export function createCachingStore(store: Store, {
 				cache.delete(key);
 				cache.set(key, cached);
 
-				return cached.value as Promise<undefined | Instance<T>>;
+				return cached.value as Promise<Optional<Instance<T>>>;
 
 			} else {
 

@@ -28,7 +28,14 @@
     "@metreeca/core": {
       "*": "https://metreeca.github.io/core/",
       "Problem": "https://metreeca.github.io/core/types/index.Problem.html",
+      "Optional": "https://metreeca.github.io/core/types/index.Optional.html",
       "nests": "https://metreeca.github.io/core/functions/resource.nests.html"
+    },
+    "@metreeca/core/arrays": {
+      "Some": "https://metreeca.github.io/core/types/arrays.Some.html"
+    },
+    "@metreeca/core/async": {
+      "Awaitable": "https://metreeca.github.io/core/types/async.Awaitable.html"
     },
     "@metreeca/qest": {
       "*": "https://metreeca.github.io/qest/",

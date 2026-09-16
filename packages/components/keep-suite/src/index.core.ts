@@ -15,6 +15,7 @@
  */
 
 import { isFunction } from "@metreeca/core";
+import type { Some } from "@metreeca/core/arrays";
 import type { Store, StoreClient } from "@metreeca/keep";
 import type { Reference, Resource } from "@metreeca/qest/resource";
 import type { StoreTestOptions } from "./index.js";
@@ -92,7 +93,7 @@ export function lookup<T extends Resource>(
  */
 export function collect(
 	store: Store,
-	resources?: Reference | readonly Reference[]
+	resources?: Some<Reference>
 ): { readonly changes: ReadonlyArray<Record<Reference, boolean>>; readonly unsubscribe: () => void } {
 
 	const changes: Record<Reference, boolean>[] = [];

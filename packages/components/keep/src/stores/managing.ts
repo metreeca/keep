@@ -23,7 +23,9 @@
  * @module
  */
 
-import { isString } from "@metreeca/core";
+import type { Optional } from "@metreeca/core";
+import { some } from "@metreeca/core/arrays";
+import type { Awaitable } from "@metreeca/core/async";
 import { isNestedIRI } from "@metreeca/core/resource";
 import { immutable } from "@metreeca/core/structures";
 
@@ -79,7 +81,10 @@ import type { Store, StoreClient, StoreObserver } from "../index.js";
  *     directly to the wrapper and provides no additional guard
  * @param management.observe - Registers each observer with the delegate as well as locally, combining the two
  *     unsubscribe handles so a single detach call releases both; this is how storage-level events (mutations from
- *     other clients sharing the backend) reach the wrapper's local observers. Absent by default
+ *     other clients sharing the backend) reach the wrapper's local observers. The resource filter always arrives as
+ *     an array of references, or as `undefined` where the registration is unfiltered, so a bare reference or a
+ *     single-pass iterable handed to {@link Store.observe observe} never has to be handled again downstream.
+ *     Absent by default
  * @param management.close - Exposed verbatim on the returned store. Defaults to a resolved no-op
  *
  * @returns An immutable {@link Store} composing `store` with the supplied `management` opts
@@ -87,7 +92,7 @@ import type { Store, StoreClient, StoreObserver } from "../index.js";
 export function createManagingStore(store: StoreClient, {
 
 	observe,
-	execute = <V>(task: (store: StoreClient) => V | Promise<V>) => Promise.resolve().then(() => task(store)),
+	execute = <V>(task: (store: StoreClient) => Awaitable<V>) => Promise.resolve().then(() => task(store)),
 	close = () => Promise.resolve()
 
 }: Partial<Store> = {}): Store {
@@ -95,7 +100,7 @@ export function createManagingStore(store: StoreClient, {
 	const observers = new Map<symbol, {
 
 		readonly observer: StoreObserver,
-		readonly resources: undefined | readonly Reference[]
+		readonly resources: Optional<readonly Reference[]>
 
 	}>();
 
@@ -113,21 +118,21 @@ export function createManagingStore(store: StoreClient, {
 
 		observe(observer, resources) {
 
-			if ( Array.isArray(resources) && resources.length === 0 ) {
+			// normalise upfront: the filter is drawn from once, so a single-pass iterable is safely
+			// shared between the local registration and the delegate
+
+			const filter = resources === undefined ? undefined : some(resources);
+
+			if ( filter?.length === 0 ) {
 
 				return observe?.(observer, []) ?? (() => {});
 
 			} else {
 
 				const token = Symbol();
-				const detach = observe?.(observer, resources);
+				const detach = observe?.(observer, filter);
 
-				observers.set(token, {
-					observer,
-					resources: resources === undefined ? undefined
-						: isString(resources) ? [resources]
-							: [...resources]
-				});
+				observers.set(token, { observer, resources: filter });
 
 				return () => {
 					try { detach?.(); } finally { observers.delete(token); }
@@ -161,10 +166,10 @@ export function createManagingStore(store: StoreClient, {
 
 	async function notify<V>(task: (notify: {
 
-		mutated: <R extends undefined | Reference>(entry: R) => R,
-		deleted: <R extends undefined | Reference>(entry: R) => R
+		mutated: <R extends Optional<Reference>>(entry: R) => R,
+		deleted: <R extends Optional<Reference>>(entry: R) => R
 
-	}) => V | Promise<V>): Promise<V> {
+	}) => Awaitable<V>): Promise<V> {
 
 		const mutations = new Map<Reference, boolean>();
 

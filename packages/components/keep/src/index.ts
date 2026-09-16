@@ -200,7 +200,9 @@
 
 import type { validate } from "@metreeca/blue";
 import type { ResourceShape } from "@metreeca/blue/resource";
-import type { Lazy } from "@metreeca/core";
+import type { Lazy, Optional } from "@metreeca/core";
+import type { Some } from "@metreeca/core/arrays";
+import type { Awaitable } from "@metreeca/core/async";
 import type { Tag } from "@metreeca/core/language";
 import type { TraceError } from "@metreeca/core/trace";
 import type { Problem } from "@metreeca/http/success";
@@ -252,8 +254,12 @@ export interface Store extends StoreClient {
 	 * - `undefined` (omitted) — no filter; the observer fires for every mutation
 	 * - a single {@link Reference} — fires for mutations to that resource and its
 	 *   {@link @metreeca/core!isNestedIRI | descendants}
-	 * - an array of references — fires for mutations matching any element and its descendants
-	 * - an empty array — ignored; no registration is created and the returned handle is a no-op
+	 * - a collection of references — an array, a set, an iterator, or any other iterable; fires for mutations
+	 *   matching any element and its descendants
+	 * - an empty collection — ignored; no registration is created and the returned handle is a no-op
+	 *
+	 * The filter is read once, as the registration is created: single-pass iterables are safe to hand over, and
+	 * later changes to the collection leave the registration untouched.
 	 *
 	 * > [!NOTE]
 	 * > The observer receives only resource identifiers and an existence flag — not the mutated state.
@@ -261,13 +267,13 @@ export interface Store extends StoreClient {
 	 * > and lets each observer fetch whatever data envelope it needs via {@link StoreClient.lookup lookup}.
 	 *
 	 * @param observer - Mutation observer invoked with each batch of matching mutations
-	 * @param resources - Filter (single reference, array of references, or omitted for no filter)
+	 * @param resources - Filter (a single reference, a collection of references, or omitted for no filter)
 	 *
 	 * @returns A function that detaches **this** registration
 	 *
 	 * @throws `Error` if the store has been {@link Store.close closed}
 	 */
-	observe(observer: StoreObserver, resources?: Reference | readonly Reference[]): () => void;
+	observe(observer: StoreObserver, resources?: Some<Reference>): () => void;
 
 	/**
 	 * Execute a task within a store transaction.
@@ -307,7 +313,7 @@ export interface Store extends StoreClient {
 	 *
 	 * @throws `Error` if the store has been {@link Store.close closed}
 	 */
-	execute<V>(task: (store: StoreClient) => V | Promise<V>): Promise<V>;
+	execute<V>(task: (store: StoreClient) => Awaitable<V>): Promise<V>;
 
 	/**
 	 * Release resources held by this store.
@@ -387,7 +393,7 @@ export interface StoreClient {
 		depth?: number
 		limit?: number
 
-	}): Promise<undefined | Instance<T>>;
+	}): Promise<Optional<Instance<T>>>;
 
 
 	/**
@@ -423,7 +429,7 @@ export interface StoreClient {
 		readonly shape: Lazy<ResourceShape>;
 		readonly state: Resource
 
-	}): Promise<undefined | Reference>;
+	}): Promise<Optional<Reference>>;
 
 	/**
 	 * Update a resource.
@@ -458,7 +464,7 @@ export interface StoreClient {
 		readonly shape: Lazy<ResourceShape>;
 		readonly state: Resource
 
-	}): Promise<undefined | Reference>;
+	}): Promise<Optional<Reference>>;
 
 	/**
 	 * Delete a resource.
@@ -487,7 +493,7 @@ export interface StoreClient {
 		readonly entry: Reference;
 		readonly shape: Lazy<ResourceShape>;
 
-	}): Promise<undefined | Reference>;
+	}): Promise<Optional<Reference>>;
 
 
 	/**
@@ -591,6 +597,6 @@ export interface StoreObserver {
 	 * @param mutations - Record mapping resource identifiers to existence flags
 	 *     (`true` for upserted, `false` for removed)
 	 */
-	(mutations: { readonly [entry: Reference]: boolean }): void | Promise<void>;
+	(mutations: { readonly [entry: Reference]: boolean }): Awaitable<void>;
 
 }

@@ -144,8 +144,8 @@ const unsubscribe = store.observe(mutations => {
 unsubscribe(); // stop receiving events
 ```
 
-The second argument scopes the observer to the given resources and their descendants; omit it to receive all mutations,
-pass an empty array to detach the observer.
+The second argument scopes the observer to the given resources and their descendants: pass a single reference or any
+collection of them, omit it to receive all mutations, or pass an empty collection to skip registration altogether.
 
 ## Executing Transactions
 

@@ -20,6 +20,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a reference-specific constraint set
 - `@metreeca/keep-suite` — `StoreTestOptions.includes` and `StoreTestOptions.excludes` take a `Probe` in place of a
   partial state, and `StoreTestOptions.generate` takes and returns a shape `Instance`
+- `@metreeca/keep` — `Store.observe` takes its resource filter as any collection of references, arrays, sets and
+  single-pass iterators alike, and `Store.execute` and `StoreObserver` accept any thenable in place of a native
+  promise
 
 ### Fixed
 
