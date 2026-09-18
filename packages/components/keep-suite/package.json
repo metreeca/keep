@@ -1,6 +1,6 @@
 {
   "name": "@metreeca/keep-suite",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "Connector conformance test suite for @metreeca/keep.",
   "keywords": [
     "typescript",
@@ -52,7 +52,7 @@
   "dependencies": {
     "@metreeca/blue": "^0.10.0",
     "@metreeca/core": "^0.10.0",
-    "@metreeca/keep": "^0.10.0",
+    "@metreeca/keep": "^0.11.0",
     "@metreeca/qest": "^0.10.0"
   },
   "peerDependencies": {

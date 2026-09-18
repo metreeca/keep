@@ -1,6 +1,6 @@
 {
   "name": "@metreeca/keep-flake",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "Shape-driven traversal trees for @metreeca/keep connectors.",
   "keywords": [
     "typescript",
@@ -51,7 +51,7 @@
     "@metreeca/qest": "^0.10.0"
   },
   "devDependencies": {
-    "@metreeca/keep-suite": "^0.10.0",
+    "@metreeca/keep-suite": "^0.11.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.13"
   }
