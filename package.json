@@ -4,6 +4,9 @@
   "workspaces": [
     "packages/*/*"
   ],
+  "engines": {
+    "node": ">=22.22.0"
+  },
   "scripts": {
     "clean": "npm run clean --workspaces && rm -rf dist docs node_modules",
     "prime": "npm ci",
