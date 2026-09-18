@@ -28,14 +28,16 @@ import {
 	getFlakeEntries,
 	getFlakeVariant,
 	isModelBranch,
-	isQueryBranch
+	isQueryBranch,
+	type Mould
 } from "@metreeca/keep-flake";
-import type { Broker, Deferred, Lookup } from "@metreeca/keep/batching";
-import type { Dictionary, Reference, Resource, Value, Values } from "@metreeca/qest/resource";
-import { isTemplate, type Placeholders, type Query } from "@metreeca/qest/template";
+import type { Broker, Deferred, Lookup, Response } from "@metreeca/keep/batching";
+import type { Dictionary, Reference, Resource, Value, Values } from "@metreeca/qest/state";
+import { isSelector } from "@metreeca/qest/model";
 import type { Term } from "@metreeca/trio";
 import type { Tuple, Variable } from "@metreeca/wire-sparql";
 import { column } from "../_/_decode.js";
+import { isExpanded } from "../_/_model.js";
 import { getUnionPlaceholders } from "../_/_union.js";
 
 
@@ -71,9 +73,13 @@ export function decode(
 	tuples: readonly Tuple[]
 ): void {
 
+	// ;(cast) the decoded resource is the instance the request asked for: the walk is driven by the very flake
+	// the model built, so its slots are the model's keys. The static inference no longer says so, reading leaf
+	// types off a notation that no longer carries them (see `@metreeca/keep/_inference`).
+
 	items.forEach(({ request, flake, resolve, reject }) =>
 		decodeResource(request.entry, flake, request.locale)
-			.then(resolve)
+			.then(resource => resolve(resource as Response<Lookup>))
 			.catch(reject)
 	);
 
@@ -107,7 +113,11 @@ export function decode(
 
 			return isQueryBranch(branch) ? broker
 					.select({ entry, shape, field: branch.entry, query: branch.drain.mould, locale })
-					.then(values => [branch.path[branch.path.length-1], isSelected(branch.drain.mould) || !isEmpty(values) ? values : undefined])
+					// ;(cast) the selected collection is the property's decoded value set, as above
+					.then((values): Slot => [
+						branch.path[branch.path.length-1],
+						isSelected(branch.drain.mould) || !isEmpty(values) ? values as Values : undefined
+					])
 
 				: isModelBranch(branch) ? Promise
 						.resolve(decodeProperty(locale, branch))
@@ -145,9 +155,13 @@ export function decode(
 		} else if ( rangeShape.kind === "dictionary" ) {
 
 			// localised slots resolve as a single structured `Localised` value, not a collection:
-			// the `Locales` placeholder's tag ranges select the languages and fix the per-tag cardinality
+			// the `Locale` placeholder's tag ranges select the languages and fix the per-tag cardinality
 
-			return decodeDictionary(locale, model, unique(column(scope.resolve(branch), tuples), equals));
+			return decodeDictionary(
+				locale, model,
+				unique(column(scope.resolve(branch), tuples), equals),
+				rangeShape.uniqueLang === true
+			);
 
 		} else {
 
@@ -160,7 +174,7 @@ export function decode(
 	/**
 	 * Decodes the localised arm: the language-tagged terms matched against a localised placeholder.
 	 *
-	 * Structural access (a {@link @metreeca/qest/template!Locales | Locales} placeholder) yields the
+	 * Structural access (a {@link @metreeca/qest/model!Locale | Locale} placeholder) yields the
 	 * {@link Dictionary} map of the tags matching the requested ranges by RFC 4647 basic filtering (the wildcard `*`
 	 * or an empty map admits every tag), with the per-tag cardinality fixed by the placeholder's value shape. Coalesced
 	 * access (a plain string or singleton-array placeholder) reduces the map to the first locale-priority
@@ -170,9 +184,10 @@ export function decode(
 	 */
 	function decodeDictionary(
 		locale: readonly Tag[],
-		placeholder: Placeholders | undefined,
-		terms: readonly Term[]
-	): string | string[] | Dictionary | undefined {
+		placeholder: Mould | undefined,
+		terms: readonly Term[],
+		uniqueLang: boolean
+	): string | readonly string[] | Dictionary | undefined {
 
 		const pairs = terms.flatMap((t): readonly { readonly tag: string; readonly text: string }[] => {
 
@@ -182,33 +197,27 @@ export function decode(
 
 		});
 
-		if ( isObject(placeholder) ) {
+		// §5.4: a tag-range map asks for the property structurally, the atomic leaf `{}` for its coalesced
+		// label; the two are told apart by key presence, `{}` no longer standing for "every tag"
 
-			const ranges = Object.keys(placeholder);
+		const ranges = Object.keys(placeholder ?? {}).filter(key => !isSelector(key));
 
-			const matching = ranges.length === 0 ? pairs : pairs.filter(({ tag }) =>
-				ranges.some(range => matchTag(tag, range))
-			);
+		if ( ranges.length > 0 ) {
 
-			if ( matching.length === 0 ) {
+			const matching = pairs.filter(({ tag }) => ranges.some(range => matchTag(tag, range)));
 
-				return undefined;
+			// §5.4: the retrieved entries carry the per-tag cardinality the property declares, which the
+			// template does not restate
 
-			} else if ( Object.values(placeholder).some(v => isArray(v)) ) {
-
-				return matching.reduce<Record<string, readonly string[]>>(
-					(values, { tag, text }) => ({ ...values, [tag]: [...(values[tag] ?? []), text] }),
-					{}
-				);
-
-			} else {
-
-				return matching.reduce<Record<string, string>>(
-					(values, { tag, text }) => ({ ...values, [tag]: text }),
-					{}
-				);
-
-			}
+			return matching.length === 0 ? undefined
+				: uniqueLang ? matching.reduce<Record<string, string>>(
+						(values, { tag, text }) => ({ ...values, [tag]: text }),
+						{}
+					)
+					: matching.reduce<Record<string, readonly string[]>>(
+						(values, { tag, text }) => ({ ...values, [tag]: [...(values[tag] ?? []), text] }),
+						{}
+					);
 
 		} else {
 
@@ -216,8 +225,8 @@ export function decode(
 			const texts = pairs.filter(pair => pair.tag === winning).map(pair => pair.text);
 
 			return winning === undefined ? undefined
-				: isArray(placeholder) ? texts
-					: texts[0];
+				: uniqueLang ? texts[0]
+					: texts;
 
 		}
 
@@ -278,7 +287,7 @@ export function decode(
 
 			case "reference":
 
-				return isTemplate(placeholder)
+				return isExpanded(placeholder)
 					? entries().map(entry => decodeVariant(entry, eager(shape.target), locale, branches))
 					: entries();
 
@@ -318,14 +327,15 @@ export function decode(
 	}
 
 	/**
-	 * Tests whether a collection query carries a non-vacuous selection: such a slot is a filtered query
+	 * Tests whether a collection query carries at least one constraint: such a slot is a filtered query
 	 * whose result set is returned even when empty, rather than an unconstrained value set subject to
 	 * empty-value omission (§4).
+	 *
+	 * Constraints ride on the node retrieving the collection (§5.6), so the test reads the node's own
+	 * criteria keys where it once read a query tuple's second slot.
 	 */
-	function isSelected(query: Query): boolean {
-		return isArray(query, [isAny, selection =>
-			isObject(selection) && Object.keys(selection).length > 0
-		]);
+	function isSelected(query: Mould): boolean {
+		return Object.keys(query).some(isSelector);
 	}
 
 }

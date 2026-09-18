@@ -15,7 +15,7 @@
  */
 
 import { createScope } from "@metreeca/core/scope";
-import { createFlake } from "@metreeca/keep-flake";
+import { createQueryFlake } from "@metreeca/keep-flake";
 import type { Broker, Deferred, Select } from "@metreeca/keep/batching";
 import { type RepositoryClient, variable } from "@metreeca/wire-sparql";
 import { decode } from "./decode.js";
@@ -43,7 +43,7 @@ export async function select(
 	const scope = createScope(variable);
 
 	const items = batch.map(select =>
-		({ ...select, flake: createFlake(select.request.field.range.shape, select.request.query) })
+		({ ...select, flake: createQueryFlake(select.request.field.range.shape, select.request.query) })
 	);
 
 	decode(scope, items, broker, await client.select(

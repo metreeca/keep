@@ -14,10 +14,13 @@
  * limitations under the License.
  */
 
-import type { Identifier } from "@metreeca/core";
+import type { Identifier, Lazy } from "@metreeca/core";
+import type { ResourceShape } from "@metreeca/blue/resource";
+import type { Delivery } from "@metreeca/blue/value";
 import { immutable } from "@metreeca/core/structures";
-import type { Reference } from "@metreeca/qest/resource";
-import type { Instance, Query, Template } from "@metreeca/qest/template";
+import type { Reference } from "@metreeca/qest/state";
+import type { Template } from "@metreeca/qest/model";
+import type { Items, Mould } from "../_inference.js";
 import type { Broker, Deferred, Detect, Handler, Lookup, Modify, Request, Select } from "./batching.js";
 
 /**
@@ -92,14 +95,14 @@ export function createBroker(handlers: {
 			);
 		},
 
-		lookup<T extends Template>(request: Lookup<T>) { // ;(cast) the handler resolves Instance<T> at runtime
-			return new Promise<Instance<T>>((resolve, reject) =>
+		lookup<S extends Lazy<ResourceShape>, T extends Template>(request: Lookup<T, S>) { // ;(cast) the handler resolves Instance<T> at runtime
+			return new Promise<Delivery<S, T>>((resolve, reject) =>
 				queues.lookup.items.push({ request, resolve, reject } as Deferred<Lookup>)
 			);
 		},
 
-		select<T extends Query>(request: Select<T>) { // ;(cast) the handler resolves Instance<T> at runtime
-			return new Promise<Instance<T>>((resolve, reject) =>
+		select<T extends Mould>(request: Select<T>) { // ;(cast) the handler resolves Items<T> at runtime
+			return new Promise<Items<T>>((resolve, reject) =>
 				queues.select.items.push({ request, resolve, reject } as Deferred<Select>)
 			);
 		},
@@ -120,11 +123,11 @@ export function createBroker(handlers: {
 			return process(() => broker.detect(request));
 		},
 
-		lookup<T extends Template>(request: Lookup<T>) {
+		lookup<S extends Lazy<ResourceShape>, T extends Template>(request: Lookup<T, S>) {
 			return process(() => broker.lookup(request));
 		},
 
-		select<T extends Query>(request: Select<T>) {
+		select<T extends Mould>(request: Select<T>) {
 			return process(() => broker.select(request));
 		},
 

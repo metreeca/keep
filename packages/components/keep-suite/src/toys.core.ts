@@ -20,7 +20,7 @@ import { eager, type Instance } from "@metreeca/blue/value";
 import { error, isString, type Lazy, map } from "@metreeca/core";
 import { immutable } from "@metreeca/core/structures";
 import { TraceError } from "@metreeca/core/trace";
-import { isReference, type Reference, type Resource } from "@metreeca/qest/resource";
+import { isReference, type Reference, type Resource } from "@metreeca/qest/state";
 import { base, Category, Image, Product, toys, Vendor, Video } from "./toys.js";
 import json from "./toys.json" with { type: "json" };
 

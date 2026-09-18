@@ -15,9 +15,8 @@
  */
 
 import type { Identifier } from "@metreeca/core";
-import { type Branch, createFlake, type Flake, isConstrainedFlake, isDrainedFlake } from "@metreeca/keep-flake";
+import { type Branch, createQueryFlake, type Flake, isConstrainedFlake, isDrainedFlake } from "@metreeca/keep-flake";
 import { Product } from "@metreeca/keep-suite/toys";
-import type { Query } from "@metreeca/qest/template";
 import { describe, expect, it } from "vitest";
 
 
@@ -40,7 +39,7 @@ describe("retrieved", () => {
 		// `year:launched` binds its projection alias on the launched branch's `year` transform stage, not on
 		// the branch itself, so the branch surfaces a retrieved value only along its transform axis
 
-		const flake = createFlake(Product, [{ "y=year:launched": 0 }] as Query);
+		const flake = createQueryFlake(Product, { "y=year:launched": {} });
 
 		expect(isDrainedFlake(at(flake, "launched"))).toBeTruthy();
 
@@ -55,7 +54,7 @@ describe("constrains", () => {
 		// `>=year:launched` lands its bound on the launched branch's `year` transform stage, not on the
 		// branch itself, so the branch carries a constraint only along its transform axis
 
-		const flake = createFlake(Product, [{ ">=year:launched": 2020 }] as Query);
+		const flake = createQueryFlake(Product, { ">=year:launched": 2020 });
 
 		expect(isConstrainedFlake(at(flake, "launched"))).toBeTruthy();
 

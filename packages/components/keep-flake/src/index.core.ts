@@ -29,8 +29,8 @@ import { getModelBranches, getShapeBranches } from "@metreeca/blue/union";
 import { effective, type Range, type Shape } from "@metreeca/blue/value";
 import { type Identifier, isObject, isString, opt } from "@metreeca/core";
 import { TraceError } from "@metreeca/core/trace";
-import { encodeProbe, isVacuous, type Model, type Transform } from "@metreeca/qest/template";
-import type { Branch, Entries } from "./index.js";
+import { encodeProbe, isSelector, type Transform } from "@metreeca/qest/model";
+import type { Branch, Entries, Mould } from "./index.js";
 
 
 /**
@@ -93,7 +93,7 @@ function getRange(source: Shape | Range, path: readonly Identifier[], pipe: read
  * dropped, `id` and `type` entries become terminal branches, and property entries carry their requested fragment as
  * their {@link Flake.drain | drain}. Only a single-valued range expanded inline as a nested object is descended for
  * nested properties; a leaf placeholder or a multi-valued range (which carries a
- * {@link @metreeca/qest/template!Query | Query}) holds none (§6.2). `path` accumulates the branch path to this node
+ * {@link @metreeca/qest/model!Query | Query}) holds none (§6.2). `path` accumulates the branch path to this node
  * and is prefixed onto every emitted child branch.
  *
  * @param range The effective {@link Range} of the node whose properties are assembled
@@ -104,7 +104,7 @@ function getRange(source: Shape | Range, path: readonly Identifier[], pipe: read
  * non-object `model`, or a range no variant of which contributes a record (no variant resolves an owned target, or
  * a multi-variant range's alternatives match no variant)
  */
-export function getEntries(range: Range, path: readonly Identifier[], model: Model): Entries | undefined {
+export function getEntries(range: Range, path: readonly Identifier[], model: Mould): Entries | undefined {
 
 	// each reachable variant folds its model fragment against its target's declared properties, merged across
 	// variants: a multi-variant range reads the §5.4 keyed union form (each object-valued alternative matched to
@@ -118,7 +118,7 @@ export function getEntries(range: Range, path: readonly Identifier[], model: Mod
 
 	} else if ( variants.length > 1 ) {
 
-		return mergeEntries(Object.values(model).filter(v => isObject(v)).flatMap(alternative =>
+		return mergeEntries(getMouldEntries(model).flatMap(([, alternative]) =>
 			getModelBranches(alternative, variants)?.flatMap(variant => descend(variant, alternative)) ?? []
 		));
 
@@ -131,17 +131,17 @@ export function getEntries(range: Range, path: readonly Identifier[], model: Mod
 	}
 
 
-	function descend(shape: Shape, model: Model) {
+	function descend(shape: Shape, model: Mould) {
 		return opt(getShapeTarget(shape), target => {
 
 			if ( isObject(model) ) {
 
-				return [Object.fromEntries(Object.entries(model).flatMap<[Identifier, Branch[]]>(([k, v]) => {
+				return [Object.fromEntries(getMouldEntries(model).flatMap<[Identifier, Branch[]]>(([k, v]) => {
 
 					const field = target.members[k];
 					const lower: readonly Identifier[] = [...path, k];
 
-					if ( isVacuous(v) || field === undefined ) {
+					if ( field === undefined ) {
 
 						return [];
 
@@ -162,7 +162,11 @@ export function getEntries(range: Range, path: readonly Identifier[], model: Mod
 
 						const child = getPropertyRange(range, k);
 
-						const entries = child.maxCount === 1 && isObject(v)
+						// the atomic leaf asks for the value as it stands (§5.3), so a reference under it comes
+						// back as the identifier naming its target rather than expanded; only a fragment stating
+						// retrieval keys of its own descends
+
+						const entries = child.maxCount === 1 && getMouldEntries(v).length > 0
 							? getEntries(child, lower, v)
 							: undefined;
 
@@ -196,6 +200,30 @@ export function getEntries(range: Range, path: readonly Identifier[], model: Mod
 
 		}, []);
 	}
+
+}
+
+/**
+ * The retrieval half of a node's requested fragment.
+ *
+ * Retrieval keys and constraint keys share one key space (§5.6), so a walk descending the retrieval keys drops
+ * the {@link @metreeca/qest/model!Criteria | criteria} narrowing the node's own collection, which the node
+ * carries in its own slots rather than in a branch. An entry set to the absent marker `undefined` names
+ * nothing and is dropped with them.
+ *
+ * @param mould The requested fragment to read
+ *
+ * @returns The fragment's retrieval entries, in stated order, each pairing a key with the fragment requested
+ * under it
+ */
+export function getMouldEntries(mould: Mould): readonly (readonly [Identifier, Mould])[] {
+
+	// ;(cast) with the constraint keys dropped, qest's Template contract leaves a retrieval fragment under
+	// every remaining key
+
+	return Object.entries(mould)
+		.filter(([key, value]) => !isSelector(key) && value !== undefined)
+		.map(([key, value]) => [key, value as Mould] as const);
 
 }
 

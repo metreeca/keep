@@ -18,8 +18,9 @@ import { reference } from "@metreeca/blue/reference";
 import { optional, type Property, resource, type ResourceShape } from "@metreeca/blue/resource";
 import { eager } from "@metreeca/blue/value";
 import type { Lazy } from "@metreeca/core";
-import type { Reference } from "@metreeca/qest/resource";
-import type { Query, Template } from "@metreeca/qest/template";
+import type { Reference } from "@metreeca/qest/state";
+import type { Template } from "@metreeca/qest/model";
+import type { Mould } from "../_inference.js";
 import { describe, expect, it } from "vitest";
 import { createBroker } from "./batching.core.js";
 import { type Broker, createBatchingStore, type Detect, type Lookup, type Modify, type Select } from "./batching.js";
@@ -314,7 +315,7 @@ describe("createBroker", () => {
 	const property: Property = broaderEntry;
 
 	const resourceModel: Template = {};
-	const collectionModel: Query = ["http://example.com/element"];
+	const collectionModel: Mould = {};
 
 
 	function lookupRequest(overrides?: Partial<Lookup>): Lookup {

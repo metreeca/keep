@@ -95,8 +95,8 @@ import { transport } from "@metreeca/http/transport";
 import type { Store } from "@metreeca/keep";
 import { createManagingStore } from "@metreeca/keep/managing";
 import { createValidatingStore } from "@metreeca/keep/validating";
-import { encodeResource } from "@metreeca/qest/resource";
-import { encodeTemplate } from "@metreeca/qest/template";
+import { encodeResource } from "@metreeca/qest/state";
+import { encodeTemplate } from "@metreeca/qest/model";
 
 
 /**

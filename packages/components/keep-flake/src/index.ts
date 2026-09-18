@@ -17,7 +17,7 @@
 /**
  * A shape and its optional retrieval model or collection query, represented as a single traversal tree.
  *
- * A {@link Shape} and its retrieval {@link Model} or collection {@link Query} scatter what to fetch
+ * A {@link Shape} and its retrieval {@link @metreeca/qest/model!Template | Template} scatter what to fetch
  * across the structure as independent probes (property requests, constraints, transforms), leaving the
  * collective traversal that satisfies them implicit. A flake makes it explicit, reorganising the probes
  * into one tree a shape-driven processor walks directly instead of correlating raw shape with raw input
@@ -26,12 +26,12 @@
  * {@link createFlake} produces three flavours of the tree, one per overload:
  *
  * - **shape** — a resource full structural reach, with no input (a leaf for a non-resource root);
- * - **model** — the reach restricted to the properties a retrieval {@link Model} addresses, each node
+ * - **model** — the reach restricted to the properties a retrieval {@link @metreeca/qest/model!Template | Template} addresses, each node
  *   carrying the {@link Flake.drain | drain} requested for it (a
- *   {@link @metreeca/qest/template!Template} on a resource root; any other form, or a non-resource root,
+ *   {@link @metreeca/qest/model!Template} on a resource root; any other form, or a non-resource root,
  *   degenerates to a leaf);
  * - **query** — a collection member shape tagged with the constraints, ordering, and projection a
- *   {@link Query} expresses.
+ *   {@link Mould} expresses.
  *
  * Every node, the root included, is a {@link Flake} located by its {@link Flake.path | path} along the
  * property axis and its {@link Flake.pipe | pipe} along the transform axis, and sharing the same
@@ -52,22 +52,24 @@
 
 import { getShapeProperties, type Id, type Member, type Property, type Type } from "@metreeca/blue/resource";
 import { eager, type Range, type Shape } from "@metreeca/blue/value";
-import { type Identifier, isArray, isObject, type Lazy } from "@metreeca/core";
+import { type Identifier, isObject, type Lazy } from "@metreeca/core";
 import { some } from "@metreeca/core/arrays";
 import { by } from "@metreeca/core/order";
-import type { Dictionary, Literal } from "@metreeca/qest/resource";
+import type { Dictionary, Literal } from "@metreeca/qest/state";
 import {
 	getOrderPrecedence,
 	isAggregate,
-	type Model,
 	type Option,
 	type Options,
-	type Placeholders,
+	type Placeholder,
+	type Projection,
 	type Query,
-	type Transform
-} from "@metreeca/qest/template";
+	type Template,
+	type Transform,
+	type Union
+} from "@metreeca/qest/model";
 import { createModelFlake } from "./model.js";
-import { createQueryFlake } from "./query.js";
+import { createQueryFlake as createFlakeQuery } from "./query.js";
 import { createShapeFlake } from "./shape.js";
 
 
@@ -221,9 +223,25 @@ export type Drain = {
 	/**
 	 * The requested template fragment.
 	 */
-	readonly mould: Placeholders;
+	readonly mould: Mould;
 
 };
+
+/**
+ * The retrieval fragment requested at a {@link Flake | node} of a flake.
+ *
+ * Every form a template entry takes, with the collection {@link @metreeca/qest/model!Criteria | criteria} constraining
+ * it merged in: an {@link @metreeca/qest/model!Atomic | atomic} leaf, a nested
+ * {@link @metreeca/qest/model!Template | template}, a {@link @metreeca/qest/model!Locale | locale} map, a
+ * {@link @metreeca/qest/model!Union | union} of those, or a {@link @metreeca/qest/model!Projection | projection}.
+ * Retrieval keys and constraint keys share one key space, so a node states what to retrieve and which items to
+ * retrieve it for in one object.
+ */
+export type Mould = Query<
+	| Placeholder
+	| Union<Placeholder>
+	| Projection
+>;
 
 /**
  * A node's transform stages, keyed by the {@link Transform} each stage applies.
@@ -268,38 +286,47 @@ export type Entries = {
 export function createFlake(shape: Lazy<Shape>): Flake;
 
 /**
- * Builds a flake from a shape and a retrieval model, keeping only the properties the model addresses,
- * each branch carrying the {@link Flake.drain | drain} requested for it.
+ * Builds a flake from a shape and a retrieval template, keeping only the properties the template addresses,
+ * each branch carrying the {@link Flake.drain | drain} requested for it, the constraints merged into that
+ * request, and the transforms and projection marks it directs.
  *
- * Property branches form only for a {@link @metreeca/qest/template!Template} model on a resource root; any other
- * {@link Model} form, or a non-resource root, yields a degenerate leaf flake.
+ * Property branches form only on a resource root; a non-resource root yields a degenerate leaf flake.
  *
  * @param shape The {@link Lazy | lazy} root shape
- * @param model The retrieval {@link Model} selecting the properties to keep
+ * @param model The retrieval {@link @metreeca/qest/model!Template | template} selecting the properties to keep
  *
- * @returns An immutable {@link Flake} restricted to the model-addressed properties
+ * @returns An immutable {@link Flake} restricted to the template-addressed properties
  */
-export function createFlake(shape: Lazy<Shape>, model: Model): Flake;
+export function createFlake(shape: Lazy<Shape>, model: Template): Flake;
 
 /**
- * Builds a flake from a collection member shape and a query, tagging each addressed node with
- * the constraints, ordering, and projection the query expresses.
- *
- * @param shape The {@link Lazy | lazy} member shape of the collection elements
- * @param query The collection {@link Query} to apply
- *
- * @returns An immutable {@link Flake} tagged with the query constraints, ordering, and projection
+ * Builds a {@link Flake} from a {@link Shape} and an optional retrieval
+ * {@link @metreeca/qest/model!Template | template}.
  */
-export function createFlake(shape: Lazy<Shape>, query: Query): Flake;
+export function createFlake(shape: Lazy<Shape>, model?: Template): Flake {
+
+	return model === undefined ? createShapeFlake(eager(shape))
+		: createModelFlake(eager(shape), model);
+
+}
 
 /**
- * Builds a {@link Flake} from a {@link Shape} and an optional {@link Model} or {@link Query}.
+ * Builds a flake from a collection's member shape and the node retrieving it, tagging each addressed node with
+ * the constraints, ordering, and projection the node expresses.
+ *
+ * A collection is reached through the entry naming it, which carries its
+ * {@link @metreeca/qest/model!Criteria | criteria} merged in alongside its retrieval keys, so a caller holding
+ * such an entry resolves the collection through this rather than through {@link createFlake}, whose root states
+ * a plain {@link @metreeca/qest/model!Template | template}.
+ *
+ * @param shape The {@link Lazy | lazy} member shape of the collection's elements
+ * @param query The node retrieving the collection, its criteria merged in
+ *
+ * @returns An immutable {@link Flake} tagged with the constraints, ordering, and projection `query` expresses
  */
-export function createFlake(shape: Lazy<Shape>, drain?: Model | Query): Flake {
+export function createQueryFlake(shape: Lazy<Shape>, query: Mould): Flake {
 
-	return drain === undefined ? createShapeFlake(eager(shape))
-		: isArray(drain) ? createQueryFlake(eager(shape), drain as Query)
-			: createModelFlake(eager(shape), drain as Model);
+	return createFlakeQuery(eager(shape), query);
 
 }
 
@@ -325,7 +352,7 @@ export function isComputedFlake(flake: Flake): boolean {
  * Checks whether a {@link Flake} is an aggregate transform stage.
  *
  * True for a {@link isComputedFlake | computed} node whose leading {@link Flake.pipe | pipe} transform
- * aggregates a group (`qest`'s {@link @metreeca/qest/template!isAggregate | isAggregate}), such as a count or
+ * aggregates a group (`qest`'s {@link @metreeca/qest/model!isAggregate | isAggregate}), such as a count or
  * sum. Aggregate stages drive grouped query semantics: the non-aggregate projection bindings become the
  * `GROUP BY` keys and the aggregate filters move to `HAVING`. The test is local to the node; walk the tree to
  * find aggregate stages nested beneath it.
@@ -357,7 +384,7 @@ export function isScalarFlake(flake: Flake): boolean {
  * Checks whether a {@link Flake} groups the query.
  *
  * True when any of the flake's {@link getFlakeProjections | projected flakes} carries an
- * {@link @metreeca/qest/template!isAggregate | aggregate} transform along its {@link Flake.pipe | pipe}. A single
+ * {@link @metreeca/qest/model!isAggregate | aggregate} transform along its {@link Flake.pipe | pipe}. A single
  * aggregate projection switches the whole query to grouped semantics: the non-aggregate projections become the
  * grouping keys (see {@link getFlakeGrouping}) and the aggregates reduce each group. Scans the projection set across
  * the tree, unlike {@link isAggregateFlake}, which tests one node.
@@ -548,51 +575,72 @@ export function isPropertyBranch(flake: Flake): flake is Branch & {
 }
 
 /**
- * Checks whether a flake steps through a {@link Property} carrying a single-value {@link Model} template
- * retrieval: a non-projected {@link Flake.drain | drain} whose mould is a {@link Model} (or no drain).
+ * Checks whether a flake steps through a single-valued {@link Property}, whose retrieval addresses one value
+ * and admits no collection constraints.
+ *
+ * Cardinality is read off the property the branch steps through, never off {@link Flake.range | range}, which
+ * composes the cardinality of every step from the root and so reports a single-valued property under a
+ * multi-valued ancestor as multi-valued.
  *
  * @param flake The flake to inspect
  *
- * @returns true if `flake` is a {@link Property} with a non-projected {@link Model} drain (or none); false
- * otherwise, including transform stages, {@link Id} / {@link Type} markers, {@link isQueryBranch | query},
+ * @returns true if `flake` is a single-valued {@link Property} with a non-projected drain (or none); false
+ * otherwise, including transform stages, {@link Id} / {@link Type} markers, {@link isQueryBranch | collection},
  * and {@link isProbeBranch | projected} branches
  */
 export function isModelBranch(flake: Flake): flake is Branch & {
 
 	readonly entry: Property;
-	readonly drain?: { readonly mould: Model }
+	readonly drain?: { readonly mould: Mould }
 
 } {
 
-	return isBranch(flake)
-		&& flake.entry.kind === "property"
+	return isPropertyBranch(flake)
 		&& flake.drain?.alias === undefined
-		&& !isArray(flake.drain?.mould);
+		&& !isCollection(flake.entry);
 
 }
 
 /**
- * Checks whether a flake steps through a {@link Property} carrying a collection {@link Query} template
- * retrieval: a non-projected {@link Flake.drain | drain} whose mould is a {@link Query}.
+ * Checks whether a flake steps through a multi-valued {@link Property}, whose retrieval addresses a collection
+ * and carries the {@link @metreeca/qest/model!Criteria | criteria} narrowing it.
+ *
+ * Cardinality is read off the property the branch steps through, for the reason given on
+ * {@link isModelBranch}.
  *
  * @param flake The flake to inspect
  *
- * @returns true if `flake` is a {@link Property} with a non-projected {@link Query} drain; false otherwise,
- * including transform stages, {@link Id} / {@link Type} markers, {@link isModelBranch | model}, and
+ * @returns true if `flake` is a multi-valued {@link Property} with a non-projected drain; false otherwise,
+ * including transform stages, {@link Id} / {@link Type} markers, {@link isModelBranch | single-valued}, and
  * {@link isProbeBranch | projected} branches
  */
 export function isQueryBranch(flake: Flake): flake is Branch & {
 
 	readonly entry: Property;
-	readonly drain: { readonly mould: Query }
+	readonly drain: { readonly mould: Mould }
 
 } {
 
-	return isBranch(flake)
-		&& flake.entry.kind === "property"
-		&& flake.drain?.alias === undefined
-		&& isArray(flake.drain?.mould);
+	return isPropertyBranch(flake)
+		&& flake.drain !== undefined
+		&& flake.drain.alias === undefined
+		&& isCollection(flake.entry);
 
+}
+
+/**
+ * Checks whether a property addresses a collection.
+ *
+ * A property admitting several values addresses a collection, with one exception: a localised property is delivered
+ * as a single tag-keyed map whatever its bounds, the per-tag cardinality it declares applying within that map rather
+ * than making the property itself multi-valued (§5.4).
+ *
+ * @param entry The property to test
+ *
+ * @returns true if `entry` addresses a collection; false otherwise
+ */
+function isCollection(entry: Property): boolean {
+	return entry.range.maxCount !== 1 && eager(entry.range.shape).kind !== "dictionary";
 }
 
 /**
@@ -604,7 +652,7 @@ export function isQueryBranch(flake: Flake): flake is Branch & {
  */
 export function isProbeBranch(flake: Flake): flake is Branch & {
 
-	readonly drain: { readonly alias: Identifier; readonly mould: Placeholders }
+	readonly drain: { readonly alias: Identifier; readonly mould: Mould }
 
 } {
 
@@ -689,7 +737,7 @@ export function getFlakeProjection(flake: Flake): { readonly [alias: Identifier]
  * Collects the grouping keys of a {@link Flake}.
  *
  * The {@link getFlakeProjections | projected flakes} that do not carry an
- * {@link @metreeca/qest/template!isAggregate | aggregate} transform along their {@link Flake.pipe | pipe}. When the
+ * {@link @metreeca/qest/model!isAggregate | aggregate} transform along their {@link Flake.pipe | pipe}. When the
  * flake {@link isGroupingFlake | groups the query}, these are the keys each group is formed on, while the aggregate
  * projections reduce per group.
  *
@@ -732,7 +780,7 @@ export function getFlakeFocusing(flake: Flake): readonly (Flake & { readonly foc
  *
  * Every coordinate under the flake that bears a {@link Flake.order | sort order} (qest §5.7.5), gathered by
  * descending through transform stages and nested property branches, then ordered by its
- * {@link @metreeca/qest/template!getOrderPrecedence | precedence} with document order breaking ties. These are
+ * {@link @metreeca/qest/model!getOrderPrecedence | precedence} with document order breaking ties. These are
  * the regular sort criteria, applied after any {@link getFlakeFocusing | focus} boost.
  *
  * @param flake The flake to collect from

@@ -200,14 +200,15 @@
 
 import type { validate } from "@metreeca/blue";
 import type { ResourceShape } from "@metreeca/blue/resource";
+import type { Delivery } from "@metreeca/blue/value";
 import type { Lazy, Optional } from "@metreeca/core";
 import type { Some } from "@metreeca/core/arrays";
 import type { Awaitable } from "@metreeca/core/async";
 import type { Tag } from "@metreeca/core/language";
 import type { TraceError } from "@metreeca/core/trace";
 import type { Problem } from "@metreeca/http/success";
-import { type Reference, Resource } from "@metreeca/qest/resource";
-import { Instance, Template } from "@metreeca/qest/template";
+import { type Reference, Resource } from "@metreeca/qest/state";
+import { Template } from "@metreeca/qest/model";
 
 import type { createManagingStore } from "./stores/managing.js";
 
@@ -340,7 +341,7 @@ export interface StoreClient {
 	 * Retrieve a resource.
 	 *
 	 * The result is shaped by the `model` {@link Template}: plain identifier properties are resolved from the
-	 * shape's {@link Instance}\<T\> type, while computed bindings are derived from the template value.
+	 * shape's {@link @metreeca/blue/value!Delivery | Delivery}\<T\> type, while computed bindings are derived from the template value.
 	 *
 	 * > [!NOTE]
 	 * > `shape` and `model` are kept distinct so that a single `shape` can serve many retrieval templates —
@@ -379,10 +380,10 @@ export interface StoreClient {
 	 *
 	 * @throws `Error` if the store has been {@link Store.close closed}
 	 */
-	lookup<T extends Template>(request: {
+	lookup<S extends Lazy<ResourceShape>, T extends Template>(request: {
 
 		readonly entry: Reference;
-		readonly shape: Lazy<ResourceShape>;
+		readonly shape: S;
 		readonly model: T;
 
 	}, opts?: {
@@ -393,7 +394,7 @@ export interface StoreClient {
 		depth?: number
 		limit?: number
 
-	}): Promise<Optional<Instance<T>>>;
+	}): Promise<Optional<Delivery<S, T>>>;
 
 
 	/**

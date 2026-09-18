@@ -24,11 +24,12 @@ import { eager, effective, type Range } from "@metreeca/blue/value";
 import type { Identifier } from "@metreeca/core";
 import { createNamespace } from "@metreeca/core/resource";
 import { PostalAddress, Product, Vendor } from "@metreeca/keep-suite/toys";
-import type { Probe, Query, Template, Transform } from "@metreeca/qest/template";
+import type { Probe, Query, Template, Transform } from "@metreeca/qest/model";
 import { describe, expect, it } from "vitest";
-import type { Branch, Entries, Flake } from "./index.js";
+import type { Branch, Entries, Flake, Mould } from "./index.js";
 import {
 	createFlake,
+	createQueryFlake,
 	getFlakeProjection,
 	getFlakeVariant,
 	isModelBranch,
@@ -324,7 +325,7 @@ describe("createFlake", () => {
 
 			it("carries the retrieval model on Flake.drain", async () => {
 
-				const template = { label: "" } as Template;
+				const template = { label: {} } as Template;
 
 				expect(createFlake(Thing, template).drain).toEqual({ mould: template });
 
@@ -340,7 +341,7 @@ describe("createFlake", () => {
 				["dictionary", dictionary()]
 			] as const)("yields a degenerate leaf flake on a %s shape, ignoring the template", async (_, shape) => {
 
-				const flake = createFlake(shape, { label: "" } as Template);
+				const flake = createFlake(shape, { label: {} } as Template);
 
 				expect(flake.entries).toBeUndefined();
 
@@ -348,11 +349,10 @@ describe("createFlake", () => {
 
 			it.each([
 				["literal", 0],
-				["string", ""],
-				["reference", "https://example.org/ns#x"]
+				["atomic", {}]
 			] as const)("yields a degenerate leaf flake on a primitive %s model", async (_, model) => {
 
-				const flake = createFlake(decimal(), model);
+				const flake = createFlake(decimal(), model as Template);
 
 				expect(flake.entries).toBeUndefined();
 
@@ -365,7 +365,7 @@ describe("createFlake", () => {
 
 			it("keeps the id template entry as a branch with entry.kind 'id'", async () => {
 
-				const flake = createFlake(Thing, { id: "" } as Template);
+				const flake = createFlake(Thing, { id: {} } as Template);
 
 				expect(at(flake, "id").entry.kind).toBe("id");
 
@@ -373,7 +373,7 @@ describe("createFlake", () => {
 
 			it("keeps the type template entry as a branch with entry.kind 'type'", async () => {
 
-				const flake = createFlake(Thing, { type: "" } as Template);
+				const flake = createFlake(Thing, { type: {} } as Template);
 
 				expect(at(flake, "type").entry.kind).toBe("type");
 
@@ -381,7 +381,7 @@ describe("createFlake", () => {
 
 			it("id / type branches have empty components and no query", async () => {
 
-				const flake = createFlake(Thing, { id: "", type: "" } as Template);
+				const flake = createFlake(Thing, { id: {}, type: {} } as Template);
 
 				expect(at(flake, "id").entries).toBeUndefined();
 				expect(at(flake, "id").drain).toBeUndefined();
@@ -397,7 +397,7 @@ describe("createFlake", () => {
 
 			it("becomes a leaf branch with no query", async () => {
 
-				const flake = createFlake(Thing, { label: "" } as Template);
+				const flake = createFlake(Thing, { label: {} } as Template);
 
 				expect(at(flake, "label").entry.kind).toBe("property");
 				expect(Array.isArray(at(flake, "label").drain?.mould)).toBe(false);
@@ -407,7 +407,7 @@ describe("createFlake", () => {
 
 			it("path extends from the root", async () => {
 
-				const flake = createFlake(Thing, { label: "" } as Template);
+				const flake = createFlake(Thing, { label: {} } as Template);
 
 				expect(at(flake, "label").path).toEqual(["label"]);
 
@@ -420,18 +420,18 @@ describe("createFlake", () => {
 
 			it("array placeholder becomes a terminal branch carrying the user model in query", async () => {
 
-				const flake = createFlake(Thing, { tags: [{ label: "" }] } as Template);
+				const flake = createFlake(Thing, { tags: { label: {} } } as Template);
 				const tags = at(flake, "tags");
 
 				expect(tags.entry.kind).toBe("property");
-				expect(tags.drain).toEqual({ mould: [{ label: "" }] });
+				expect(tags.drain).toEqual({ mould: { label: {} } });
 				expect(tags.entries).toBeUndefined();
 
 			});
 
 			it("locale-map placeholder on a localised range is a leaf resolved in the resources pass", async () => {
 
-				const flake = createFlake(Thing, { description: { en: "" } } as Template);
+				const flake = createFlake(Thing, { description: { en: {} } } as Template);
 				const description = at(flake, "description");
 
 				// single-valued localised slots are single structured values, not collections — the
@@ -445,7 +445,7 @@ describe("createFlake", () => {
 
 			it("string shorthand placeholder on a single-valued localised range is a leaf resolved in the resources pass", async () => {
 
-				const flake = createFlake(Thing, { description: "" } as Template);
+				const flake = createFlake(Thing, { description: {} } as Template);
 				const description = at(flake, "description");
 
 				expect(Array.isArray(description.drain?.mould)).toBe(false);
@@ -455,7 +455,7 @@ describe("createFlake", () => {
 
 			it("array-per-tag localised placeholder carries the coalesced model in query, retaining the dictionary shape", async () => {
 
-				const flake = createFlake(Thing, { keywords: [""] } as Template);
+				const flake = createFlake(Thing, { keywords: {} } as Template);
 				const keywords = at(flake, "keywords");
 
 				// an array-per-tag localised property coalesces as a multi-valued string collection, so
@@ -465,7 +465,7 @@ describe("createFlake", () => {
 				const field = keywords.entry;
 				if ( field.kind !== "property" ) { throw new Error("expected a property entry"); }
 
-				expect(keywords.drain).toEqual({ mould: [""] });
+				expect(keywords.drain).toEqual({ mould: {} });
 				expect(eager(field.range.shape).kind).toBe("dictionary");
 				expect(keywords.entries).toBeUndefined();
 
@@ -476,19 +476,19 @@ describe("createFlake", () => {
 
 		describe("single-valued reference", () => {
 
-			it("opaque IRI placeholder is a leaf (empty components, no query)", async () => {
+			it("atomic placeholder is a leaf (empty components)", async () => {
 
-				const flake = createFlake(Thing, { parent: "" } as Template);
+				const flake = createFlake(Thing, { parent: {} } as Template);
 				const parent = at(flake, "parent");
 
-				expect(Array.isArray(parent.drain?.mould)).toBe(false);
+				expect(parent.drain?.mould).toEqual({});
 				expect(parent.entries).toBeUndefined();
 
 			});
 
 			it("object placeholder recurses through the resolved target shape", async () => {
 
-				const flake = createFlake(Thing, { parent: { label: "" } } as Template);
+				const flake = createFlake(Thing, { parent: { label: {} } } as Template);
 
 				expect(at(flake, "parent", "label")).toBeDefined();
 				expect(at(flake, "parent", "label").path).toEqual(["parent", "label"]);
@@ -507,7 +507,7 @@ describe("createFlake", () => {
 
 			it("routes a nested template to the variant it structurally matches", async () => {
 
-				const flake = createFlake(Thing, { address: { "7": { city: "" } } } as Template);
+				const flake = createFlake(Thing, { address: { "7": { city: {} } } } as Template);
 				const address = at(flake, "address");
 
 				expect(hasVariant(address, 1)).toBe(true);
@@ -516,7 +516,7 @@ describe("createFlake", () => {
 
 			it("each variant entry is a Properties record (no entry, no path of its own)", async () => {
 
-				const flake = createFlake(Thing, { address: { "7": { city: "" } } } as Template);
+				const flake = createFlake(Thing, { address: { "7": { city: {} } } } as Template);
 				const v1 = variant(at(flake, "address"), 1);
 
 				expect("entry" in v1).toBe(false);
@@ -526,7 +526,7 @@ describe("createFlake", () => {
 
 			it("variant Properties hold the requested branches with extended path", async () => {
 
-				const flake = createFlake(Thing, { address: { "7": { city: "" } } } as Template);
+				const flake = createFlake(Thing, { address: { "7": { city: {} } } } as Template);
 				const city = variant(at(flake, "address"), 1)["city"];
 
 				expect(city.entry.kind).toBe("property");
@@ -537,7 +537,7 @@ describe("createFlake", () => {
 			it("routes each branch to its matched variant under opaque keys", async () => {
 
 				const flake = createFlake(Thing, {
-					address: { "0": { city: "" }, "1": "" }
+					address: { "0": { city: {} }, "1": "" }
 				} as Template);
 				const address = at(flake, "address");
 
@@ -556,7 +556,7 @@ describe("createFlake", () => {
 
 			it("filters out selector keys", async () => {
 
-				const flake = createFlake(Thing, { label: "", "<": 5, "@": 0 } as Template);
+				const flake = createQueryFlake(Thing, { label: {}, "<": 5, "@": 0 });
 
 				expect(at(flake, "label")).toBeDefined();
 				expect("<" in props(flake)).toBe(false);
@@ -564,27 +564,27 @@ describe("createFlake", () => {
 
 			});
 
-			it("filters out vacuous (undefined) placeholders", async () => {
+			it("filters out an absent (undefined) entry", async () => {
 
-				const flake = createFlake(Thing, { label: "", count: undefined } as Template);
+				const flake = createFlake(Thing, { label: {}, count: undefined } as Template);
 
 				expect(at(flake, "label")).toBeDefined();
 				expect("count" in props(flake)).toBe(false);
 
 			});
 
-			it("filters out vacuous (empty object) placeholders", async () => {
+			it("keeps an atomic placeholder — `{}` asks for the value, it does not elide the slot", async () => {
 
-				const flake = createFlake(Thing, { label: "", parent: {} } as Template);
+				const flake = createFlake(Thing, { label: {}, parent: {} } as Template);
 
 				expect(at(flake, "label")).toBeDefined();
-				expect("parent" in props(flake)).toBe(false);
+				expect("parent" in props(flake)).toBe(true);
 
 			});
 
 			it("filters properties not declared on the shape", async () => {
 
-				const flake = createFlake(Thing, { label: "", bogus: "" } as Template);
+				const flake = createFlake(Thing, { label: {}, bogus: {} } as Template);
 
 				expect(at(flake, "label")).toBeDefined();
 				expect("bogus" in props(flake)).toBe(false);
@@ -598,25 +598,25 @@ describe("createFlake", () => {
 
 			it("stashes a scalar property's placeholder on Branch.drain", async () => {
 
-				const flake = createFlake(Thing, { label: "" } as Template);
+				const flake = createFlake(Thing, { label: {} } as Template);
 
-				expect(at(flake, "label").drain).toEqual({ mould: "" });
+				expect(at(flake, "label").drain).toEqual({ mould: {} });
 
 			});
 
-			it("stashes a localised slot's Locales map on Branch.drain", async () => {
+			it("stashes a localised slot's Locale map on Branch.drain", async () => {
 
-				const flake = createFlake(Thing, { description: { en: "" } } as Template);
+				const flake = createFlake(Thing, { description: { en: {} } } as Template);
 
-				expect(at(flake, "description").drain).toEqual({ mould: { en: "" } });
+				expect(at(flake, "description").drain).toEqual({ mould: { en: {} } });
 
 			});
 
 			it("stashes a single-valued reference's nested template on Branch.drain", async () => {
 
-				const flake = createFlake(Thing, { parent: { label: "" } } as Template);
+				const flake = createFlake(Thing, { parent: { label: {} } } as Template);
 
-				expect(at(flake, "parent").drain).toEqual({ mould: { label: "" } });
+				expect(at(flake, "parent").drain).toEqual({ mould: { label: {} } });
 
 			});
 
@@ -624,24 +624,24 @@ describe("createFlake", () => {
 
 				// the slot key "7" is opaque and stashed verbatim on the branch drain; the { city }
 				// placeholder is routed to the Postal variant (member index 1) by structure, not by key
-				const flake = createFlake(Thing, { address: { "7": { city: "" } } } as Template);
+				const flake = createFlake(Thing, { address: { "7": { city: {} } } } as Template);
 
-				expect(at(flake, "address").drain).toEqual({ mould: { "7": { city: "" } } });
-				expect(variant(at(flake, "address"), 1)["city"].drain).toEqual({ mould: "" });
+				expect(at(flake, "address").drain).toEqual({ mould: { "7": { city: {} } } });
+				expect(variant(at(flake, "address"), 1)["city"].drain).toEqual({ mould: {} });
 
 			});
 
-			it("carries a Query drain (array) on multi-valued slots", async () => {
+			it("carries the requested node as the drain on multi-valued slots", async () => {
 
-				const flake = createFlake(Thing, { tags: [{ label: "" }] } as Template);
+				const flake = createFlake(Thing, { tags: { label: {} } } as Template);
 
-				expect(Array.isArray(at(flake, "tags").drain?.mould)).toBe(true);
+				expect(at(flake, "tags").drain?.mould).toEqual({ label: {} });
 
 			});
 
 			it("leaves model unset on id / type branches", async () => {
 
-				const flake = createFlake(Thing, { id: "", type: "" } as Template);
+				const flake = createFlake(Thing, { id: {}, type: {} } as Template);
 
 				expect(at(flake, "id").drain).toBeUndefined();
 				expect(at(flake, "type").drain).toBeUndefined();
@@ -670,7 +670,7 @@ describe("createFlake", () => {
 
 			it("carries the retrieval query on Flake.drain", async () => {
 
-				const query = [{ label: "" }] as Query;
+				const query = { label: {} };
 
 				expect(createFlake(Thing, query).drain).toEqual({ mould: query });
 
@@ -682,7 +682,7 @@ describe("createFlake", () => {
 
 			it("primitive scalar collection produces empty components and no projection", async () => {
 
-				const flake = createFlake(string(), [""] as Query);
+				const flake = createQueryFlake(string(), {});
 
 				expect(flake.entries).toBeUndefined();
 				expect(flake.drain?.alias).toBeUndefined();
@@ -691,7 +691,7 @@ describe("createFlake", () => {
 
 			it("primitive numeric collection has no components", async () => {
 
-				const flake = createFlake(decimal(), [0] as Query);
+				const flake = createQueryFlake(decimal(), {});
 
 				expect(flake.entries).toBeUndefined();
 
@@ -699,11 +699,11 @@ describe("createFlake", () => {
 
 		});
 
-		describe("[Union & Selection] arm", () => {
+		describe("[Union & Criteria] arm", () => {
 
 			it("attaches root selection constraints from operator probes", async () => {
 
-				const flake = createFlake(Product, [{ "<price": 100 }] as Query);
+				const flake = createQueryFlake(Product, { "<price": 100 });
 
 				expect(at(flake, "price").lt).toBe(100);
 
@@ -711,7 +711,7 @@ describe("createFlake", () => {
 
 			it("never sets projection markers — bare identifiers are path descents, not bindings", async () => {
 
-				const flake = createFlake(Product, [{ name: "", "<price": 100 }] as Query);
+				const flake = createQueryFlake(Product, { name: {}, "<price": 100 });
 
 				expect(flake.drain?.alias).toBeUndefined();
 
@@ -720,99 +720,113 @@ describe("createFlake", () => {
 			it("routes a union member placeholder to its structurally matched variant", async () => {
 
 				const Address = () => union(string(), PostalAddress);
-				const flake = createFlake(Address, [{ "0": { "c=city": "" } }] as Query);
+				const flake = createQueryFlake(Address, { "0": { "c=city": {} } });
 
 				// key "0" is opaque: the { city } projection structurally singles out the PostalAddress
 				// variant (member index 1), not the string variant the key would positionally name
 				expect(hasVariant(flake, 1)).toBe(true);
-				expect(variant(flake, 1)["city"]?.drain).toEqual({ alias: "c", mould: "" });
+				expect(variant(flake, 1)["city"]?.drain).toEqual({ alias: "c", mould: {} });
+
+			});
+
+			it("splits a union node's key space, criteria apart from alternatives", async () => {
+
+				const Address = () => union(string(), PostalAddress);
+				const flake = createQueryFlake(Address, { "#": 10, "0": { "c=city": {} } });
+
+				// a union node carries the collection's criteria alongside its alternatives (§5.6): the key
+				// space tells the two apart, the bearing union shape making every remaining key an
+				// alternative (§5.5), so neither kind is decided by inspecting one key in isolation
+
+				expect(flake.limit).toBe(10);
+				expect(variant(flake, 1)["city"]?.drain).toEqual({ alias: "c", mould: {} });
 
 			});
 
 		});
 
-		describe("[Projection & Selection] arm", () => {
+		describe("[Projection & Criteria] arm", () => {
 
 			it("marks identity binding's coord with the binding alias and model", async () => {
 
-				const flake = createFlake(Product, [{ "n=name": "" }] as Query);
+				const flake = createQueryFlake(Product, { "n=name": {} });
 
-				expect(at(flake, "name").drain).toEqual({ alias: "n", mould: "" });
+				expect(at(flake, "name").drain).toEqual({ alias: "n", mould: {} });
 
 			});
 
 			it("marks path binding's leaf only — not intermediates", async () => {
 
-				const flake = createFlake(Product, [{ "v=vendor.name": "" }] as Query);
+				const flake = createQueryFlake(Product, { "v=vendor.name": {} });
 
 				expect(at(flake, "vendor").drain?.alias).toBeUndefined();
-				expect(at(flake, "vendor", "name").drain).toEqual({ alias: "v", mould: "" });
+				expect(at(flake, "vendor", "name").drain).toEqual({ alias: "v", mould: {} });
 
 			});
 
 			it("marks pipe binding's stage only — not the bearing branch", async () => {
 
-				const flake = createFlake(Product, [{ "y=year:launched": 0 }] as Query);
+				const flake = createQueryFlake(Product, { "y=year:launched": {} });
 
 				expect(at(flake, "launched").drain?.alias).toBeUndefined();
-				expect(at(flake, "launched").transforms?.["year"]?.drain).toEqual({ alias: "y", mould: 0 });
+				expect(at(flake, "launched").transforms?.["year"]?.drain).toEqual({ alias: "y", mould: {} });
 
 			});
 
 			it("marks aggregate-at-root binding on the root transforms axis", async () => {
 
-				const flake = createFlake(Product, [{ "c=count:": 0 }] as Query);
+				const flake = createQueryFlake(Product, { "c=count:": {} });
 
-				expect(flake.transforms?.["count"]?.drain).toEqual({ alias: "c", mould: 0 });
+				expect(flake.transforms?.["count"]?.drain).toEqual({ alias: "c", mould: {} });
 
 			});
 
 			it("explores every binding's expression independently", async () => {
 
-				const flake = createFlake(Product, [{
-					"n=name": "",
-					"v=vendor.name": "",
-					"y=year:launched": 0
-				}] as Query);
+				const flake = createQueryFlake(Product, {
+					"n=name": {},
+					"v=vendor.name": {},
+					"y=year:launched": {}
+				});
 
-				expect(at(flake, "name").drain).toEqual({ alias: "n", mould: "" });
-				expect(at(flake, "vendor", "name").drain).toEqual({ alias: "v", mould: "" });
-				expect(at(flake, "launched").transforms?.["year"]?.drain).toEqual({ alias: "y", mould: 0 });
+				expect(at(flake, "name").drain).toEqual({ alias: "n", mould: {} });
+				expect(at(flake, "vendor", "name").drain).toEqual({ alias: "v", mould: {} });
+				expect(at(flake, "launched").transforms?.["year"]?.drain).toEqual({ alias: "y", mould: {} });
 
 			});
 
 			it("traverses union variants for nested paths via implicit variant routing", async () => {
 
-				const flake = createFlake(Vendor, [{ "c=address.city": "" }] as Query);
+				const flake = createQueryFlake(Vendor, { "c=address.city": {} });
 				const address = at(flake, "address");
 
 				expect(address.drain?.alias).toBeUndefined();
 				expect(hasVariant(address, 1)).toBe(true);
-				expect(variant(address, 1)["city"]?.drain).toEqual({ alias: "c", mould: "" });
+				expect(variant(address, 1)["city"]?.drain).toEqual({ alias: "c", mould: {} });
 
 			});
 
 			it("combines projection and constraint at the same coord", async () => {
 
-				const flake = createFlake(Product, [{ "n=name": "", "~name": "toy" }] as Query);
+				const flake = createQueryFlake(Product, { "n=name": {}, "~name": "toy" });
 
-				expect(at(flake, "name").drain).toEqual({ alias: "n", mould: "" });
+				expect(at(flake, "name").drain).toEqual({ alias: "n", mould: {} });
 				expect(at(flake, "name").like).toBe("toy");
 
 			});
 
 			it("folds a resource binding's nested template into the terminal's properties (§5.6)", async () => {
 
-				const flake = createFlake(Product, [{ "v=vendor": { name: "" } }] as Query);
+				const flake = createQueryFlake(Product, { "v=vendor": { name: {} } });
 
-				expect(at(flake, "vendor").drain).toEqual({ alias: "v", mould: { name: "" } });
-				expect(at(flake, "vendor", "name").drain).toEqual({ mould: "" });
+				expect(at(flake, "vendor").drain).toEqual({ alias: "v", mould: { name: {} } });
+				expect(at(flake, "vendor", "name").drain).toEqual({ mould: {} });
 
 			});
 
 			it("folds a nested template under a multi-step path terminal", async () => {
 
-				const flake = createFlake(Product, [{ "v=vendor": { name: "" } }] as Query);
+				const flake = createQueryFlake(Product, { "v=vendor": { name: {} } });
 
 				expect(at(flake, "vendor", "name").entry.kind).toBe("property");
 
@@ -824,12 +838,12 @@ describe("createFlake", () => {
 				// shared `subject` predicate — so the binding is one cell (§5.6) whose range is the disjunction
 				// (§5.8.1), not one subject branch per media variant
 
-				const flake = createFlake(Product, [{
+				const flake = createQueryFlake(Product, {
 					"s=media.subject": {
-						"0": { name: "" },
-						"1": { title: "" }
+						"0": { name: {} },
+						"1": { title: {} }
 					}
-				}] as Query);
+				});
 
 				const subject = at(flake, "media", "subject");
 
@@ -838,8 +852,8 @@ describe("createFlake", () => {
 			                                                                           // Category]
 				expect(subject.drain?.alias).toBe("s");
 
-				expect(variant(subject, 0)["name"]?.drain).toEqual({ mould: "" });     // Product arm
-				expect(variant(subject, 1)["title"]?.drain).toEqual({ mould: "" });    // Category arm
+				expect(variant(subject, 0)["name"]?.drain).toEqual({ mould: {} });     // Product arm
+				expect(variant(subject, 1)["title"]?.drain).toEqual({ mould: {} });    // Category arm
 
 			});
 
@@ -849,7 +863,7 @@ describe("createFlake", () => {
 				// localised text, under the shared `caption` predicate — so the binding is one cell whose range
 				// carries both kinds, never a caption branch per media variant
 
-				const flake = createFlake(Product, [{ "cap=media.caption": "" }] as Query);
+				const flake = createQueryFlake(Product, { "cap=media.caption": {} });
 
 				const caption = at(flake, "media", "caption");
 
@@ -861,10 +875,10 @@ describe("createFlake", () => {
 
 			it("folds a union binding's variant template into the terminal's properties", async () => {
 
-				const flake = createFlake(Vendor, [{ "a=address": { "0": { street: "" } } }] as Query);
+				const flake = createQueryFlake(Vendor, { "a=address": { "0": { street: {} } } });
 
 				expect(at(flake, "address").drain?.alias).toBe("a");
-				expect(variant(at(flake, "address"), 1)["street"]?.drain).toEqual({ mould: "" });
+				expect(variant(at(flake, "address"), 1)["street"]?.drain).toEqual({ mould: {} });
 
 			});
 
@@ -884,7 +898,7 @@ describe("createFlake", () => {
 				["order", "^price", "price", 1]
 			] as const)("populates %s slot at the path coordinate", async (slot, key, prop, value) => {
 
-				const flake = createFlake(Product, [{ [key]: value }] as Query);
+				const flake = createQueryFlake(Product, { [key]: value } as Mould);
 
 				expect(at(flake, prop)[slot]).toEqual(value);
 
@@ -892,7 +906,7 @@ describe("createFlake", () => {
 
 			it("descends through transforms for piped constraints", async () => {
 
-				const flake = createFlake(Product, [{ ">=year:launched": 2020 }] as Query);
+				const flake = createQueryFlake(Product, { ">=year:launched": 2020 });
 
 				expect(at(flake, "launched").transforms?.["year"]?.gte).toBe(2020);
 				expect(at(flake, "launched").transforms?.["year"]?.pipe).toEqual(["year"]);
@@ -901,7 +915,7 @@ describe("createFlake", () => {
 
 			it("transform stage carries the parent's path alongside its pipe", async () => {
 
-				const flake = createFlake(Product, [{ ">=year:launched": 2020 }] as Query);
+				const flake = createQueryFlake(Product, { ">=year:launched": 2020 });
 				const stage = at(flake, "launched").transforms?.["year"];
 
 				expect(stage?.path).toEqual(["launched"]);
@@ -911,7 +925,7 @@ describe("createFlake", () => {
 
 			it("descends through multi-step pipe to the deepest stage", async () => {
 
-				const flake = createFlake(Product, [{ "<round:avg:price": 100 }] as Query);
+				const flake = createQueryFlake(Product, { "<round:avg:price": 100 });
 
 				const avg = at(flake, "price").transforms?.["avg"];
 				const round = avg?.transforms?.["round"];
@@ -924,7 +938,7 @@ describe("createFlake", () => {
 
 			it("nested transform stages carry the same parent path and accumulate pipe", async () => {
 
-				const flake = createFlake(Product, [{ "<round:avg:price": 100 }] as Query);
+				const flake = createQueryFlake(Product, { "<round:avg:price": 100 });
 
 				const avg = at(flake, "price").transforms?.["avg"];
 				const round = avg?.transforms?.["round"];
@@ -938,7 +952,7 @@ describe("createFlake", () => {
 
 			it("combines multiple constraints on the same path", async () => {
 
-				const flake = createFlake(Product, [{ ">=price": 10, "<=price": 100 }] as Query);
+				const flake = createQueryFlake(Product, { ">=price": 10, "<=price": 100 });
 
 				expect(at(flake, "price").gte).toBe(10);
 				expect(at(flake, "price").lte).toBe(100);
@@ -947,7 +961,7 @@ describe("createFlake", () => {
 
 			it("populates root constraints from empty-path expressions", async () => {
 
-				const flake = createFlake(Product, [{ "~": "search" }] as Query);
+				const flake = createQueryFlake(Product, { "~": "search" });
 
 				expect(flake.like).toBe("search");
 
@@ -955,7 +969,7 @@ describe("createFlake", () => {
 
 			it("populates root transforms from aggregate expressions", async () => {
 
-				const flake = createFlake(Product, [{ "<count:": 100 }] as Query);
+				const flake = createQueryFlake(Product, { "<count:": 100 });
 
 				expect(flake.transforms?.["count"]?.lt).toBe(100);
 
@@ -967,7 +981,7 @@ describe("createFlake", () => {
 
 			it("infers an aggregate stage as a single value", async () => {
 
-				const flake = createFlake(Product, [{ "<count:": 100 }] as Query);
+				const flake = createQueryFlake(Product, { "<count:": 100 });
 				const value = flake.transforms?.["count"]?.range;
 
 				expect(value?.maxCount).toBe(1);
@@ -977,7 +991,7 @@ describe("createFlake", () => {
 
 			it("infers an aggregate over a property as a single numeric value", async () => {
 
-				const flake = createFlake(Product, [{ ">=avg:price": 0 }] as Query);
+				const flake = createQueryFlake(Product, { ">=avg:price": 0 });
 				const value = at(flake, "price").transforms?.["avg"]?.range;
 
 				if ( value === undefined ) { throw new Error("expected a range"); }
@@ -994,7 +1008,7 @@ describe("createFlake", () => {
 
 				// launched is single-valued (optional date); a scalar transform preserves maxCount
 
-				const flake = createFlake(Product, [{ "y=year:launched": 0 }] as Query);
+				const flake = createQueryFlake(Product, { "y=year:launched": {} });
 				const value = at(flake, "launched").transforms?.["year"]?.range;
 
 				expect(value?.maxCount).toBe(1);
@@ -1004,7 +1018,7 @@ describe("createFlake", () => {
 
 			it("composes the effective shape through a multi-stage pipe", async () => {
 
-				const flake = createFlake(Product, [{ "<round:avg:price": 100 }] as Query);
+				const flake = createQueryFlake(Product, { "<round:avg:price": 100 });
 
 				const avg = at(flake, "price").transforms?.["avg"]?.range;
 				const round = at(flake, "price").transforms?.["avg"]?.transforms?.["round"]?.range;
@@ -1020,7 +1034,7 @@ describe("createFlake", () => {
 				// models are validated at the Keep boundary, so reaching the flake builder is a contract
 				// violation surfaced as an error
 
-				expect(() => createFlake(Product, [{ "y=year:name": 0 }] as Query)).toThrow();
+				expect(() => createQueryFlake(Product, { "y=year:name": {} })).toThrow();
 
 			});
 
@@ -1073,7 +1087,7 @@ describe("createFlake", () => {
 
 			it("populates the range in model mode", async () => {
 
-				const name = at(createFlake(Vendor, { name: "" } as Template), "name");
+				const name = at(createFlake(Vendor, { name: {} } as Template), "name");
 				const probe: Probe = { target: "probe", path: name.path, pipe: name.pipe };
 
 				expect(name.range).toEqual(effective(Vendor, probe));
@@ -1082,7 +1096,7 @@ describe("createFlake", () => {
 
 			it("populates the range in query mode", async () => {
 
-				const name = at(createFlake(Vendor, [{ "n=name": "" }] as Query), "name");
+				const name = at(createQueryFlake(Vendor, { "n=name": {} }), "name");
 				const probe: Probe = { target: "probe", path: name.path, pipe: name.pipe };
 
 				expect(name.range).toEqual(effective(Vendor, probe));
@@ -1095,7 +1109,7 @@ describe("createFlake", () => {
 
 			it("populates offset from @ key on root", async () => {
 
-				const flake = createFlake(Product, [{ "@": 10 }] as Query);
+				const flake = createQueryFlake(Product, { "@": 10 });
 
 				expect(flake.offset).toBe(10);
 
@@ -1103,7 +1117,7 @@ describe("createFlake", () => {
 
 			it("populates limit from # key on root", async () => {
 
-				const flake = createFlake(Product, [{ "#": 25 }] as Query);
+				const flake = createQueryFlake(Product, { "#": 25 });
 
 				expect(flake.limit).toBe(25);
 
@@ -1111,7 +1125,7 @@ describe("createFlake", () => {
 
 			it("populates both pagination keys on root", async () => {
 
-				const flake = createFlake(Product, [{ "@": 5, "#": 10 }] as Query);
+				const flake = createQueryFlake(Product, { "@": 5, "#": 10 });
 
 				expect(flake.offset).toBe(5);
 				expect(flake.limit).toBe(10);
@@ -1128,7 +1142,7 @@ describe("createFlake", () => {
 				["dictionary", dictionary()]
 			] as const)("yields a leaf flake on a %s shape", async (_, shape) => {
 
-				const flake = createFlake(shape, [""] as Query);
+				const flake = createQueryFlake(shape, {});
 
 				expect(flake.entries).toBeUndefined();
 
@@ -1136,7 +1150,7 @@ describe("createFlake", () => {
 
 			it("attaches root selection constraints on a numeric scalar root", async () => {
 
-				const flake = createFlake(decimal(), [{ "<": 100, ">": 10 }] as Query);
+				const flake = createQueryFlake(decimal(), { "<": 100, ">": 10 });
 
 				expect(flake.lt).toBe(100);
 				expect(flake.gt).toBe(10);
@@ -1149,13 +1163,13 @@ describe("createFlake", () => {
 
 			it("root flake has empty path", async () => {
 
-				expect(createFlake(Product, [{ "<price": 0 }] as Query).path).toEqual([]);
+				expect(createQueryFlake(Product, { "<price": 0 }).path).toEqual([]);
 
 			});
 
 			it("nested branches extend the path recursively", async () => {
 
-				const flake = createFlake(Product, [{ "v=vendor.name": "" }] as Query);
+				const flake = createQueryFlake(Product, { "v=vendor.name": {} });
 
 				expect(at(flake, "vendor").path).toEqual(["vendor"]);
 				expect(at(flake, "vendor", "name").path).toEqual(["vendor", "name"]);
@@ -1164,7 +1178,7 @@ describe("createFlake", () => {
 
 			it("creates a sparse tree (only paths touched by entries)", async () => {
 
-				const flake = createFlake(Product, [{ "<price": 100 }] as Query);
+				const flake = createQueryFlake(Product, { "<price": 100 });
 
 				expect("price" in props(flake)).toBe(true);
 				expect("name" in props(flake)).toBe(false);
@@ -1174,7 +1188,7 @@ describe("createFlake", () => {
 
 			it("each branch carries the corresponding shape entry kind", async () => {
 
-				const flake = createFlake(Product, [{ "<price": 0, "n=name": "" }] as Query);
+				const flake = createQueryFlake(Product, { "<price": 0, "n=name": {} });
 
 				expect(at(flake, "price").entry.kind).toBe("property");
 				expect(at(flake, "name").entry.kind).toBe("property");
@@ -1183,7 +1197,7 @@ describe("createFlake", () => {
 
 			it("variant fork shares the parent property's path; entries inside use the extended path", async () => {
 
-				const flake = createFlake(Vendor, [{ "c=address.city": "" }] as Query);
+				const flake = createQueryFlake(Vendor, { "c=address.city": {} });
 				const address = at(flake, "address");
 				const city = variant(address, 1)["city"];
 
@@ -1198,7 +1212,7 @@ describe("createFlake", () => {
 
 			it("elides entries with `undefined` value", async () => {
 
-				const flake = createFlake(Product, [{ "<price": 100, "<launched": undefined }] as Query);
+				const flake = createQueryFlake(Product, { "<price": 100, "<launched": undefined });
 
 				expect("price" in props(flake)).toBe(true);
 				expect("launched" in props(flake)).toBe(false);
@@ -1207,7 +1221,7 @@ describe("createFlake", () => {
 
 			it("elides identity bindings with vacuous value", async () => {
 
-				const flake = createFlake(Product, [{ "n=name": undefined }] as Query);
+				const flake = createQueryFlake(Product, { "n=name": undefined });
 
 				expect("name" in props(flake)).toBe(false);
 
@@ -1232,7 +1246,7 @@ describe("createFlake", () => {
 
 		it("model mode returns a deeply frozen Flake", async () => {
 
-			const flake = createFlake(Thing, { label: "", parent: { label: "" } } as Template);
+			const flake = createFlake(Thing, { label: {}, parent: { label: {} } } as Template);
 
 			expect(Object.isFrozen(flake)).toBe(true);
 			expect(Object.isFrozen(flake.entries!)).toBe(true);
@@ -1243,7 +1257,7 @@ describe("createFlake", () => {
 
 		it("query mode returns a deeply frozen Flake", async () => {
 
-			const flake = createFlake(Product, [{ "v=vendor.name": "", "<price": 0 }] as Query);
+			const flake = createQueryFlake(Product, { "v=vendor.name": {}, "<price": 0 });
 
 			expect(Object.isFrozen(flake)).toBe(true);
 			expect(Object.isFrozen(flake.entries!)).toBe(true);
@@ -1342,25 +1356,25 @@ describe("flake methods", () => {
 		});
 
 		it("indexes a root projection by its alias", async () => {
-			const node = root({ drain: { alias: "r", mould: "" } });
+			const node = root({ drain: { alias: "r", mould: {} } });
 			expect(getFlakeProjection(node).r).toEqual(node);
 		});
 
 		it("indexes a projection on a transform stage", async () => {
-			const counted = stage(["count"], { drain: { alias: "c", mould: "" } });
+			const counted = stage(["count"], { drain: { alias: "c", mould: {} } });
 			expect(getFlakeProjection(root({ transforms: { count: counted } })).c).toEqual(counted);
 		});
 
 		it("indexes a projection on a nested branch", async () => {
-			const child = branch({ drain: { alias: "p", mould: "" } });
+			const child = branch({ drain: { alias: "p", mould: {} } });
 			expect(getFlakeProjection(root({ entries: { parent: [child] } })).p).toEqual(child);
 		});
 
 		it("collects projections across all axes, keyed by alias", async () => {
-			const counted = stage(["count"], { drain: { alias: "c", mould: "" } });
-			const child = branch({ drain: { alias: "p", mould: "" } });
+			const counted = stage(["count"], { drain: { alias: "c", mould: {} } });
+			const child = branch({ drain: { alias: "p", mould: {} } });
 			const node = root({
-				drain: { alias: "r", mould: "" },
+				drain: { alias: "r", mould: {} },
 				transforms: { count: counted },
 				entries: { parent: [child] }
 			});
@@ -1379,7 +1393,7 @@ describe("branch methods", () => {
 	 * variant (member index 2); the leading string variant (member index 0) declares neither.
 	 */
 	function addressBranch(): Branch {
-		const flake = createFlake(Vendor, [{ "c=address.city": "", "g=address.latitude": 0 }] as Query);
+		const flake = createQueryFlake(Vendor, { "c=address.city": {}, "g=address.latitude": {} });
 		return at(flake, "address");
 	}
 
@@ -1398,7 +1412,7 @@ describe("branch methods", () => {
 	describe("isModelBranch", () => {
 
 		it("is true for a single-valued property carrying a Model drain", async () => {
-			expect(isModelBranch(at(createFlake(Product, { name: "" } as Template), "name"))).toBe(true);
+			expect(isModelBranch(at(createFlake(Product, { name: {} } as Template), "name"))).toBe(true);
 		});
 
 		it("is true for a property with an absent drain (shape mode)", async () => {
@@ -1406,12 +1420,12 @@ describe("branch methods", () => {
 		});
 
 		it("is false for a multi-valued property carrying a Query drain", async () => {
-			expect(isModelBranch(at(createFlake(Product, { categories: [{ name: "" }] } as Template), "categories")))
+			expect(isModelBranch(at(createFlake(Product, { categories: { name: {} } } as Template), "categories")))
 				.toBe(false);
 		});
 
 		it("is false for an id / type marker branch", async () => {
-			const flake = createFlake(Product, { id: "", type: "" } as Template);
+			const flake = createFlake(Product, { id: {}, type: {} } as Template);
 
 			expect(isModelBranch(at(flake, "id"))).toBe(false);
 			expect(isModelBranch(at(flake, "type"))).toBe(false);
@@ -1422,12 +1436,12 @@ describe("branch methods", () => {
 	describe("isQueryBranch", () => {
 
 		it("is true for a multi-valued property carrying a Query drain", async () => {
-			expect(isQueryBranch(at(createFlake(Product, { categories: [{ name: "" }] } as Template), "categories")))
+			expect(isQueryBranch(at(createFlake(Product, { categories: { name: {} } } as Template), "categories")))
 				.toBe(true);
 		});
 
 		it("is false for a single-valued property carrying a Model drain", async () => {
-			expect(isQueryBranch(at(createFlake(Product, { name: "" } as Template), "name"))).toBe(false);
+			expect(isQueryBranch(at(createFlake(Product, { name: {} } as Template), "name"))).toBe(false);
 		});
 
 		it("is false for a property with an absent drain (shape mode)", async () => {
@@ -1435,7 +1449,7 @@ describe("branch methods", () => {
 		});
 
 		it("is false for an id / type marker branch", async () => {
-			const flake = createFlake(Product, { id: "", type: "" } as Template);
+			const flake = createFlake(Product, { id: {}, type: {} } as Template);
 
 			expect(isQueryBranch(at(flake, "id"))).toBe(false);
 			expect(isQueryBranch(at(flake, "type"))).toBe(false);
@@ -1446,11 +1460,11 @@ describe("branch methods", () => {
 	describe("isProbeBranch", () => {
 
 		it("is true for a query-projected branch carrying an alias", async () => {
-			expect(isProbeBranch(at(createFlake(Product, [{ "n=name": "" }] as Query), "name"))).toBe(true);
+			expect(isProbeBranch(at(createQueryFlake(Product, { "n=name": {} }), "name"))).toBe(true);
 		});
 
 		it("is false for a model-drain branch without an alias", async () => {
-			expect(isProbeBranch(at(createFlake(Product, { name: "" } as Template), "name"))).toBe(false);
+			expect(isProbeBranch(at(createFlake(Product, { name: {} } as Template), "name"))).toBe(false);
 		});
 
 		it("is false for a property with an absent drain (shape mode)", async () => {
@@ -1480,7 +1494,7 @@ describe("branch methods", () => {
 		});
 
 		it("returns every branch of a non-union resource node", async () => {
-			const vendor = at(createFlake(Product, [{ "v=vendor.name": "", "s=vendor.code": "" }] as Query), "vendor");
+			const vendor = at(createQueryFlake(Product, { "v=vendor.name": {}, "s=vendor.code": {} }), "vendor");
 			const field = vendor.entry;
 
 			if ( field.kind !== "property" ) { throw new Error("expected a property entry"); }
@@ -1493,7 +1507,7 @@ describe("branch methods", () => {
 			// media.caption crosses the Image|Video union under the shared `caption` predicate, so the folded
 			// branch belongs to both media variants, not only the first one whose entry it carries
 
-			const media = at(createFlake(Product, [{ "cap=media.caption": "" }] as Query), "media");
+			const media = at(createQueryFlake(Product, { "cap=media.caption": {} }), "media");
 			const branches = getShapeBranches(asUnion(media));
 
 			expect(getFlakeVariant(media, branches[0]).map(leafName)).toEqual(["caption"]);  // Image

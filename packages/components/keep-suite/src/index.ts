@@ -49,7 +49,7 @@ import type { ResourceShape } from "@metreeca/blue/resource";
 import type { Instance } from "@metreeca/blue/value";
 import type { Eager, Lazy } from "@metreeca/core";
 import type { Store, StoreClient } from "@metreeca/keep";
-import type { Reference, Resource } from "@metreeca/qest/resource";
+import type { Reference, Resource } from "@metreeca/qest/state";
 import type { Awaitable } from "@vitest/utils";
 import { afterAll, beforeAll, describe } from "vitest";
 import type { TestFactory, TestFixture } from "./index.core.js";

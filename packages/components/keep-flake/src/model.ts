@@ -22,7 +22,7 @@
  * tree. Selectors, vacuous placeholders, and unknown property names are filtered. The `id` and `type`
  * template entries are kept as terminal branches;
  * each remaining property entry carries the template fragment requested for it as its
- * {@link Flake.drain | drain}, a {@link Query} on a multi-valued property and a {@link Model} on a
+ * {@link Flake.drain | drain}, the node retrieving it on a multi-valued property and the requested fragment on a
  * single-valued one.
  *
  * Well-formed input is assumed at the Keep boundary: no input checking is performed beyond the
@@ -32,9 +32,8 @@
  */
 
 import { type Shape } from "@metreeca/blue/value";
-import { isObject } from "@metreeca/core";
 import { immutable } from "@metreeca/core/structures";
-import { type Model, type Query, type Template } from "@metreeca/qest/template";
+import { type Template } from "@metreeca/qest/model";
 import { getEntries, getRootRange } from "./index.core.js";
 import { type Flake } from "./index.js";
 
@@ -45,8 +44,7 @@ import { type Flake } from "./index.js";
  * Internal entry point: public callers go through the dispatcher in {@link createFlake}, which routes
  * the `(Shape, Model)` call shape here.
  *
- * Property branches form only for a {@link Template} model on a resource root; any other {@link Model}
- * form, or a non-resource root, yields a degenerate leaf flake.
+ * Property branches form only on a resource root; a non-resource root yields a degenerate leaf flake.
  *
  * @param shape The shape rooting the walk
  * @param model The retrieval model driving per-property reach
@@ -54,11 +52,11 @@ import { type Flake } from "./index.js";
  * @returns The immutable {@link Flake} rooted at `shape`, carrying the whole model on its
  * {@link Flake.drain | drain} and with model-driven branches in {@link Flake.entries | entries}
  */
-export function createModelFlake(shape: Shape, model: Model): Flake {
+export function createModelFlake(shape: Shape, model: Template): Flake {
 
 	const range = getRootRange(shape);
 
-	return immutable(shape.kind === "resource" && isObject(model)
+	return immutable(shape.kind === "resource"
 		? { path: [], pipe: [], range, drain: { mould: model }, entries: getEntries(range, [], model) ?? {} }
 		: { path: [], pipe: [], range, drain: { mould: model } }
 	);

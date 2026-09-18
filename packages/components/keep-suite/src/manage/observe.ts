@@ -16,7 +16,7 @@
 
 import type { Instance } from "@metreeca/blue/value";
 import type { Store, StoreClient, StoreObserver } from "@metreeca/keep";
-import type { Reference } from "@metreeca/qest/resource";
+import type { Reference } from "@metreeca/qest/state";
 import { describe, expect, it } from "vitest";
 import { collect, type TestFactory } from "../index.core.js";
 import { collections, testProduct } from "../toys.core.js";

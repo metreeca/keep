@@ -234,7 +234,7 @@ export function Entity() {
  *
  * @param member - The resource shape factory for collection members
  */
-export function Catalogue(member: Lazy<ResourceShape>) {
+export function Catalogue<M extends Lazy<ResourceShape>>(member: M) {
 	return resource(Resource,{
 
 		virtual: true,

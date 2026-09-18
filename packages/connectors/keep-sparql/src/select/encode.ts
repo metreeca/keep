@@ -59,8 +59,8 @@ import {
 	isScalarFlake
 } from "@metreeca/keep-flake";
 import type { Deferred, Select } from "@metreeca/keep/batching";
-import type { Literal } from "@metreeca/qest/resource";
-import { getOrderDirection, isAggregate, isProjection } from "@metreeca/qest/template";
+import type { Literal } from "@metreeca/qest/state";
+import { getOrderDirection, isAggregate, isProjection } from "@metreeca/qest/model";
 import { named, type Named, rdf, type Term } from "@metreeca/trio";
 import { type SPARQL, type Variable } from "@metreeca/wire-sparql";
 import {
@@ -112,6 +112,7 @@ import {
 } from "@metreeca/wire-sparql/builder";
 import { boundToTerm, expression, link, membership, optionsToTerms } from "../_/_encode.js";
 import { crossing, isXComputed, isXScalar, references } from "../_/_flake.js";
+import { isProjected } from "../_/_model.js";
 import { getUnionPlaceholders } from "../_/_union.js";
 
 
@@ -208,11 +209,11 @@ export function encode(
 
 	function arm(request: Select, flake: Flake, index: number): SPARQL {
 
-		const [item] = request.query;
+		const item = request.query;
 		const { locale } = request;
 
 		const projections = getFlakeProjections(flake);
-		const projection = isProjection(item); // !!! test empty flake projection
+		const projection = isProjected(item);
 
 		const scalars = projection
 			? getFlakeGrouping(flake).map(key => variable(scope.resolve(key)))

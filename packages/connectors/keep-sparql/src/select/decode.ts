@@ -43,14 +43,15 @@ import {
 	getFlakeVariant,
 	isBranch,
 	isDrainedFlake,
-	isPropertyBranch
+	isPropertyBranch,
+	type Mould
 } from "@metreeca/keep-flake";
 import type { Broker, Deferred, Select } from "@metreeca/keep/batching";
-import type { Reference, Resource, Value } from "@metreeca/qest/resource";
-import { isProjection, isTemplate, type Model } from "@metreeca/qest/template";
+import type { Reference, Resource, Value } from "@metreeca/qest/state";
 import type { Term } from "@metreeca/trio";
 import type { Tuple, Variable } from "@metreeca/wire-sparql";
 import { termToValue } from "../_/_decode.js";
+import { isExpanded, isProjected } from "../_/_model.js";
 import { getUnionPlaceholders } from "../_/_union.js";
 
 
@@ -73,7 +74,7 @@ export function decode(
 
 	batch.forEach(({ request, flake, resolve, reject }, index) => {
 
-		const placeholder = request.query[0];
+		const placeholder = request.query;
 		const locale = request.locale;
 
 		collection(flake, placeholder, locale, index)
@@ -94,7 +95,7 @@ export function decode(
 		index: number
 	): Promise<readonly Value[]> {
 
-		const projected = isProjection(placeholder);
+		const projected = isProjected(placeholder);
 
 		function stamped(tuple: Tuple): boolean {
 			const block = tuple[guard];
@@ -177,7 +178,7 @@ export function decode(
 			} else if ( branch !== undefined && (
 				single?.kind === "resource"
 				|| (single?.kind === "reference" && (
-					isTemplate(placeholder) || getFlakeEntries(branch).some(isDrainedFlake)
+					isExpanded(placeholder) || getFlakeEntries(branch).some(isDrainedFlake)
 				))
 			) ) {
 
@@ -187,7 +188,7 @@ export function decode(
 
 					return Promise.resolve(undefined);
 
-				} else if ( isTemplate(placeholder) || getFlakeEntries(branch).some(isDrainedFlake) ) {
+				} else if ( isExpanded(placeholder) || getFlakeEntries(branch).some(isDrainedFlake) ) {
 
 					// a structured reference/resource binding delegates its folded sub-structure (§5.6) straight to
 					// the lookup pass, keyed on the bound member reference
@@ -227,14 +228,19 @@ export function decode(
 			subject: Term
 		): Promise<undefined | Value> {
 
-			// a localised entry resolves as one structured value, so its drain is a Model, never a multi-valued Query
+			// a localised entry resolves as one structured value, so its drain requests a single value, never a
+			// constrained collection; an entry stating none falls back to the atomic leaf
 
 			const model = branch.drain?.mould;
-			const placeholder: Model = isObject(model) ? model : "";
+			const placeholder: Mould = isObject(model) ? model : {};
+
+			// ;(cast) the looked-up resource carries the one field just requested, and a localised property
+			// decodes to a single structured value rather than to a set. The static inference no longer says
+			// either, reading leaf types off a notation that no longer carries them (see `@metreeca/keep/_inference`)
 
 			return subject.kind === "named"
 				? broker.lookup({ entry: subject.iri, shape, model: { [field]: placeholder }, locale })
-					.then(resource => resource[field])
+					.then(resource => (resource as Resource)[field] as undefined | Value)
 				: Promise.resolve(undefined);
 
 		}
@@ -277,7 +283,7 @@ export function decode(
 			return Promise.resolve(undefined);
 
 		} else if ( (single.kind === "resource" || single.kind === "reference")
-			&& (isTemplate(placeholder) || getFlakeEntries(flake).some(isDrainedFlake)) ) {
+			&& (isExpanded(placeholder) || getFlakeEntries(flake).some(isDrainedFlake)) ) {
 
 			// range dereferences a reference to its target resource, so resource and reference coincide here; the
 			// expansion is gated on the drain (a nested template or folded branches, §5.6), so a leaf reference —
@@ -317,7 +323,7 @@ export function decode(
 					? isObject(placeholder) ? { [element.language]: element.text } : element.text
 					: undefined);
 
-			} else if ( variant.kind === "reference" && !isTemplate(placeholder) && !getFlakeVariant(flake, variant).some(isDrainedFlake) ) {
+			} else if ( variant.kind === "reference" && !isExpanded(placeholder) && !getFlakeVariant(flake, variant).some(isDrainedFlake) ) {
 
 				return Promise.resolve(element.kind === "named" ? element.iri : undefined);
 

@@ -41,7 +41,7 @@ import {
 	Vendor,
 	Video
 } from "@metreeca/keep-suite/toys";
-import { type Reference, type Resource } from "@metreeca/qest/resource";
+import { type Reference, type Resource } from "@metreeca/qest/state";
 import { log } from "@metreeca/tape";
 import { blank, skolemize, type Triple, typed } from "@metreeca/trio";
 import { data, description as resource, link, property, resource as about, term, text } from "@metreeca/trio/builder";

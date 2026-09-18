@@ -18,12 +18,12 @@
  * Per-arm coverage of selection on multi-valued properties of a directly-retrieved resource.
  *
  * Consolidates the collection-retrieval contract in one place: the multi-valued
- * {@link @metreeca/qest/template!Placeholders} arms — a bare `Locales`, `[Placeholder, Selection?]`, and
- * `[Union, Selection?]` — against single-resource retrievals. Localised slots carry no inline
- * `Selection` (`Locales` reaches `Placeholders` as its own arm, never a `Query` element), so the
- * `Locales` arm is exercised bare only; the `[Placeholder, Selection?]` and `[Union, Selection?]`
- * arms are exercised both bare and with a `Selection` (filter / order / slice) attached in the
- * tuple's second slot. The `[Projection, Selection?]` arm is exclusively covered by
+ * {@link @metreeca/qest/model!Placeholders} arms — a bare `Locale`, `[Placeholder, Criteria?]`, and
+ * `[Union, Criteria?]` — against single-resource retrievals. Localised slots carry no inline
+ * `Criteria` (`Locale` reaches `Placeholders` as its own arm, never a `Query` element), so the
+ * `Locale` arm is exercised bare only; the `[Placeholder, Criteria?]` and `[Union, Criteria?]`
+ * arms are exercised both bare and with a `Criteria` (filter / order / slice) attached in the
+ * tuple's second slot. The `[Projection, Criteria?]` arm is exclusively covered by
  * `projection.ts` (catalogue-scoped); cross-cutting selection on projection sub-collections is
  * tracked as a follow-up gap.
  *
@@ -62,8 +62,8 @@ export function testRetrieveQuery(factory: TestFactory): void {
 		describe("locale — §5.3", () => {
 
 			// Localised properties are inherently multi-valued (qest §10) and carry no inline
-			// `Selection` — `Locales` reaches `Placeholders` as its own arm, never a `Query` element. Filtering or
-			// ordering by a localised value attaches at the enclosing collection's `Selection` through an
+			// `Criteria` — `Locale` reaches `Placeholders` as its own arm, never a `Query` element. Filtering or
+			// ordering by a localised value attaches at the enclosing collection's `Criteria` through an
 			// `Expression`, with the target language supplied out-of-band, never inline on the slot.
 
 			it("should lookup every requested tag without selection", factory(async ({ store }) => {
@@ -103,8 +103,8 @@ export function testRetrieveQuery(factory: TestFactory): void {
 
 		describe("[placeholder] (scalar collection) — §5.5", () => {
 
-			// Bare `[Placeholder]` with no Selection attached. Selection on scalar primitives is
-			// expressed through the second tuple slot `[Placeholder, Selection]`,
+			// Bare `[Placeholder]` with no Criteria attached. Criteria on scalar primitives is
+			// expressed through the second tuple slot `[Placeholder, Criteria]`,
 			// here authored through the local `collection(element, selection)` helper.
 
 			it("should lookup every element without selection", factory(async ({ store }) => {
@@ -338,8 +338,8 @@ export function testRetrieveQuery(factory: TestFactory): void {
 				const items = result?.media ?? [];
 
 				expect(items).toHaveLength(2);
-				expect(items.some(m => "width" in m && "height" in m)).toBe(true);  // image branch
-				expect(items.some(m => "duration" in m)).toBe(true);               // video branch
+				expect(items.some(m => isObject(m) && "width" in m && "height" in m)).toBe(true);  // image branch
+				expect(items.some(m => isObject(m) && "duration" in m)).toBe(true);                // video branch
 
 			}));
 

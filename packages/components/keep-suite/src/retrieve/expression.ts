@@ -30,7 +30,7 @@ import { reference } from "@metreeca/blue/reference";
 import { id, multiple, optional, required, resource } from "@metreeca/blue/resource";
 import { date, string, url } from "@metreeca/blue/string";
 import { ascending, by } from "@metreeca/core/order";
-import type { Selection } from "@metreeca/qest/template";
+import type { Criteria } from "@metreeca/qest/model";
 import { beforeAll, describe, expect, it } from "vitest";
 import { lookup, type TestFactory } from "../index.core.js";
 import { collections } from "../toys.core.js";
@@ -318,7 +318,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 						entry: Catalogue,
 						shape: Products,
 						model: catalogue({
-							id: "",
+							id: {},
 							documents: collection(url(), {
 								">=length:": 30
 							})
@@ -522,7 +522,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 			// §5.8.1: paths referencing unknown properties are rejected; §5.8.2: pipes referencing
 			// unknown transforms, and ill-formed pipes applying more than one aggregate, are rejected.
 
-			const rejected: ReadonlyArray<readonly [string, Selection]> = [
+			const rejected: ReadonlyArray<readonly [string, Criteria]> = [
 				["an unknown property (§5.8.1)", { ">=unknown": 1 }],
 				["an unknown nested property (§5.8.1)", { ">=vendor.unknown": 1 }],
 				["an unknown transform (§5.8.2)", { ">=bogus:price": 1 }],

@@ -17,7 +17,7 @@
 import { getModelBranches } from "@metreeca/blue/union";
 import type { Shape } from "@metreeca/blue/value";
 import { isObject } from "@metreeca/core";
-import { isBranch } from "@metreeca/qest/template";
+import { isSelector, isUnion } from "@metreeca/qest/model";
 
 /**
  * Resolves which union variants a retrieval placeholder requests, and the sub-placeholder that projects
@@ -49,9 +49,19 @@ export function getUnionPlaceholders<V extends Shape>(
 	placeholder: unknown
 ): ReadonlyMap<V, unknown> {
 
-	const placeholders = isObject(placeholder, (_, key) => isBranch(key)) && Object.keys(placeholder).length > 0
-		? Object.values(placeholder)
-		: [placeholder];
+	// criteria ride on the node retrieving a collection (§5.6) and name no alternative, so they are dropped
+	// here, where the alternatives are read, rather than by every caller
+
+	const model = isObject(placeholder)
+		? Object.fromEntries(Object.entries(placeholder).filter(([key]) => !isSelector(key)))
+		: placeholder;
+
+	// the keyed form is decided once for the placeholder as a whole (§5.5 admits no mixing); the atomic leaf
+	// `{}`, which `isUnion` accepts vacuously, is a single alternative
+
+	const placeholders = isUnion(model) && Object.keys(model).length > 0
+		? Object.values(model)
+		: [model];
 
 	return new Map(placeholders.flatMap(alternative =>
 		(getModelBranches(alternative, variants) ?? []).map(variant => [variant, alternative])

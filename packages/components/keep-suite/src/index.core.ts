@@ -17,7 +17,7 @@
 import { isFunction } from "@metreeca/core";
 import type { Some } from "@metreeca/core/arrays";
 import type { Store, StoreClient } from "@metreeca/keep";
-import type { Reference, Resource } from "@metreeca/qest/resource";
+import type { Reference, Resource } from "@metreeca/qest/state";
 import type { StoreTestOptions } from "./index.js";
 
 

@@ -23,7 +23,12 @@
     },
     "@metreeca/blue/value": {
       "model": "https://metreeca.github.io/blue/functions/value.model.html",
-      "getShapeModel": "https://metreeca.github.io/blue/functions/value.getShapeModel.html"
+      "getShapeModel": "https://metreeca.github.io/blue/functions/value.getShapeModel.html",
+      "Delivery": "https://metreeca.github.io/blue/types/value.Delivery.html"
+    },
+    "@metreeca/keep": {
+      "Mould": "#",
+      "Items": "#"
     },
     "@metreeca/core": {
       "*": "https://metreeca.github.io/core/",
@@ -44,7 +49,7 @@
       "Values": "https://metreeca.github.io/qest/types/state.Values.html",
       "Indexed": "https://metreeca.github.io/qest/types/index.Indexed.html"
     },
-    "@metreeca/qest/template": {
+    "@metreeca/qest/model": {
       "*": "https://metreeca.github.io/qest/modules/model.html",
       "Transform": "https://metreeca.github.io/qest/types/model.Transform.html",
       "Pipe": "https://metreeca.github.io/qest/types/model.Pipe.html",

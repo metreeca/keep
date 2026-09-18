@@ -80,7 +80,7 @@ describe("createRESTStore", () => {
 	describe("entry validation", () => {
 
 		const callers: Array<readonly [string, (store: StoreClient, entry: string) => Promise<unknown>]> = [
-			["lookup", (store, entry) => store.lookup({ entry, shape, model: { id: "", name: "" } })],
+			["lookup", (store, entry) => store.lookup({ entry, shape, model: { id: {}, name: {} } })],
 			["create", (store, entry) => store.create({ entry, shape, state: { name: "X" } })],
 			["update", (store, entry) => store.update({ entry, shape, state: { name: "X" } })],
 			["delete", (store, entry) => store.delete({ entry, shape })],
@@ -118,7 +118,7 @@ describe("createRESTStore", () => {
 			const fetcher = mockFetcher(() => jsonResponse({ id: `${base}/products/1`, name: "Widget" }));
 			const store = createRESTStore(fetcher);
 
-			await store.lookup({ entry: `${base}/products/1`, shape, model: { id: "", name: "" } });
+			await store.lookup({ entry: `${base}/products/1`, shape, model: { id: {}, name: {} } });
 
 			expect(fetcher).toHaveBeenCalledOnce();
 
@@ -143,7 +143,7 @@ describe("createRESTStore", () => {
 				const fetcher = mockFetcher(() => jsonResponse({ id: `${base}/products/1`, name: "Widget" }));
 				const store = createRESTStore(fetcher);
 
-				await store.lookup({ entry: `${base}/products/1`, shape, model: { id: "", name: "" } }, { locale });
+				await store.lookup({ entry: `${base}/products/1`, shape, model: { id: {}, name: {} } }, { locale });
 
 				const [, init] = fetcher.mock.calls[0];
 
@@ -156,7 +156,7 @@ describe("createRESTStore", () => {
 				const fetcher = mockFetcher(() => jsonResponse({ id: `${base}/products/1`, name: "Widget" }));
 				const store = createRESTStore(fetcher);
 
-				await store.lookup({ entry: `${base}/products/1`, shape, model: { id: "", name: "" } });
+				await store.lookup({ entry: `${base}/products/1`, shape, model: { id: {}, name: {} } });
 
 				const [, init] = fetcher.mock.calls[0];
 
@@ -169,7 +169,7 @@ describe("createRESTStore", () => {
 				const fetcher = mockFetcher(() => jsonResponse({ id: `${base}/products/1`, name: "Widget" }));
 				const store = createRESTStore(fetcher);
 
-				await store.lookup({ entry: `${base}/products/1`, shape, model: { id: "", name: "" } }, { locale: [] });
+				await store.lookup({ entry: `${base}/products/1`, shape, model: { id: {}, name: {} } }, { locale: [] });
 
 				const [, init] = fetcher.mock.calls[0];
 
@@ -184,7 +184,7 @@ describe("createRESTStore", () => {
 			const fetcher = mockFetcher(() => jsonResponse({ id: `${base}/products/1`, name: "Widget" }));
 			const store = createRESTStore(fetcher);
 
-			const model = { id: "", name: "" };
+			const model = { id: {}, name: {} };
 			await store.lookup({ entry: `${base}/products/1`, shape, model });
 
 			const [url] = fetcher.mock.calls[0];
@@ -213,7 +213,7 @@ describe("createRESTStore", () => {
 			const fetcher = mockFetcher(() => jsonResponse({ id: `${base}/products/1`, name: "Widget" }));
 			const store = createRESTStore(fetcher);
 
-			const result = await store.lookup({ entry: `${base}/products/1`, shape, model: { id: "", name: "" } });
+			const result = await store.lookup({ entry: `${base}/products/1`, shape, model: { id: {}, name: {} } });
 
 			expect(result).toEqual({ id: `${base}/products/1`, name: "Widget" });
 
@@ -224,7 +224,7 @@ describe("createRESTStore", () => {
 			const fetcher = mockFetcher(() => emptyResponse(404));
 			const store = createRESTStore(fetcher);
 
-			const result = await store.lookup({ entry: `${base}/products/999`, shape, model: { id: "", name: "" } });
+			const result = await store.lookup({ entry: `${base}/products/999`, shape, model: { id: {}, name: {} } });
 
 			expect(result).toBeUndefined();
 
@@ -236,7 +236,7 @@ describe("createRESTStore", () => {
 			const store = createRESTStore(fetcher);
 
 			await expect(store.lookup({
-				entry: `${base}/products/1`, shape, model: { id: "", name: "" }
+				entry: `${base}/products/1`, shape, model: { id: {}, name: {} }
 			})).rejects.toMatchObject({ status: 500 });
 
 		});
@@ -252,7 +252,7 @@ describe("createRESTStore", () => {
 			const store = createRESTStore(fetcher);
 
 			await expect(store.lookup({
-				entry: `${base}/products/1`, shape, model: { id: "", name: "" }
+				entry: `${base}/products/1`, shape, model: { id: {}, name: {} }
 			})).rejects.toMatchObject({ detail: expect.stringMatching(/malformed JSON/) });
 
 		});
@@ -276,7 +276,7 @@ describe("createRESTStore", () => {
 			const store = createRESTStore(fetcher);
 
 			await expect(store.lookup({
-				entry: `${base}/products/1`, shape, model: { id: "", name: "" }
+				entry: `${base}/products/1`, shape, model: { id: {}, name: {} }
 			})).rejects.toBeInstanceOf(TraceError);
 
 		});
@@ -286,7 +286,7 @@ describe("createRESTStore", () => {
 			const fetcher = mockFetcher(() => jsonResponse({ name: 42 })); // violates the shape
 			const store = createRESTStore(fetcher, { trusted: true });
 
-			const result = await store.lookup({ entry: `${base}/products/1`, shape, model: { id: "", name: "" } });
+			const result = await store.lookup({ entry: `${base}/products/1`, shape, model: { id: {}, name: {} } });
 
 			expect(result).toEqual({ name: 42 });
 
@@ -299,7 +299,7 @@ describe("createRESTStore", () => {
 			const observer = vi.fn<StoreObserver>();
 
 			store.observe(observer);
-			await store.lookup({ entry: `${base}/x`, shape, model: { id: "", name: "" } });
+			await store.lookup({ entry: `${base}/x`, shape, model: { id: {}, name: {} } });
 
 			expect(observer).not.toHaveBeenCalled();
 

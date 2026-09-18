@@ -18,7 +18,7 @@ import type { ResourceShape } from "@metreeca/blue/resource";
 import type { Instance } from "@metreeca/blue/value";
 import type { Lazy } from "@metreeca/core";
 import { TraceError } from "@metreeca/core/trace";
-import type { Reference, Resource } from "@metreeca/qest/resource";
+import type { Reference, Resource } from "@metreeca/qest/state";
 import { describe, expect, it } from "vitest";
 import { lookup, type TestFactory, type TestTools } from "../index.core.js";
 import { collections, testProduct } from "../toys.core.js";

@@ -23,11 +23,29 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `@metreeca/keep` — `Store.observe` takes its resource filter as any collection of references, arrays, sets and
   single-pass iterators alike, and `Store.execute` and `StoreObserver` accept any thenable in place of a native
   promise
+- Port every package to the reworked `@metreeca/qest` retrieval model: a retrieval leaf is written as the atomic `{}`
+  and a collection carries its criteria on the entry naming it, so the notation states neither type nor cardinality
+  and every structural decision is read off the shape
+- `@metreeca/keep` — `StoreClient.lookup` takes the resource shape as a type parameter, so results type through
+  `Delivery` in place of `Instance`; call sites are unchanged
+- `@metreeca/keep-flake` — `createFlake`, `createModelFlake` and `createQueryFlake` accept a `Template` and a `Mould`
+  in place of the withdrawn `Model` and `Query` types, and `createFlake` no longer overloads on a query argument
+- Deliver a localised property as a single tag-keyed map whatever its declared bounds, and classify a branch from the
+  cardinality the property itself declares
+- Track the `@metreeca/qest` module renames to `model` and `state`
+
+### Removed
+
+- The two retrieval elision filters, following the withdrawal of `isVacuous` from `@metreeca/qest`
+- `@metreeca/keep-suite` — the conformance cases the retrieval rework leaves without a subject: typed-leaf and
+  tuple-arity rejections, per-leaf elision, kind-based branch discrimination and per-tag arity mismatches
 
 ### Fixed
 
 - `@metreeca/keep-sparql` — retain stored `rdf:type` triples where the resource shape declares no class of its own, so
   a class-less shape factored under a common supershape no longer retracts types it never wrote
+- `@metreeca/keep-sparql` — drop a nested resource carrying no content on write, rather than minting a subject
+  identity with nothing under it
 
 ## [0.10.0](https://github.com/metreeca/keep/releases/tag/v0.10.0) - 2026-09-09
 

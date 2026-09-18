@@ -20,9 +20,9 @@ import { reference } from "@metreeca/blue/reference";
 import { id, multiple, optional, required, resource, type } from "@metreeca/blue/resource";
 import { date, instant, string, url } from "@metreeca/blue/string";
 import { union } from "@metreeca/blue/union";
-import { isObject, isString } from "@metreeca/core";
-import type { Resource } from "@metreeca/qest/resource";
-import type { Instance, Template } from "@metreeca/qest/template";
+import { isObject, isString, type Optional } from "@metreeca/core";
+import type { Resource } from "@metreeca/qest/state";
+import type { Template } from "@metreeca/qest/model";
 import { beforeAll, describe, expect, it } from "vitest";
 import { model } from "../_model.js";
 import { lookup, type TestFactory } from "../index.core.js";
@@ -67,52 +67,37 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 			type ContractCase = {
 				readonly entry: string;
 				readonly model: Template;
-				readonly assert: (call: Promise<undefined | Instance<Template>>) => Promise<unknown>;
+				readonly assert: (call: Promise<Optional<Resource>>) => Promise<unknown>;
 			};
 
 			const cases: ReadonlyArray<readonly [string, ContractCase]> = [
 
-				["reject with RangeError for invalid model", {
-					entry: AF001.id,
-					model: { price: "not a number" },
-					assert: call => expect(call).rejects.toBeInstanceOf(RangeError)
-				}],
+				// the model-typing cases the previous notation carried — a typed leaf stating the wrong type, a
+				// query tuple over a single-valued property, an over-length collection tuple — have no subject
+				// under the reworked model: every leaf is the atomic `{}` and a collection carries its criteria
+				// on the entry naming it, so none of those forms is statable
 
 				["reject with RangeError for a relative IRI", {
 					entry: "relative/path",
-					model: { price: 0 },
+					model: { price: {} },
 					assert: call => expect(call).rejects.toBeInstanceOf(RangeError)
 				}],
 
 				["reject with RangeError for an empty IRI", {
 					entry: "",
-					model: { price: 0 },
+					model: { price: {} },
 					assert: call => expect(call).rejects.toBeInstanceOf(RangeError)
 				}],
 
 				["reject with RangeError for an entry with a query string", {
 					entry: `${AF001.id}?probe=1`,
-					model: { price: 0 },
+					model: { price: {} },
 					assert: call => expect(call).rejects.toBeInstanceOf(RangeError)
 				}],
 
 				["reject with RangeError for an entry with a fragment", {
 					entry: `${AF001.id}#probe`,
-					model: { price: 0 },
-					assert: call => expect(call).rejects.toBeInstanceOf(RangeError)
-				}],
-
-				["reject a query tuple over a single-valued property (§5.5)", {
-					entry: AF001.id,
-					model: { price: [0] },
-					assert: call => expect(call).rejects.toBeInstanceOf(RangeError)
-				}],
-
-				["reject a collection tuple with more than two elements (§5.2)", {
-					entry: AF001.id,
-					// the fixture stays intentionally malformed to assert the runtime RangeError for an
-					// over-length collection tuple (§5.2)
-					model: { reviews: [{ author: "" }, { "^posted": 1 }, { "#": 1 }] },
+					model: { price: {} },
 					assert: call => expect(call).rejects.toBeInstanceOf(RangeError)
 				}],
 
@@ -148,7 +133,10 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 
 			it.each(cases)("should %s", (_, { entry, model: m, assert }) => factory(async ({ store }) => {
 
-				await assert(store.lookup({ shape: Product, entry, model: m }));
+				// ;(cast) a contract case states its model as the wide `Template`, so the delivery it resolves is
+				// the wide resource the assertions read values off
+
+				await assert(store.lookup({ shape: Product, entry, model: m }) as Promise<Optional<Resource>>);
 
 			})());
 
@@ -157,7 +145,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 				const result = await store.lookup({
 					entry: AF001.id,
 					shape: Product,
-					model: { price: 1, vendor: { name: "x" } }
+					model: { price: {}, vendor: { name: {} } }
 				});
 
 				expect(result?.vendor).toBeDefined();
@@ -214,15 +202,15 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 
 				}));
 
-				it("should ignore literal placeholder values, matching only their type (§5.1)", factory(async ({ store }) => {
+				it("should retrieve a leaf through the atomic placeholder (§5.3)", factory(async ({ store }) => {
 
-					// §5.1: the actual value of a literal placeholder is immaterial; only its type
-					// matters, so a non-zero placeholder retrieves the stored value, not itself
+					// §5.3: a placeholder carries no value of its own, so every leaf is the atomic `{}` and the
+					// retrieved value comes back under the property's own key
 
 					const result = await store.lookup({
 						entry: AF001.id,
 						shape: Product,
-						model: { sku: "PLACEHOLDER", price: 42 }
+						model: { sku: {}, price: {} }
 					});
 
 					expect(result?.sku).toBe(AF001.sku);
@@ -300,40 +288,9 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 
 				}));
 
-				it.each([
-					["an absolute IRI", "https://example.com/vendors/1"],
-					["a root-relative reference", "/vendors/"],
-					["a relative reference", "vendors/1"],
-					["the empty string", ""]
-				])("should accept %s as a reference placeholder (§5.2)", (_label, placeholder) => factory(async ({ store }) => {
-
-					// §5.2: a reference placeholder's value is immaterial and never returned; only its kind
-					// matters, and any string satisfying the IRI-reference production (the empty string,
-					// relative, root-relative, or absolute) matches the reference variant — it need not be a
-					// legal or absolute value
-
-					const result = await store.lookup({
-						entry: AF001.id,
-						shape: Product,
-						model: { vendor: placeholder }
-					});
-
-					expect(result?.vendor).toBe(AF001.vendor);
-
-				})());
-
-				it("should reject a string outside the IRI-reference production (§5.2)", factory(async ({ store }) => {
-
-					// §5.2: a string that could not reference a resource (here, one with spaces and angle
-					// brackets) satisfies no reference variant by kind and is rejected
-
-					await expect(store.lookup({
-						entry: AF001.id,
-						shape: Product,
-						model: { vendor: "not a valid <iri>" }
-					})).rejects.toBeInstanceOf(RangeError);
-
-				}));
+				// the reference-placeholder cases the previous notation carried — any string satisfying the
+				// IRI-reference production accepted as a placeholder, anything else rejected — have no subject:
+				// a placeholder carries no value of its own, so a reference is asked for through the atomic `{}`
 
 			});
 
@@ -884,21 +841,23 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 
 				}));
 
-				it("should reject a bare placeholder over a union-typed property (§5.4)", factory(async ({ store }) => {
+				it("should accept an atomic placeholder over a union-typed property (§5.3)", factory(async ({ store }) => {
 
-					// §5.4: a union-typed property is addressable only through the keyed variant form,
-					// so a bare placeholder over it is mismatched and MUST be rejected, whichever single
-					// branch it may resemble. The bare string placeholder resembles the string branch.
+					// §5.3: the atomic placeholder asks for the value as it stands and so reaches every variant
+					// coming back as one, a union-typed property included; the keyed form is what tells the
+					// alternatives apart when they are to be retrieved to different depths
 
 					const strAddr = lookup(vendors, v => typeof v.address === "string");
 
 					if ( strAddr === undefined ) { return; }
 
-					await expect(store.lookup({
+					const result = await store.lookup({
 						entry: strAddr.id,
 						shape: Vendor,
-						model: { address: "" }
-					})).rejects.toBeInstanceOf(RangeError);
+						model: { address: {} }
+					});
+
+					expect(result?.address).toBe(strAddr.address);
 
 				}));
 
@@ -982,7 +941,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 
 					expect(isObject(result?.address)).toBe(true);
 
-					if ( isObject(result?.address) ) {
+					if ( isObject(result?.address) && "street" in result.address ) {
 						expect(result.address.street).toBe(withPostalAddress.address.street);
 						expect(result.address.city).toBe(withPostalAddress.address.city);
 					}
@@ -1015,168 +974,12 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 
 				}));
 
-				it("should skip a branch the placeholder does not single out", factory(async ({ store }) => {
+				// the branch-skipping case the previous notation carried singled a branch out by the kind of its
+				// placeholder value; the atomic `{}` reaches every variant coming back as a value (§5.3), so a
+				// branch is no longer skipped by the placeholder
 
-					// A plain-string alternative singles out the string branch by kind; a vendor whose
-					// address is stored on the PostalAddress branch has no value there, so the slot is
-					// skipped and no address is returned.
-
-					const withPostalAddress = lookup(vendors,
-						v => isObject(v.address)
-					);
-
-					if ( !withPostalAddress ) { return; }
-
-					const result = await store.lookup({
-						entry: withPostalAddress.id,
-						shape: Vendor,
-						model: {
-							address: { "0": "any address" }
-						}
-					});
-
-					expect(result?.address).toBeUndefined();
-
-				}));
-
-				it.each<[string, () => { id: string } | undefined, Template]>([
-
-					// §5.4: keys are an opaque integer namespace disjoint from property identifiers,
-					// so mixing an identifier key in is rejected.
-					["mixed key spaces on single-valued union", () => withAddress, {
-						address: {
-							"0": "any address",
-							"name": ""
-						}
-					}],
-					["mixed key spaces on multi-valued union", () => withContacts, {
-						contacts: [{
-							"0": "any@contact.example.net",
-							"name": ""
-						}]
-					}],
-
-					// §5.4: an alternative matching no declared variant is unsatisfiable. A numeric
-					// placeholder matches none of the string / PostalAddress / Place address variants;
-					// a boolean matches none of the email / phone / PostalAddress / Place contact variants.
-					["an unsatisfiable alternative on single-valued union", () => withAddress, { address: { "0": 0 } }],
-					["an unsatisfiable alternative on multi-valued union", () => withContacts, { contacts: [{ "0": true }] }]
-
-				])("should reject %s", (_label, fixture, m) => factory(async ({ store }) => {
-
-					const f = fixture();
-
-					if ( !f ) { return; }
-
-					await expect(store.lookup({ entry: f.id, shape: Vendor, model: m }))
-						.rejects.toBeInstanceOf(RangeError);
-
-				})());
-
-			});
-
-			describe("literal variants — kind matching", () => {
-
-				// Vendor.score is union(decimal[0..5], grade string /^[A-F]$/) and Vendor.certified is
-				// union(boolean, decimal[0..5], grade string, year). Each alternative matches its branch
-				// by processing kind, its value immaterial (§5.4). Score's two variants differ in kind
-				// (number vs string), so kind alone tells them apart; certified's grade and year variants
-				// share the string kind, so a string alternative matches both and retrieval returns
-				// whichever branch the stored value belongs to.
-
-				it.each<[string, (v: Resource) => boolean]>([
-					["decimal", v => typeof v.score === "number"],
-					["grade", v => typeof v.score === "string"]
-				])("should retrieve a %s-valued score by matching its branch", (_kind, pick) => factory(async ({ store }) => {
-
-					const vendor = lookup(vendors, pick);
-
-					if ( !vendor ) { return; }
-
-					// model() derives one placeholder per branch (decimal number, grade string); each
-					// matches its branch by kind, and only the branch carrying the stored value contributes
-
-					const result = await store.lookup({
-						entry: vendor.id,
-						shape: Vendor,
-						model: model(resource({ score: optional(Score) }))
-					});
-
-					expect(result?.score).toBe(vendor.score);
-
-				})());
-
-				it.each<[string, (v: Resource) => boolean]>([
-					["boolean", v => typeof v.certified === "boolean"],
-					["decimal", v => typeof v.certified === "number"],
-					["grade", v => typeof v.certified === "string" && /^[A-F]$/.test(v.certified)],
-					["year", v => typeof v.certified === "string" && /^\d{4}$/.test(v.certified)]
-				])("should retrieve a %s-valued certified across the four-branch union", (_kind, pick) =>
-					factory(async ({ store }) => {
-
-						const vendor = lookup(vendors, pick);
-
-						if ( !vendor ) { return; }
-
-						// model() derives one placeholder per branch (boolean / decimal / grade / year),
-						// each matched by kind; the two string variants (grade, year) are both matched by
-						// the string placeholders, and only the branch carrying the stored value contributes
-
-						const result = await store.lookup({
-							entry: vendor.id,
-							shape: Vendor,
-							model: model(resource({ certified: optional(Certified) }))
-						});
-
-						expect(result?.certified).toBe(vendor.certified);
-
-					})()
-				);
-
-				it.each<[string, (v: Resource) => boolean]>([
-					["grade", v => typeof v.certified === "string" && /^[A-F]$/.test(v.certified)],
-					["year", v => typeof v.certified === "string" && /^\d{4}$/.test(v.certified)]
-				])("should retrieve a %s-valued certified via a single same-kind string alternative", (_kind, pick) =>
-					factory(async ({ store }) => {
-
-						const vendor = lookup(vendors, pick);
-
-						if ( !vendor ) { return; }
-
-						// §5.4: a single string alternative matches BOTH string variants (grade and year)
-						// by kind — a literal alternative does not tell same-kind variants apart, so it
-						// requests both, and retrieval returns whichever the stored value belongs to. The
-						// empty placeholder value is immaterial.
-
-						const result = await store.lookup({
-							entry: vendor.id,
-							shape: Vendor,
-							model: { certified: { "0": "" } }
-						});
-
-						expect(result?.certified).toBe(vendor.certified);
-
-					})()
-				);
-
-				it("should accept a kind-matching alternative whose value is out of domain (§5.4)", factory(async ({ store }) => {
-
-					// §5.4: a placeholder's value is immaterial — 9 lies outside the decimal[0..5] domain
-					// but is a number, so it matches the decimal branch by kind and retrieves the stored score.
-
-					const vendor = lookup(vendors, v => typeof v.score === "number");
-
-					if ( !vendor ) { return; }
-
-					const result = await store.lookup({
-						entry: vendor.id,
-						shape: Vendor,
-						model: { score: { "0": 9 } }
-					});
-
-					expect(result?.score).toBe(vendor.score);
-
-				}));
+				// the out-of-domain case the previous notation carried stated a placeholder value outside the
+				// variant domain; a placeholder carries no value of its own any more (§5.3)
 
 				it("should reject an alternative whose kind matches no variant (§5.4)", factory(async ({ store }) => {
 
@@ -1201,11 +1004,11 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 
 		describe("empty-form elision", () => {
 
-			// Per `@metreeca/qest/template` (resource.ts): empty `Template` / `Union` / `Locales`
+			// Per `@metreeca/qest/model` (resource.ts): empty `Template` / `Union` / `Locale`
 			// / `Projection` payloads, and collection tuples whose element object is empty (an
-			// empty `{}` element optionally paired with a `Selection` in the second slot),
+			// empty `{}` element optionally paired with a `Criteria` in the second slot),
 			// are vacuous — processors must ignore them as if the owning property were omitted
-			// from the enclosing template, discarding any attached `Selection` constraints.
+			// from the enclosing template, discarding any attached `Criteria` constraints.
 			// At the top level, form-serialised selection-only substitution is a server concern;
 			// the storage layer returns an empty object after the existence test succeeds, and
 			// `undefined` otherwise (assumed true for virtual resources).
@@ -1252,95 +1055,10 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 				}));
 
 			});
+			// The per-leaf elision cases the previous notation carried have no subject under the reworked
+			// model: `{}` is the atomic placeholder, a request for the property's own value, so no template
+			// fragment states an omission any more and a key left out is the only way to not ask for a slot.
 
-			// Per-leaf elision cases: each entry pairs the elided slot (property name) with the
-			// model fragment carrying the vacuous payload and a primary probe — a closure
-			// confirming a sibling entry still resolves while the elided slot is dropped from
-			// the result. Each case packs its own fixture lookup so absent fixtures skip silently.
-
-			type ElisionCase = {
-				readonly fixture: () => undefined | { readonly id: string };
-				readonly shape: typeof Product | typeof Vendor;
-				readonly slot: string;
-				readonly model: Template;
-				readonly probe: (result: undefined | Instance<Template>) => void;
-			};
-
-			const elidesFromProduct = (slot: string): ElisionCase["probe"] => result => {
-				expect(result?.price).toBe(AF001.price);
-				expect(result).not.toHaveProperty(slot);
-			};
-
-			const elidesFromVendor = (
-				expected: undefined | { readonly name: string },
-				slot: string
-			): ElisionCase["probe"] => result => {
-				expect(result?.name).toBe(expected?.name);
-				expect(result).not.toHaveProperty(slot);
-			};
-
-			const elisionCases: ReadonlyArray<readonly [string, ElisionCase]> = [
-
-				["scalar reference slot with empty Template", {
-					fixture: () => AF001, shape: Product, slot: "vendor",
-					model: { price: 1, vendor: {} },
-					probe: elidesFromProduct("vendor")
-				}],
-
-				["array slot with empty Template in singleton tuple", {
-					fixture: () => AF001, shape: Product, slot: "reviews",
-					model: { price: 1, reviews: [{}] },
-					probe: elidesFromProduct("reviews")
-				}],
-
-				["array slot with Selection-only tuple", {
-					fixture: () => AF001, shape: Product, slot: "reviews",
-					model: { price: 1, reviews: [{}, { "^posted": 1 }] },
-					probe: elidesFromProduct("reviews")
-				}],
-
-				["localised slot with empty Locales map", {
-					fixture: () => AF001, shape: Product, slot: "name",
-					model: { price: 1, name: {} },
-					probe: elidesFromProduct("name")
-				}],
-
-				["single-valued union slot with empty Union", {
-					fixture: () => withAddress, shape: Vendor, slot: "address",
-					model: { name: "x", address: {} },
-					probe: elidesFromVendor(withAddress, "address")
-				}],
-
-				["multi-valued union slot with empty singleton tuple", {
-					fixture: () => withContacts, shape: Vendor, slot: "contacts",
-					model: { name: "x", contacts: [{}] },
-					probe: elidesFromVendor(withContacts, "contacts")
-				}],
-
-				["multi-valued union slot with Selection-only tuple", {
-					fixture: () => withContacts, shape: Vendor, slot: "contacts",
-					model: { name: "x", contacts: [{}, { "^": 1 }] },
-					probe: elidesFromVendor(withContacts, "contacts")
-				}]
-
-			];
-
-			it.each(elisionCases)("should elide %s", (_, {
-				fixture,
-				shape,
-				model: m,
-				probe
-			}) => factory(async ({ store }) => {
-
-				const f = fixture();
-
-				if ( !f ) { return; }
-
-				const result = await store.lookup({ entry: f.id, shape, model: m });
-
-				probe(result);
-
-			})());
 
 		});
 

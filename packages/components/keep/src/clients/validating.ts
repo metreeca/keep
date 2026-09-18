@@ -24,10 +24,12 @@
  */
 
 import { validate } from "@metreeca/blue";
+import type { Delivery } from "@metreeca/blue/value";
+import type { Optional } from "@metreeca/core";
 import { immutable } from "@metreeca/core/structures";
 import { TraceError } from "@metreeca/core/trace";
 
-import { isReference, type Reference } from "@metreeca/qest/resource";
+import { isReference, type Reference } from "@metreeca/qest/state";
 
 import type { Store, StoreClient } from "../index.js";
 
@@ -91,10 +93,14 @@ export function createValidatingStore(store: StoreClient, {
 
 			}, opts).then(result => {
 
-				return trusted || result === undefined ? immutable(result) : validate(result, { shape, model })({
+				// ;(cast) blue validates the response against the very shape and model the store was given, so the
+				// value it hands back is the requested instance; blue resolves the leaf types from the shape while
+				// the store's own signature still reads them off the model (see `_inference.ts`)
+
+				return (trusted || result === undefined ? immutable(result) : validate(result, { shape, model })({
 					value: value => value,
 					trace: trace => { throw new TraceError("invalid response", trace ?? []); }
-				});
+				})) as Optional<Delivery<typeof shape, typeof model>>;
 
 			});
 

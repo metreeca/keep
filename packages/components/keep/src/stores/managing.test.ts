@@ -32,7 +32,7 @@ const entry = "http://example.com/products/1";
 const entryA = "http://example.com/a";
 const entryB = "http://example.com/b";
 
-const fullModel = { id: "", name: "", price: 0 };
+const fullModel = { id: {}, name: {}, price: {} };
 const fullState = { name: "Widget", price: 1 };
 
 

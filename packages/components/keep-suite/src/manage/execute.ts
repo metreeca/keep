@@ -25,7 +25,7 @@ import { Product } from "../toys.js";
 const { products } = collections;
 
 // retrieval model projecting only the price slot, shared by transactional visibility probes
-const priceModel = { price: 1 };
+const priceModel = { price: {} };
 
 
 /**

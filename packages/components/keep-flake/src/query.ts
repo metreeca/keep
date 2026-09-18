@@ -37,20 +37,24 @@
 import { getShapeProperties } from "@metreeca/blue/resource";
 import { getShapeBranches, type UnionShape } from "@metreeca/blue/union";
 import { type Range, type Shape } from "@metreeca/blue/value";
-import { type Identifier, isArray, isIdentifier, isObject } from "@metreeca/core";
+import { type Identifier, isIdentifier, isObject } from "@metreeca/core";
 import { immutable } from "@metreeca/core/structures";
 import {
 	decodeProbe,
-	isBranch,
+	isSelector,
 	isUnion,
-	isVacuous,
-	type Model,
 	type Probe,
-	type Query,
 	type Transform
-} from "@metreeca/qest/template";
-import { getEntries, getPropertyRange, getRootRange, getTransformRange, mergeEntries } from "./index.core.js";
-import { type Branch, type Entries, type Flake, type Transforms } from "./index.js";
+} from "@metreeca/qest/model";
+import {
+	getEntries,
+	getMouldEntries,
+	getPropertyRange,
+	getRootRange,
+	getTransformRange,
+	mergeEntries
+} from "./index.core.js";
+import { type Branch, type Entries, type Flake, type Mould, type Transforms } from "./index.js";
 
 
 /**
@@ -103,14 +107,14 @@ type Entry = Probe & {
  * the `(Shape, Query)` call shape here.
  *
  * @param shape The member shape: the value shape of the collection's elements
- * @param query The user query: one of the tuple arms `[Placeholder, Selection?]`, `[Union, Selection?]`,
- *              `[Projection, Selection?]`
+ * @param query The user query: the node retrieving the collection, its
+ *              {@link @metreeca/qest/model!Criteria | criteria} merged in alongside its retrieval keys
  *
  * @returns The immutable {@link Flake} rooted at `shape`, carrying the whole query on its
  * {@link Flake.drain | drain} and with constraints, transforms, and projection marks populated as the
  * query directs
  */
-export function createQueryFlake(shape: Shape, query: Query): Flake {
+export function createQueryFlake(shape: Shape, query: Mould): Flake {
 
 	return immutable({
 
@@ -126,58 +130,81 @@ export function createQueryFlake(shape: Shape, query: Query): Flake {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /**
- * Flattens the user query into an {@link Entry} stream; arm dispatch happens here.
+ * Flattens the user query into an {@link Entry} stream.
  *
- * A tuple query pairs the per-item element at slot 0 (a `Placeholder`, indexed `Union`, or
- * `Projection`) with an optional `Selection` at slot 1 (the operator-prefixed constraints and
- * pagination). Both slots are flattened against the member shape.
+ * Retrieval keys and constraint keys share one key space (§5.6), so the node is split by key syntax in
+ * {@link queryObjectEntriesOf}; the per-item element and the criteria narrowing the collection are no longer
+ * told apart by position.
  */
-function queryEntriesOf(shape: Shape, query: Query): readonly Entry[] {
+function queryEntriesOf(shape: Shape, query: Mould): readonly Entry[] {
 
-	// model-mode branches carry the user placeholder verbatim, so non-tuple forms
-	// (structural locale maps, coalesced placeholders) reach here as the bare element
-
-	const [element, selection] = isArray(query) ? query : [query, undefined];
-
-	return [
-		...(isObject(element) ? queryObjectEntriesOf(shape, element) : []),
-		...(isObject(selection) ? queryObjectEntriesOf(shape, selection) : [])
-	];
+	return isObject(query) ? queryObjectEntriesOf(shape, query) : [];
 
 }
 
 /**
- * Walks every key of an object placeholder and emits {@link Entry | entries}.
+ * Walks one node of the query and emits {@link Entry | entries}.
+ *
+ * The node's form is settled once for the whole node, never key by key: criteria keys are carved out by
+ * their own syntax (§5.6), and what remains is either the keyed alternatives a union-typed node is
+ * addressed through (§5.5) or the bindings and paths naming the element, the two admitting no mixing. A
+ * localised node contributes nothing, its tag keys naming no probe.
+ *
+ * Alternatives recurse through {@link queryVariantEntriesOf}; every other key is a probe (a criterion
+ * operator, or an element binding or path) decoded through {@link queryProbeOf}, where a key that fails to
+ * decode is a malformed query, a contract violation Keep rejects at its boundary.
  */
-function queryObjectEntriesOf(shape: Shape, placeholder: Record<string, unknown>): readonly Entry[] {
+function queryObjectEntriesOf(shape: Shape, node: Record<string, unknown>): readonly Entry[] {
 
-	return Object.entries(placeholder).flatMap(([key, value]) => queryKeyEntriesOf(shape, key, value));
+	const stated = Object.entries(node).filter(([, value]) => value !== undefined);
+
+	const criteria = stated.filter(([key]) => isSelector(key));
+	const retrieval = stated.filter(([key]) => !isSelector(key));
+
+	const keyed = shape.kind === "union"
+		&& retrieval.length > 0
+		&& retrieval.every(([key]) => isVariantKey(key));
+
+	return shape.kind === "dictionary" ? []
+		: keyed ? [
+				...criteria.map(queryProbeEntryOf),
+				...retrieval.flatMap(([key, value]) => queryVariantEntriesOf(shape, key, value))
+			]
+			: stated.map(queryProbeEntryOf);
 
 }
 
 /**
- * Routes one `(key, value)` pair from a placeholder to an {@link Entry}.
- *
- * The key's namespace is fixed by the bearing shape: under a union it is a variant key, recursing
- * through {@link queryVariantEntriesOf}; under a localised shape it is a tag key, skipped. Every other
- * key is a probe (a selection operator, or an element binding or path) and is decoded through
- * {@link queryProbeOf}; a key that fails to decode there is a malformed query, a contract violation Keep
- * rejects at its boundary.
+ * Pairs a probe key with its value as an {@link Entry}.
  */
-function queryKeyEntriesOf(shape: Shape, key: string, value: unknown): readonly Entry[] {
+function queryProbeEntryOf([key, value]: readonly [string, unknown]): Entry {
 
-	return isVacuous(value) ? []
-		: shape.kind === "union" && isBranch(key) ? queryVariantEntriesOf(shape, key, value)
-			: shape.kind === "dictionary" ? []
-				: [{ ...queryProbeOf(key), value }];
+	return { ...queryProbeOf(key), value };
 
 }
+
+/**
+ * Checks whether a key labels a {@link @metreeca/qest/model!Union | union} alternative.
+ *
+ * Alternatives are keyed by opaque canonical non-negative integer strings (§5.5), which is what tells the
+ * keyed union form apart from a template or projection naming the element. Model walks settle the same
+ * question with qest's {@link @metreeca/qest/model!isUnion | isUnion}, which a query node escapes: its
+ * alternatives carry the bindings and criteria no {@link @metreeca/qest/model!Placeholder | placeholder}
+ * admits.
+ */
+function isVariantKey(key: string): boolean {
+
+	return VariantKeys.test(key);
+
+}
+
+const VariantKeys = /^(0|[1-9]\d*)$/;
 
 /**
  * Decodes a placeholder key into a {@link Probe}.
  *
  * A bare identifier path (`name`, `vendor.name`) is a self-projecting path descent whose leaf identifier
- * names the target: qest's {@link @metreeca/qest/template!decodeProbe | decodeProbe} rejects it since the
+ * names the target: qest's {@link @metreeca/qest/model!decodeProbe | decodeProbe} rejects it since the
  * binding shorthand was removed (an explicit `alias=expression` is now required at the qest boundary), so
  * Keep reproduces the descent locally. Binding (`alias=expr`) and operator (`>price`) keys, which carry no
  * bare-identifier path, still route through `decodeProbe`.
@@ -197,9 +224,11 @@ function queryProbeOf(key: string): Probe {
  * locale maps and nested unions inside the variant are peeled correctly. The emitted entries route to
  * their variant by declared property at {@link queryDescentOf}, so they carry no variant tag.
  */
-function queryVariantEntriesOf(shape: UnionShape, key: `${number}`, value: unknown): readonly Entry[] {
+function queryVariantEntriesOf(shape: UnionShape, key: string, value: unknown): readonly Entry[] {
 
-	return isObject(value) ? queryObjectEntriesOf(getShapeBranches(shape)[key], value) : [];
+	const variant = getShapeBranches(shape).at(Number(key));
+
+	return variant === undefined || !isObject(value) ? [] : queryObjectEntriesOf(variant, value);
 
 }
 
@@ -232,9 +261,8 @@ function queryNodeOf(range: Range, path: readonly Identifier[], entries: readonl
 	// `projection[1]`); the terminal keeps its projection alias
 
 	const queried = descends ? queryDescentOf(range, path, deeper) : undefined;
-	// ;(cast) a projected node's drain model is a Model (a Query would not fold), narrowing the Model | Query slot
 	const folded = descends && base.drain?.alias !== undefined
-		? queryFoldOf(base.range, path, base.drain.mould as Model)
+		? queryFoldOf(base.range, path, base.drain.mould)
 		: undefined;
 
 	const record = queried === undefined ? undefined
@@ -246,23 +274,23 @@ function queryNodeOf(range: Range, path: readonly Identifier[], entries: readonl
 }
 
 /**
- * Folds a projection binding's nested {@link Model} into the terminal node's {@link Entries}.
+ * Folds a projection binding's nested {@link Mould} into the terminal node's {@link Entries}.
  *
  * A binding whose expression crosses a union-typed step (§5.8.1) is union-typed, so it carries the keyed
- * {@link @metreeca/qest/template!Union | union} form (§5.6) even though the walk has fanned each variant to its
+ * {@link @metreeca/qest/model!Union | union} form (§5.6) even though the walk has fanned each variant to its
  * own single reference/resource variant. Decompose it against that narrowed `range`: fold every keyed alternative
  * on its own and merge, so the alternative matching this variant surfaces its branches while the others, naming
  * no property of this target, drop out (§5.4). A multi-variant `range` (a binding whose final step is itself
  * union-typed) and every non-union model pass straight through to {@link getEntries}, which pairs a keyed
  * union model only with a multi-variant range.
  */
-function queryFoldOf(range: Range, path: readonly Identifier[], model: Model): undefined | Entries {
+function queryFoldOf(range: Range, path: readonly Identifier[], model: Mould): undefined | Entries {
 
 	return getShapeBranches(range.shape).length > 1 || !isUnion(model)
 		? getEntries(range, path, model)
-		: mergeEntries(Object.values(model).flatMap(alternative => {
+		: mergeEntries(getMouldEntries(model).flatMap(([, alternative]) => {
 
-			const entries = isObject(alternative) ? getEntries(range, path, alternative) : undefined;
+			const entries = getEntries(range, path, alternative);
 
 			return entries === undefined ? [] : [entries];
 
@@ -319,18 +347,18 @@ function queryConstraintsOf(entries: readonly Entry[]): Partial<Flake> {
  * Extracts the projection from a locus's entries.
  *
  * The first entry whose `target` is an alias rather than an {@link Operators | operator} binds that
- * alias to its requested {@link Model}; yields the empty object when none is present.
+ * alias to its requested {@link Mould}; yields the empty object when none is present.
  */
 function queryProjectionOf(entries: readonly Entry[]): {
-	drain?: { readonly alias: Identifier; readonly mould: Model }
+	drain?: { readonly alias: Identifier; readonly mould: Mould }
 } {
 
 	const bound = entries.find(e => Operators[e.target] === undefined);
 
-	// ;(cast) a binding entry's value is the requested projected model: Model is the documented
+	// ;(cast) a binding entry's value is the requested projected fragment: Mould is the documented
 	// binding-value shape at the Keep boundary.
 
-	return bound === undefined ? {} : { drain: { alias: bound.target, mould: bound.value as Model } };
+	return bound === undefined ? {} : { drain: { alias: bound.target, mould: bound.value as Mould } };
 
 }
 

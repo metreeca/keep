@@ -44,9 +44,13 @@ export default defineConfig({
 		 */
 		passWithNoTests: true,
 
+		/**
+		 * Type-tests each package against its own compiler options: `npm run check` runs vitest from every workspace
+		 * package in turn, so the path resolves against the package being checked, never against this file.
+		 */
 		typecheck: {
 			include: ["**/src/**/*.test-d.ts"],
-			tsconfig: "packages/components/keep/tsconfig.json"
+			tsconfig: "tsconfig.json"
 		}
 
 	},

@@ -25,11 +25,13 @@
  * @module
  */
 
-import { isArray, isObject, type Optional } from "@metreeca/core";
+import type { ResourceShape } from "@metreeca/blue/resource";
+import type { Delivery } from "@metreeca/blue/value";
+import { isArray, isObject, type Lazy, type Optional } from "@metreeca/core";
 import type { Tag } from "@metreeca/core/language";
 import { immutable } from "@metreeca/core/structures";
-import type { Reference } from "@metreeca/qest/resource";
-import type { Instance, Template } from "@metreeca/qest/template";
+import type { Reference } from "@metreeca/qest/state";
+import type { Template } from "@metreeca/qest/model";
 import type { Store } from "../index.js";
 
 
@@ -253,12 +255,12 @@ export function createCachingStore(store: Store, {
 	 *
 	 * @returns The memoised, freshly-fetched, or bypass-fetched promise
 	 */
-	function memoise<T extends Template>(
+	function memoise<S extends Lazy<ResourceShape>, T extends Template>(
 		entry: Reference,
 		model: T,
 		vary: { readonly locale?: readonly Tag[]; readonly limit?: number } = {},
-		miss: () => Promise<Optional<Instance<T>>>
-	): Promise<Optional<Instance<T>>> {
+		miss: () => Promise<Optional<Delivery<S, T>>>
+	): Promise<Optional<Delivery<S, T>>> {
 
 		// Bypass the cache while a write to this entry is in flight: still query the delegate so the caller
 		// gets a value, but do not store the result — it is liable to be the pre-commit snapshot that the
@@ -291,7 +293,7 @@ export function createCachingStore(store: Store, {
 				cache.delete(key);
 				cache.set(key, cached);
 
-				return cached.value as Promise<Optional<Instance<T>>>;
+				return cached.value as Promise<Optional<Delivery<S, T>>>;
 
 			} else {
 

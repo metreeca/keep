@@ -15,7 +15,7 @@
  */
 
 import { isNumeric, xsd } from "@metreeca/core/datatype";
-import type { Value } from "@metreeca/qest/resource";
+import type { Value } from "@metreeca/qest/state";
 import type { Term } from "@metreeca/trio";
 import type { Tuple, Variable } from "@metreeca/wire-sparql";
 

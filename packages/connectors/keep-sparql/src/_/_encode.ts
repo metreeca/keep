@@ -17,11 +17,11 @@
 import { getShapeClass, getShapeId, type Property } from "@metreeca/blue/resource";
 import { getBoundBranch, getShapeBranches, getStateBranch } from "@metreeca/blue/union";
 import { type Range, sh, type Shape } from "@metreeca/blue/value";
-import { error, isBoolean, isNumber, isObject, isString, opt } from "@metreeca/core";
+import { error, isArray, isBoolean, isNumber, isObject, isString, opt } from "@metreeca/core";
 import { some } from "@metreeca/core/arrays";
 import { xsd } from "@metreeca/core/datatype";
-import { isReference, type Literal, type Reference, type Value, type Values } from "@metreeca/qest/resource";
-import { Options, type Transform } from "@metreeca/qest/template";
+import { isReference, type Literal, type Reference, type Value, type Values } from "@metreeca/qest/state";
+import { Options, type Transform } from "@metreeca/qest/model";
 import { type Blank, named, type Named, rdf, tagged, type Term, typed } from "@metreeca/trio";
 import type { SPARQL, Variable } from "@metreeca/wire-sparql";
 import {
@@ -166,7 +166,8 @@ export function valueToTerm(value: Value, shape: Shape): Term {
  * {@link valueToTerm}); a localised dictionary to one plain or language-tagged term per tag (§6); a reference to
  * its IRI as-is; and a nested resource to its declared id when present (a captive resource with its own
  * identity), else a freshly skolemised IRI addressing the embedded sub-resource. Values not fitting the
- * variant are dropped.
+ * variant are dropped, as is a nested resource carrying no content: skolemising it would store a link to a
+ * subject with nothing under it.
  */
 export function valuesToTerms(values: Values, shape: Shape): readonly Term[] {
 	switch ( shape.kind ) {
@@ -216,9 +217,9 @@ export function valuesToTerms(values: Values, shape: Shape): readonly Term[] {
 
 			const id = getShapeId(shape);
 
-			return some(values).filter(v => isObject(v)).map(value => {
+			return some(values).filter(v => isObject(v)).flatMap(value => {
 				const node = id !== undefined ? value[id] : undefined;
-				return isReference(node) ? named(node) : named();
+				return isReference(node) ? [named(node)] : isVacant(value) ? [] : [named()];
 			});
 
 		case "union": // a range variant is always a flattened branch, never a union
@@ -226,6 +227,20 @@ export function valuesToTerms(values: Values, shape: Shape): readonly Term[] {
 			throw new RangeError(`unsupported union variant`);
 
 	}
+}
+
+/**
+ * Checks whether a write value carries nothing to store.
+ *
+ * A value is vacant when it is absent, or when every element or entry it holds is itself vacant, so that
+ * `{}`, `{ address: {} }` and `[{}]` all reduce to nothing. Only a nested resource consults this: every other
+ * variant types its values and drops what does not fit, while a nested resource would otherwise be skolemised
+ * into a subject carrying no triples.
+ */
+function isVacant(value: unknown): boolean {
+	return value === undefined
+		|| isArray(value, isVacant)
+		|| isObject(value, entry => isVacant(entry));
 }
 
 

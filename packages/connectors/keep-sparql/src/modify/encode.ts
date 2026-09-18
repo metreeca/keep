@@ -40,8 +40,7 @@ import { some } from "@metreeca/core/arrays";
 import type { Scope } from "@metreeca/core/scope";
 import { type Branch, type Flake, getFlakeVariant } from "@metreeca/keep-flake";
 import type { Deferred, Modify } from "@metreeca/keep/batching";
-import type { Reference, Resource, Values } from "@metreeca/qest/resource";
-import { isVacuous } from "@metreeca/qest/template";
+import type { Reference, Resource, Values } from "@metreeca/qest/state";
 import { named, type Named, rdf } from "@metreeca/trio";
 import { type SPARQL, type Variable } from "@metreeca/wire-sparql";
 import {
@@ -185,12 +184,10 @@ export function encode(
 
 							const variants = getShapeBranches(property.range.shape);
 
-							return some(values)
-								.filter(value => !isVacuous(value))
-								.flatMap(value => opt(getStateBranch(value, variants),
-									variant => triples(property, value, variant),
-									[]
-								));
+							return some(values).flatMap(value => opt(getStateBranch(value, variants),
+								variant => triples(property, value, variant),
+								[]
+							));
 
 						} else {
 

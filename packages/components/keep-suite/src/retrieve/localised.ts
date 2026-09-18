@@ -30,7 +30,7 @@
 
 import type { Tag } from "@metreeca/core/language";
 import { ascending, by } from "@metreeca/core/order";
-import type { Selection } from "@metreeca/qest/template";
+import type { Criteria } from "@metreeca/qest/model";
 import { beforeAll, describe, expect, it } from "vitest";
 import { lookup, type TestFactory } from "../index.core.js";
 import { collections } from "../toys.core.js";
@@ -67,6 +67,12 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 	const enOf = (value: Local): string | undefined => value.en;
 	const deOf = (value: Local): string | undefined => value.de;
 	const sorted = (xs: readonly string[]): readonly string[] => [...xs].sort(ascending);
+
+	// a localised property is delivered at the arity its own shape states, so a coalesced request on an
+	// array-per-tag property hands back the winning tag's set; the shape-driven typing does not tell the two
+	// access forms apart, the template no longer stating which was asked for
+
+	const coalesced = (value: unknown): readonly string[] => (value ?? []) as readonly string[]; // ;(cast)
 	const setOf = (value: Locals | undefined, priority: readonly string[]): readonly string[] => {
 		if ( value === undefined ) {
 			return [];
@@ -94,7 +100,7 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: VendorCatalogue,
 					shape: Vendors,
-					model: catalogue({ id: "", label: "" })
+					model: catalogue({ id: {}, label: {} })
 				})) ?? [];
 
 				expect(result).toHaveLength(vendors.length);
@@ -115,7 +121,7 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: ProductCatalogue,
 					shape: Products,
-					model: catalogue({ id: "", name: "" })
+					model: catalogue({ id: {}, name: {} })
 				})) ?? [];
 
 				expect(result).toHaveLength(products.length);
@@ -130,8 +136,8 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 				// does (to `undefined`), and differently from a priority the map can satisfy such as ["en"] —
 				// so the default is specifically ["und"], not "locale ignored".
 
-				const model = catalogue({ id: "", name: "" });
-				const names = (rows: readonly { id: string; name?: string }[]) =>
+				const model = catalogue({ id: {}, name: {} });
+				const names = (rows: readonly { readonly id: string; readonly name?: unknown }[]) =>
 					[...rows].sort(by(r => r.id)).map(r => r.name);
 
 				const omitted = names(members(await store.lookup({
@@ -167,13 +173,13 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 				const structural = (members(await store.lookup({
 					entry: VendorCatalogue,
 					shape: Vendors,
-					model: catalogue({ id: "", label: { "*": "" } })
+					model: catalogue({ id: {}, label: { "*": {} } })
 				})) ?? []).find(r => r.id === v.id);
 
 				const coalesced = (members(await store.lookup({
 					entry: VendorCatalogue,
 					shape: Vendors,
-					model: catalogue({ id: "", label: "" })
+					model: catalogue({ id: {}, label: {} })
 				})) ?? []).find(r => r.id === v.id);
 
 				expect(structural?.label).toEqual(v.label);
@@ -199,7 +205,7 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: VendorCatalogue,
 					shape: Vendors,
-					model: catalogue({ id: "" }, { "^label": 1 })
+					model: catalogue({ id: {} }, { "^label": 1 })
 				})) ?? [];
 
 				expect(result.map(r => r.id)).toEqual(expected);
@@ -217,7 +223,7 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: VendorCatalogue,
 					shape: Vendors,
-					model: catalogue({ id: "" }, { ">=label": bound })
+					model: catalogue({ id: {} }, { ">=label": bound })
 				})) ?? [];
 
 				expect(result.map(r => r.id).sort()).toEqual(expected);
@@ -242,7 +248,7 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: VendorCatalogue,
 					shape: Vendors,
-					model: catalogue({ id: "" }, { "~label": query })
+					model: catalogue({ id: {} }, { "~label": query })
 				})) ?? [];
 
 				expect(expected.length).toBeGreaterThan(0);
@@ -262,7 +268,7 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: VendorCatalogue,
 					shape: Vendors,
-					model: catalogue({ id: "" }, { "?label": [option] })
+					model: catalogue({ id: {} }, { "?label": [option] })
 				})) ?? [];
 
 				expect(result.map(r => r.id).sort()).toEqual(expected);
@@ -282,7 +288,7 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: VendorCatalogue,
 					shape: Vendors,
-					model: catalogue({ id: "" }, { "+label": [option] })
+					model: catalogue({ id: {} }, { "+label": [option] })
 				})) ?? [];
 
 				expect(result).toHaveLength(vendors.length);
@@ -313,7 +319,7 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: ProductCatalogue,
 					shape: Products,
-					model: catalogue({ id: "" }, { "?name": { en: enName } })
+					model: catalogue({ id: {} }, { "?name": { en: enName } })
 				})) ?? [];
 
 				expect(result.map(r => r.id).sort()).toEqual(expected);
@@ -335,7 +341,7 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: ProductCatalogue,
 					shape: Products,
-					model: catalogue({ id: "" }, { "!name": { en: enName } })
+					model: catalogue({ id: {} }, { "!name": { en: enName } })
 				})) ?? [];
 
 				expect(result.map(r => r.id).sort()).toEqual(expected);
@@ -371,7 +377,7 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: ProductCatalogue,
 					shape: Products,
-					model: catalogue({ id: "" }, { "?name": { en: [enName1, enName2] } })
+					model: catalogue({ id: {} }, { "?name": { en: [enName1, enName2] } })
 				})) ?? [];
 
 				expect(expected.length).toBeGreaterThan(1);
@@ -408,7 +414,7 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: ProductCatalogue,
 					shape: Products,
-					model: catalogue({ id: "" }, { "?name": { en: enName, de: deName } })
+					model: catalogue({ id: {} }, { "?name": { en: enName, de: deName } })
 				})) ?? [];
 
 				expect(expected).toContain(deTarget.id);
@@ -454,7 +460,7 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: ProductCatalogue,
 					shape: Products,
-					model: catalogue({ id: "" }, { "?name": { en: [enName1, enName2], de: [deName] } })
+					model: catalogue({ id: {} }, { "?name": { en: [enName1, enName2], de: [deName] } })
 				})) ?? [];
 
 				expect(expected).toContain(deTarget.id);
@@ -492,7 +498,7 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: ProductCatalogue,
 					shape: Products,
-					model: catalogue({ id: "" }, { "!name": { en: enName, de: deName } })
+					model: catalogue({ id: {} }, { "!name": { en: enName, de: deName } })
 				})) ?? [];
 
 				expect(result.map(r => r.id).sort()).toEqual(expected);
@@ -517,7 +523,7 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: ProductCatalogue,
 					shape: Products,
-					model: catalogue({ id: "", name: "" })
+					model: catalogue({ id: {}, name: {} })
 				}, { locale: ["en"] })) ?? [];
 
 				const row = result.find(r => r.id === target.id);
@@ -537,7 +543,7 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: ProductCatalogue,
 					shape: Products,
-					model: catalogue({ id: "", name: "" })
+					model: catalogue({ id: {}, name: {} })
 				}, { locale: ["zxx", "de"] })) ?? [];
 
 				const row = result.find(r => r.id === target.id);
@@ -557,7 +563,7 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: ProductCatalogue,
 					shape: Products,
-					model: catalogue({ id: "" }, { "^name": 1 })
+					model: catalogue({ id: {} }, { "^name": 1 })
 				}, { locale: ["en"] })) ?? [];
 
 				expect(result.map(r => r.id)).toEqual(expected);
@@ -583,7 +589,7 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: ProductCatalogue,
 					shape: Products,
-					model: catalogue({ id: "", description: "" })
+					model: catalogue({ id: {}, description: {} })
 				}, { locale: priority })) ?? [];
 
 				described.forEach(p => {
@@ -606,7 +612,7 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: VendorCatalogue,
 					shape: Vendors,
-					model: catalogue({ id: "", label: "" })
+					model: catalogue({ id: {}, label: {} })
 				}, { locale: ["en"] })) ?? [];
 
 				expect(result).toHaveLength(vendors.length);
@@ -627,10 +633,9 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 
 			const EN: readonly string[] = ["en"];
 
-			// the coalesced array placeholder is a type-only one-element tuple (§5.3); the readonly
-			// tuple annotation preserves its arity so the retrieved row's `keywords` infers as a plain
-			// string array rather than collapsing to a mapped slot type
-			const COALESCED: readonly [""] = [""];
+			// §5.4: a localised property is asked for coalesced through the atomic placeholder, which yields the
+			// label resolved under the request.s language priority; the tag-range map asks for it structurally
+			const COALESCED = {};
 
 			it("should coalesce an array-per-tag property to a plain-string array", factory(async ({ store }) => {
 
@@ -643,14 +648,14 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: ProductCatalogue,
 					shape: Products,
-					model: catalogue({ id: "", keywords: COALESCED })
+					model: catalogue({ id: {}, keywords: COALESCED })
 				}, { locale: EN })) ?? [];
 
 				expect(keyworded.length).toBeGreaterThan(0);
 
 				keyworded.forEach(p => {
 					const row = result.find(r => r.id === p.id);
-					expect(sorted(row?.keywords ?? [])).toEqual(sorted(setOf(p.keywords, EN)));
+					expect(sorted(coalesced(row?.keywords))).toEqual(sorted(setOf(p.keywords, EN)));
 				});
 
 			}));
@@ -664,7 +669,7 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: ProductCatalogue,
 					shape: Products,
-					model: catalogue({ id: "", keywords: COALESCED })
+					model: catalogue({ id: {}, keywords: COALESCED })
 				})) ?? [];
 
 				expect(result).toHaveLength(products.length);
@@ -686,12 +691,12 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: ProductCatalogue,
 					shape: Products,
-					model: catalogue({ id: "", keywords: COALESCED })
+					model: catalogue({ id: {}, keywords: COALESCED })
 				}, { locale: priority })) ?? [];
 
 				keyworded.forEach(p => {
 					const row = result.find(r => r.id === p.id);
-					expect(sorted(row?.keywords ?? [])).toEqual(sorted(setOf(p.keywords, priority)));
+					expect(sorted(coalesced(row?.keywords))).toEqual(sorted(setOf(p.keywords, priority)));
 				});
 
 				// the response genuinely mixes languages: resolved tags span more than one language
@@ -712,7 +717,7 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: ProductCatalogue,
 					shape: Products,
-					model: catalogue({ id: "" }, { "~keywords": query })
+					model: catalogue({ id: {} }, { "~keywords": query })
 				}, { locale: EN })) ?? [];
 
 				expect(expected.length).toBeGreaterThan(0);
@@ -732,7 +737,7 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: ProductCatalogue,
 					shape: Products,
-					model: catalogue({ id: "" }, { ">=keywords": bound })
+					model: catalogue({ id: {} }, { ">=keywords": bound })
 				}, { locale: EN })) ?? [];
 
 				expect(expected.length).toBeGreaterThan(0);
@@ -753,7 +758,7 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: ProductCatalogue,
 					shape: Products,
-					model: catalogue({ id: "" }, { "?keywords": options })
+					model: catalogue({ id: {} }, { "?keywords": options })
 				}, { locale: EN })) ?? [];
 
 				expect(expected.length).toBeGreaterThan(0);
@@ -773,13 +778,13 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 				const en = members(await store.lookup({
 					entry: ProductCatalogue,
 					shape: Products,
-					model: catalogue({ id: "" }, { ">=count:keywords": 1 })
+					model: catalogue({ id: {} }, { ">=count:keywords": 1 })
 				}, { locale: EN })) ?? [];
 
 				const und = members(await store.lookup({
 					entry: ProductCatalogue,
 					shape: Products,
-					model: catalogue({ id: "" }, { ">=count:keywords": 1 })
+					model: catalogue({ id: {} }, { ">=count:keywords": 1 })
 				})) ?? [];
 
 				expect(expected.length).toBeGreaterThan(0);
@@ -788,7 +793,7 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 
 			}));
 
-			const rejectedKeys: ReadonlyArray<readonly [string, Selection]> = [
+			const rejectedKeys: ReadonlyArray<readonly [string, Criteria]> = [
 				["sort", { "^keywords": 1 }],
 				["focus", { "+keywords": ["gadget"] }]
 			];
@@ -801,38 +806,14 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 				await expect(store.lookup({
 					entry: ProductCatalogue,
 					shape: Products,
-					model: catalogue({ id: "" }, selection)
+					model: catalogue({ id: {} }, selection)
 				}, { locale: EN })).rejects.toThrow();
 
 			})());
 
-			it("should reject a [\"\"] placeholder over a single-string-per-tag property (§5.3)", factory(async ({ store }) => {
-
-				// §5.3: the coalesced placeholder shape MUST match the property's per-tag cardinality —
-				// `[""]` is admissible only over an array-per-tag property, not the single-string
-				// `Product.name`.
-
-				await expect(store.lookup({
-					entry: ProductCatalogue,
-					shape: Products,
-					model: catalogue({ id: "", name: [""] })
-				})).rejects.toThrow();
-
-			}));
-
-			it("should reject a \"\" placeholder over an array-per-tag property (§5.3)", factory(async ({ store }) => {
-
-				// §5.3: the mismatch is rejected in the other direction too — the scalar `""` is
-				// admissible only over a single-string-per-tag property, not the array-per-tag
-				// `Product.keywords`.
-
-				await expect(store.lookup({
-					entry: ProductCatalogue,
-					shape: Products,
-					model: catalogue({ id: "", keywords: "" })
-				})).rejects.toThrow();
-
-			}));
+			// the per-tag arity cases the previous notation carried — `[""]` admissible only over an array-per-tag
+			// property and `""` only over a single-string one — have no subject: a coalesced request is the atomic
+			// `{}` whatever the property, the arity coming from the shape rather than from the placeholder (§5.4)
 
 			const extendedRanges: ReadonlyArray<readonly [string, string]> = [
 				["a trailing-wildcard subtag", "de-*"],
@@ -848,7 +829,7 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 				await expect(store.lookup({
 					entry: VendorCatalogue,
 					shape: Vendors,
-					model: catalogue({ id: "", label: { [range]: "" } })
+					model: catalogue({ id: {}, label: { [range]: {} } })
 				})).rejects.toThrow();
 
 			})());

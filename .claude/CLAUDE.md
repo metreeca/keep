@@ -127,17 +127,18 @@ stack is now just `keep-sparql`, since the backend connectors were extracted to 
 - **Forward/reverse predicates**: `forward` and `reverse` on a `Property` are IRI predicates that control triple storage
   direction. Both write actual triples. For example, `broader` with `forward: toys.broader, reverse:
   toys.narrower` writes BOTH `<child> toys:broader <parent>` AND `<parent> toys:narrower <child>`.
-- **Foreign references**: `foreign` on a `ReferenceShape` marks a reference as read-only/derived. It reads triples
-  already written by the target property's forward/reverse predicates. It does NOT write or delete any triples.
-- **NEVER conflate reverse predicates with foreign references**: They are independent concepts. A `reverse` predicate on
-  a property writes a real triple in the inverse direction. A `foreign` reference is a virtual view over triples owned
+- **Foreign properties**: `foreign` in a property's `PropertyConstraints` marks the property as read-only/derived. It
+  reads triples already written by the target property's forward/reverse predicates. It does NOT write or delete any
+  triples.
+- **NEVER conflate reverse predicates with foreign properties**: They are independent concepts. A `reverse` predicate on
+  a property writes a real triple in the inverse direction. A `foreign` property is a virtual view over triples owned
   by another property.
 - **Embedded resources**: Embedded resources have no independent lifecycle or identity — they are created, updated, and
   deleted only in the context of their embedding resource. The `id` and `type` fields are not allowed on them.
-- **Captive resources**: Identified by the `captive` flag on `ReferenceShape`. Captive resources have independent
-  lifecycle and identity (unlike embedded resources), but on captor deletion they are always cascade-deleted. They can
-  be created, updated, and deleted independently of the referencing resource. They may also optionally be created or
-  updated in a single batch embedded within their captor resource.
+- **Captive resources**: Identified by the `captive` flag in a property's `PropertyConstraints`. Captive resources have
+  independent lifecycle and identity (unlike embedded resources), but on captor deletion they are always
+  cascade-deleted. They can be created, updated, and deleted independently of the referencing resource. They may also
+  optionally be created or updated in a single batch embedded within their captor resource.
 - **NEVER conflate embedded and captive resources**: They are related but distinct concepts. Embedded resources lack
   independent identity and lifecycle. Captive resources have both, but are cascade-deleted with their captor.
 

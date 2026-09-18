@@ -29,7 +29,7 @@ import type { Awaitable } from "@metreeca/core/async";
 import { isNestedIRI } from "@metreeca/core/resource";
 import { immutable } from "@metreeca/core/structures";
 
-import type { Reference } from "@metreeca/qest/resource";
+import type { Reference } from "@metreeca/qest/state";
 
 import type { Store, StoreClient, StoreObserver } from "../index.js";
 

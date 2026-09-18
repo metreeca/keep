@@ -15,7 +15,7 @@
     "@metreeca/qest": {
       "*": "https://metreeca.github.io/qest/"
     },
-    "@metreeca/qest/template": {
+    "@metreeca/qest/model": {
       "*": "https://metreeca.github.io/qest/"
     }
   }

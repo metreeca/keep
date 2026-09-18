@@ -21,7 +21,7 @@ import { id, multiple, nonempty, optional, required, resource } from "@metreeca/
 import { date, string, url } from "@metreeca/blue/string";
 import { isObject } from "@metreeca/core";
 import { ascending, by, compound, descending, reverse } from "@metreeca/core/order";
-import type { Selection } from "@metreeca/qest/template";
+import type { Criteria } from "@metreeca/qest/model";
 import { beforeAll, describe, expect, it } from "vitest";
 import { lookup, type TestFactory } from "../index.core.js";
 import { collections } from "../toys.core.js";
@@ -49,7 +49,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 			describe("comparison — §5.7.1", () => {
 
 				const numericCases: ReadonlyArray<readonly [
-					string, Selection, (p: { price: number }) => boolean
+					string, Criteria, (p: { price: number }) => boolean
 				]> = [
 					["<", { "<price": 20 }, p => p.price < 20],
 					[">", { ">price": 50 }, p => p.price > 50],
@@ -80,7 +80,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				});
 
 				const temporalCases: ReadonlyArray<readonly [
-					string, Selection, (p: { launched?: string }) => boolean
+					string, Criteria, (p: { launched?: string }) => boolean
 				]> = [
 					[
 						"<",
@@ -117,7 +117,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				});
 
 				const stringCases: ReadonlyArray<readonly [
-					string, Selection, (p: { condition: string }) => boolean
+					string, Criteria, (p: { condition: string }) => boolean
 				]> = [
 					[">", { ">condition": "new" }, p => p.condition > "new"],
 					["<=", { "<=condition": "new" }, p => p.condition <= "new"]
@@ -777,7 +777,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 
 			const precedenceCases: ReadonlyArray<readonly [
 				string,
-				Selection,
+				Criteria,
 				(rows: ReadonlyArray<{ condition: string; price: number }>) =>
 					ReadonlyArray<{ condition: string; price: number }>
 			]> = [
@@ -1291,7 +1291,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 
 		describe("union-crossing paths — §5.7", () => {
 
-			// Selection operators over a path that crosses a union: either stepping THROUGH a union
+			// Criteria operators over a path that crosses a union: either stepping THROUGH a union
 			// member into a variant sub-property (`address.city` / `address.latitude` / `address.label`),
 			// or landing on a union-typed leaf through an intermediate reference step (`vendor.score` /
 			// `vendor.certified`). Both route the operand off a nested-branch anchor carrying the crossed
@@ -1326,7 +1326,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				describe("comparison — §5.7.1", () => {
 
 					const cases: ReadonlyArray<readonly [
-						string, Selection, (v: typeof vendors[number]) => boolean
+						string, Criteria, (v: typeof vendors[number]) => boolean
 					]> = [
 						[">", { ">address.latitude": 0 }, v => {
 							const l = latitudeOf(v);
@@ -2351,7 +2351,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 			it("should support combined offset/limit with explicit zeros treated as no pagination",
 				factory(async ({ store }) => {
 
-					// Per `Selection` docs (`resource.ts` @/#): "zero is ignored" for both operators.
+					// Per `Criteria` docs (`resource.ts` @/#): "zero is ignored" for both operators.
 					// Combined coverage: bounded slice, beyond-set offset, default range, zero-edge.
 
 					const bounded = members(await store.lookup({
@@ -2471,7 +2471,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				// row per member, fixing the member window after the offset; the document-bearing element under
 				// the same order and offset must skip the same members, never a fraction of one member's rows.
 
-				const order: Selection = { "^sku": 1, "@": 2 };
+				const order: Criteria = { "^sku": 1, "@": 2 };
 
 				const identities = (members(await store.lookup({
 					entry: Catalogue,
@@ -2596,7 +2596,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 			// or whose bound or option type does not match the target's resolved type, is
 			// unsupported and rejected; §5.7.6 likewise rejects negative or non-integer pagination.
 
-			const rejected: ReadonlyArray<readonly [string, Selection]> = [
+			const rejected: ReadonlyArray<readonly [string, Criteria]> = [
 				["text search over a numeric target", { "~price": "10" }],
 				["comparison over a reference target", { "<vendor": "a" }],
 				["sort over a multi-valued target", { "^documents": 1 }],
@@ -2644,7 +2644,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 
 			describe("filtering", () => {
 
-				const filterCases: ReadonlyArray<readonly [string, Selection, (p: P) => boolean]> = [
+				const filterCases: ReadonlyArray<readonly [string, Criteria, (p: P) => boolean]> = [
 					["count over a multi-valued reference", { ">=count:categories": 2 },
 						p => p.categories.length >= 2],
 					["sum over a multi-valued path", { ">=sum:reviews.rating": 8 },
@@ -2717,7 +2717,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 					...values.flatMap(v => v === undefined ? [] : [v]).sort(ascending)
 				];
 
-				const sortCases: ReadonlyArray<readonly [string, Selection, (p: P) => undefined | number]> = [
+				const sortCases: ReadonlyArray<readonly [string, Criteria, (p: P) => undefined | number]> = [
 					["count", { "^count:categories": 1 }, p => p.categories.length],
 					["sum", { "^sum:reviews.rating": 1 }, sumRatings],
 					["min", { "^min:reviews.rating": 1 }, minRatings],

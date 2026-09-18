@@ -35,7 +35,7 @@ describe("createValidatingStore", () => {
 
 	const entry = "http://example.com/products/1";
 
-	const fullModel = { id: "", name: "", price: 0 };
+	const fullModel = { id: {}, name: {}, price: {} };
 	const fullState = { name: "Widget", price: 1 };
 
 	const Target = resource({ name: required(string()) });
@@ -160,7 +160,7 @@ describe("createValidatingStore", () => {
 			});
 			const store = createValidatingStore(inner);
 			await expect(store.lookup({
-				entry, shape, model: { price: 0 }
+				entry, shape, model: { price: {} }
 			})).rejects.toBeInstanceOf(TraceError);
 		});
 
@@ -169,7 +169,7 @@ describe("createValidatingStore", () => {
 				lookup: retrieveStub(({ entry: e }) => ({ id: e, price: 9.99 }))
 			});
 			const store = createValidatingStore(inner);
-			const result = await store.lookup({ entry, shape, model: { id: "", price: 0 } });
+			const result = await store.lookup({ entry, shape, model: { id: {}, price: {} } });
 			expect(result).toEqual({ id: entry, price: 9.99 });
 		});
 
@@ -179,7 +179,7 @@ describe("createValidatingStore", () => {
 			});
 			const store = createValidatingStore(inner);
 			await expect(store.lookup({
-				entry, shape, model: { id: "", price: 0 }
+				entry, shape, model: { id: {}, price: {} }
 			})).rejects.toBeInstanceOf(TraceError);
 		});
 
@@ -196,7 +196,7 @@ describe("createValidatingStore", () => {
 				lookup: retrieveStub(() => ({ price: "not-a-number" }))
 			});
 			const store = createValidatingStore(inner, { trusted: true });
-			const result = await store.lookup({ entry, shape, model: { price: 0 } });
+			const result = await store.lookup({ entry, shape, model: { price: {} } });
 			expect(result).toEqual({ price: "not-a-number" });
 		});
 
@@ -245,37 +245,37 @@ describe("createValidatingStore", () => {
 		it("should reject a model carrying aggregate transforms when plain is true", async () => {
 			const store = createValidatingStore(stubStore(), { trusted: true });
 			await expect(store.lookup({
-				entry, shape: nested, model: { items: [{ "total=count:": 0 }] }
+				entry, shape: nested, model: { items: { "total=count:": {} } }
 			}, { plain: true })).rejects.toBeInstanceOf(TraceError);
 		});
 
 		it("should reject a nested model when depth is zero", async () => {
 			const store = createValidatingStore(stubStore(), { trusted: true });
 			await expect(store.lookup({
-				entry, shape: nested, model: { items: [{ name: "" }] }
+				entry, shape: nested, model: { items: { name: {} } }
 			}, { depth: 0 })).rejects.toBeInstanceOf(TraceError);
 		});
 
 		it("should accept a bare-reference model when depth is zero (references admitted, nesting rejected)", async () => {
 			const store = createValidatingStore(stubStore(), { trusted: true });
 			await expect(store.lookup({
-				entry, shape: nested, model: { items: [""] }
+				entry, shape: nested, model: { items: {} }
 			}, { depth: 0 })).resolves.toBeDefined();
 		});
 
 		it("should reject a model whose pagination constraint exceeds the limit", async () => {
 			const store = createValidatingStore(stubStore(), { trusted: true });
 			await expect(store.lookup({
-				entry, shape: nested, model: { items: [{}, { "#": 101 }] }
+				entry, shape: nested, model: { items: { "#": 101 } }
 			}, { limit: 100 })).rejects.toBeInstanceOf(TraceError);
 		});
 
 		it("should inject the limit as a default pagination bound into the forwarded model", async () => {
 			const inner = stubStore();
 			const store = createValidatingStore(inner, { trusted: true });
-			await store.lookup({ entry, shape: nested, model: { items: [{ name: "" }] } }, { limit: 50 });
+			await store.lookup({ entry, shape: nested, model: { items: { name: {} } } }, { limit: 50 });
 			expect(inner.lookup).toHaveBeenCalledWith(
-				{ entry, shape: nested, model: { items: [{ name: "" }, { "#": 50 }] } },
+				{ entry, shape: nested, model: { items: { name: {}, "#": 50 } } },
 				{ limit: 50 }
 			);
 		});

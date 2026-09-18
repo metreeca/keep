@@ -16,8 +16,8 @@
 
 import type { ResourceShape } from "@metreeca/blue/resource";
 import type { Lazy } from "@metreeca/core";
-import type { Reference } from "@metreeca/qest/resource";
-import type { Template } from "@metreeca/qest/template";
+import type { Reference } from "@metreeca/qest/state";
+import type { Template } from "@metreeca/qest/model";
 import { describe, expect, it, vi } from "vitest";
 import type { Store, StoreClient, StoreObserver } from "../index.js";
 import { createCachingStore } from "./caching.js";
@@ -174,7 +174,7 @@ describe("createCachingStore", () => {
 			const mock = MockStore();
 			const store = createCachingStore(mock);
 
-			await store.lookup({ entry: "/products/1", shape, model: { name: "" } });
+			await store.lookup({ entry: "/products/1", shape, model: { name: {} } });
 
 			expect(mock.calls).toEqual(["lookup"]);
 
@@ -185,8 +185,8 @@ describe("createCachingStore", () => {
 			const mock = MockStore();
 			const store = createCachingStore(mock);
 
-			await store.lookup({ entry: "/products/1", shape, model: { name: "" } });
-			await store.lookup({ entry: "/products/1", shape, model: { name: "" } });
+			await store.lookup({ entry: "/products/1", shape, model: { name: {} } });
+			await store.lookup({ entry: "/products/1", shape, model: { name: {} } });
 
 			expect(mock.calls).toEqual(["lookup"]);
 
@@ -197,8 +197,8 @@ describe("createCachingStore", () => {
 			const mock = MockStore();
 			const store = createCachingStore(mock);
 
-			await store.lookup({ entry: "/products/1", shape, model: { name: "" } });
-			await store.lookup({ entry: "/products/2", shape, model: { name: "" } });
+			await store.lookup({ entry: "/products/1", shape, model: { name: {} } });
+			await store.lookup({ entry: "/products/2", shape, model: { name: {} } });
 
 			expect(mock.calls).toEqual(["lookup", "lookup"]);
 
@@ -209,8 +209,8 @@ describe("createCachingStore", () => {
 			const mock = MockStore();
 			const store = createCachingStore(mock);
 
-			await store.lookup({ entry: "/x", shape, model: { name: "" } });
-			await store.lookup({ entry: "/x", shape, model: { price: 0 } });
+			await store.lookup({ entry: "/x", shape, model: { name: {} } });
+			await store.lookup({ entry: "/x", shape, model: { price: {} } });
 
 			expect(mock.calls).toEqual(["lookup", "lookup"]);
 
@@ -235,11 +235,11 @@ describe("createCachingStore", () => {
 		// in property order or in the order of an order-insignificant option set collapse to the same cache key
 
 		const equivalent: ReadonlyArray<readonly [string, Template, Template]> = [
-			["flat property order", { name: "", price: 0 }, { price: 0, name: "" }],
-			["nested object property order", { vendor: { name: "", id: "" } }, { vendor: { id: "", name: "" } }],
+			["flat property order", { name: {}, price: {} }, { price: {}, name: {} }],
+			["nested object property order", { vendor: { name: {}, id: {} } }, { vendor: { id: {}, name: {} } }],
 			["selection option order",
-				{ items: [{ id: "" }, { "?tag": ["b", "a", "c"] }] },
-				{ items: [{ id: "" }, { "?tag": ["a", "b", "c"] }] }]
+				{ items: { id: {}, "?tag": ["b", "a", "c"] } },
+				{ items: { id: {}, "?tag": ["a", "b", "c"] } }]
 		];
 
 		it.each(equivalent)("should share a cache entry across equivalent models differing in %s", async (_label, first, second) => {
@@ -254,16 +254,16 @@ describe("createCachingStore", () => {
 
 		});
 
-		it("should not collide undefined fields with the literal string 'undefined'", async () => {
+		it("should not collide an absent field with one asked for", async () => {
 
 			// `canonical` substitutes a sentinel for undefined to avoid `JSON.stringify(undefined) === undefined`
-			// — a model carrying the actual string "undefined" must canonicalise to a different key
+			// — a model eliding a field must canonicalise to a different key from one asking for it
 
 			const mock = MockStore();
 			const store = createCachingStore(mock);
 
 			await store.lookup({ entry: "/x", shape, model: { tag: undefined } });
-			await store.lookup({ entry: "/x", shape, model: { tag: "undefined" } });
+			await store.lookup({ entry: "/x", shape, model: { tag: {} } });
 
 			expect(mock.calls).toEqual(["lookup", "lookup"]);
 

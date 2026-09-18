@@ -28,7 +28,7 @@
  *  - **`detect`** — probes whether each {@link Detect} entry exists in the store
  *  - **`lookup`** — materialises each {@link Lookup} against its `model`; multi-valued slots reached
  *    by the model may be delegated to the `select` handler via {@link Broker.select}
- *  - **`select`** — materialises each {@link Select} collection (see {@link Query} for the admitted
+ *  - **`select`** — materialises each {@link Select} collection (see `Mould` for the admitted
  *    forms); element resources reached by the query may be delegated to the `lookup` handler via
  *    {@link Broker.lookup}
  *  - **`modify`** — creates, updates, or deletes each {@link Modify} target
@@ -49,12 +49,13 @@
  */
 
 import type { Property, ResourceShape } from "@metreeca/blue/resource";
-import { eager } from "@metreeca/blue/value";
+import { type Delivery, eager } from "@metreeca/blue/value";
 import type { Lazy, Optional } from "@metreeca/core";
 import type { Tag } from "@metreeca/core/language";
 import { immutable } from "@metreeca/core/structures";
-import type { Reference, Resource } from "@metreeca/qest/resource";
-import type { Instance, Query, Template } from "@metreeca/qest/template";
+import type { Reference, Resource } from "@metreeca/qest/state";
+import type { Template } from "@metreeca/qest/model";
+import type { Items, Mould } from "../_inference.js";
 import type { StoreClient } from "../index.js";
 import { createBroker } from "./batching.core.js";
 
@@ -72,15 +73,15 @@ export type Request =
  * Result of running a {@link Request}, narrowed by request variant:
  *
  *  - a {@link Detect} resolves to a `boolean` existence flag
- *  - a {@link Lookup} resolves to its materialised resource {@link Instance}
- *  - a {@link Select} resolves to its materialised collection {@link Instance}
+ *  - a {@link Lookup} resolves to its materialised resource {@link @metreeca/blue/value!Delivery | Delivery}
+ *  - a {@link Select} resolves to its materialised collection {@link @metreeca/blue/value!Delivery | Delivery}
  *  - a {@link Modify} resolves to its mutated entry's {@link Reference}
  *
  * @typeParam R The request whose result type is selected
  */
 export type Response<R extends Request> =
-	R extends Select<infer T> ? Instance<T>
-		: R extends Lookup<infer T> ? Instance<T>
+	R extends Select<infer T> ? Items<T>
+		: R extends Lookup<infer T, infer S> ? Delivery<S, T>
 			: R extends Modify ? Reference
 				: R extends Detect ? boolean // ;( keep it last: structurally the most general (entry only)
 					: never;
@@ -106,10 +107,13 @@ export type Detect = {
  *
  * @typeParam T The resource model selecting the result shape
  */
-export type Lookup<T extends Template = Template> = {
+export type Lookup<
+	T extends Template = Template,
+	S extends Lazy<ResourceShape> = Lazy<ResourceShape>
+> = {
 
 	readonly entry: Reference;
-	readonly shape: Lazy<ResourceShape>;
+	readonly shape: S;
 	readonly model: T;
 
 	readonly locale: readonly Tag[];
@@ -120,12 +124,12 @@ export type Lookup<T extends Template = Template> = {
  * Collection retrieval request.
  *
  * Carries a single multi-valued property (`field` on `entry` of `shape`), the `query` describing the
- * shape of its values (one of the {@link Query} arms), and the `locale` priority driving language
+ * shape of its values (one of the `Mould` arms), and the `locale` priority driving language
  * negotiation for its localised content (§6.2). Resolves to the materialised collection.
  *
  * @typeParam T The collection query selecting the result shape
  */
-export type Select<T extends Query = Query> = {
+export type Select<T extends Mould = Mould> = {
 
 	readonly entry: Reference;
 	readonly shape: Lazy<ResourceShape>;
@@ -221,11 +225,11 @@ export type Broker = {
 	 *
 	 * @param request The resource and model to materialise
 	 *
-	 * @returns A promise resolving to the materialised {@link Instance} of the request's `model` (the
+	 * @returns A promise resolving to the materialised {@link @metreeca/blue/value!Delivery | Delivery} of the request's `model` (the
 	 * resource value), settled once the owning batch and any nested promises needed to assemble its
 	 * value have resolved
 	 */
-	lookup<T extends Template>(request: Lookup<T>): Promise<Instance<T>>;
+	lookup<S extends Lazy<ResourceShape>, T extends Template>(request: Lookup<T, S>): Promise<Delivery<S, T>>;
 
 	/**
 	 * Enqueue a {@link Select} request.
@@ -235,11 +239,11 @@ export type Broker = {
 	 *
 	 * @param request The property and query to materialise
 	 *
-	 * @returns A promise resolving to the materialised {@link Instance} of the request's `query` (one
-	 * of the tuple-wrapped {@link Query} arms), settled once the owning batch and any nested promises
+	 * @returns A promise resolving to the materialised {@link @metreeca/blue/value!Delivery | Delivery} of the request's `query` (one
+	 * of the tuple-wrapped `Mould` arms), settled once the owning batch and any nested promises
 	 * needed to assemble its value have resolved
 	 */
-	select<T extends Query>(request: Select<T>): Promise<Instance<T>>;
+	select<T extends Mould>(request: Select<T>): Promise<Items<T>>;
 
 	/**
 	 * Enqueue a {@link Modify} request.
@@ -334,10 +338,10 @@ export function createBatchingStore(handlers: {
 
 	return immutable({
 
-		async lookup<T extends Template>({ entry, shape, model }: {
+		async lookup<S extends Lazy<ResourceShape>, T extends Template>({ entry, shape, model }: {
 
 			entry: Reference,
-			shape: Lazy<ResourceShape>,
+			shape: S,
 			model: T
 
 		}, {
@@ -348,7 +352,7 @@ export function createBatchingStore(handlers: {
 
 			locale?: readonly Tag[]
 
-		} = {}): Promise<Optional<Instance<T>>> {
+		} = {}): Promise<Optional<Delivery<S, T>>> {
 
 			// virtual resources have no stored state of their own: their members are derived from
 			// selection constraints rather than from stored content, so the existence probe is skipped.
