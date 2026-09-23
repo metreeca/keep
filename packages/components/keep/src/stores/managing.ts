@@ -112,7 +112,7 @@ export function createManagingStore(store: StoreClient, {
 		update: specs => notify(({ mutated }) => execute(store => store.update(specs).then(mutated))),
 		delete: specs => notify(({ deleted }) => execute(store => store.delete(specs).then(deleted))),
 
-		insert: (specs, opts) => notify(({ mutated }) => execute(store => store.insert(specs, opts).then(mutated))),
+		insert: specs => notify(({ mutated }) => execute(store => store.insert(specs).then(mutated))),
 		remove: specs => notify(({ deleted }) => execute(store => store.remove(specs).then(deleted))),
 
 
@@ -152,7 +152,7 @@ export function createManagingStore(store: StoreClient, {
 				update: specs => store.update(specs).then(mutated),
 				delete: specs => store.delete(specs).then(deleted),
 
-				insert: (specs, opts) => store.insert(specs, opts).then(mutated),
+				insert: specs => store.insert(specs).then(mutated),
 				remove: specs => store.remove(specs).then(deleted)
 
 			}))));

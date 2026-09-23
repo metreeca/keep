@@ -198,9 +198,9 @@ export function createCachingStore(store: Store, {
 		},
 
 
-		insert({ entry, shape, state }, opts) {
+		insert({ entry, shape, state }) {
 
-			return write(entry, () => store.insert({ entry, shape, state }, opts));
+			return write(entry, () => store.insert({ entry, shape, state }));
 
 		},
 

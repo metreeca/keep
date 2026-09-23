@@ -46,10 +46,8 @@ import type { Store, StoreClient } from "../index.js";
  *   {@link StoreClient.lookup lookup}, with the `lookup` `plain`/`depth`/`limit` opts forwarded as
  *   query-complexity caps
  * - `state` is validated as a resource for {@link StoreClient.create create}/
- *   {@link StoreClient.update update}/{@link StoreClient.insert insert}; `create` and
- * `update` always cap captive expansion at depth `0` (inline captive batches rejected), while `insert` honours its
- * `depth` opt
- *   (omitted leaves expansion unbounded)
+ *   {@link StoreClient.update update}/{@link StoreClient.insert insert}, always capping captive
+ *   expansion at depth `0` (inline captive batches rejected)
  *
  * The `trusted` opt controls whether {@link StoreClient.lookup lookup} responses are re-validated
  * against the shape narrowed by the caller's `model` template before surfacing. Defaults to `false`
@@ -146,19 +144,19 @@ export function createValidatingStore(store: StoreClient, {
 		},
 
 
-		async insert({ entry, shape, state }, opts) {
+		async insert({ entry, shape, state }) {
 
 			return store.insert({
 
 				entry: assertEntry(entry),
 				shape,
 
-				state: validate(state, { ...opts, shape })({
+				state: validate(state, { shape, depth: 0 })({
 					value: value => value,
 					trace: trace => { throw new TraceError("invalid state", trace ?? []); }
 				})
 
-			}, opts);
+			});
 
 		},
 

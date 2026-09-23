@@ -282,9 +282,8 @@ describe("createValidatingStore", () => {
 
 	});
 
-	// Captive expansion depth: create/update always validate state at depth 0, rejecting inline captive
-	// batches (single-resource paths); insert carries a caller-configurable opts.depth (omitted = unbounded)
-	// for batch upserts embedding captive trees, threaded through every wrapper down to the validation.
+	// Captive expansion depth: create/update/insert always validate state at depth 0, rejecting inline captive
+	// batches until cascading captive writes are supported (https://github.com/metreeca/keep/issues/4).
 	describe("captive expansion depth cap", () => {
 
 		it("should reject an inline captive batch on create (always capped at depth 0)", async () => {
@@ -299,40 +298,10 @@ describe("createValidatingStore", () => {
 				.rejects.toBeInstanceOf(TraceError);
 		});
 
-		it("should reject an inline captive batch on insert when depth is zero", async () => {
-			const store = createValidatingStore(stubStore());
-			await expect(store.insert({ entry, shape: captor, state: captiveBatch }, { depth: 0 }))
-				.rejects.toBeInstanceOf(TraceError);
-		});
-
-		it("should accept an inline captive batch on insert when depth is unbounded", async () => {
+		it("should reject an inline captive batch on insert (always capped at depth 0)", async () => {
 			const inner = stubStore();
 			const store = createValidatingStore(inner);
-			await store.insert({ entry, shape: captor, state: captiveBatch });
-			expect(inner.insert).toHaveBeenCalledOnce();
-		});
-
-		it("should enforce insert depth through the managed wrapper", async () => {
-			const inner = stubStore();
-			const store = createManagingStore(createValidatingStore(inner));
-			await expect(store.insert({ entry, shape: captor, state: captiveBatch }, { depth: 0 }))
-				.rejects.toBeInstanceOf(TraceError);
-			expect(inner.insert).not.toHaveBeenCalled();
-		});
-
-		it("should enforce insert depth through the execute task store", async () => {
-			const inner = stubStore();
-			const store = createManagingStore(createValidatingStore(inner));
-			await expect(store.execute(async s => {
-				await s.insert({ entry, shape: captor, state: captiveBatch }, { depth: 0 });
-			})).rejects.toBeInstanceOf(TraceError);
-			expect(inner.insert).not.toHaveBeenCalled();
-		});
-
-		it("should enforce insert depth through the cache wrapper", async () => {
-			const inner = stubStore();
-			const store = createCachingStore(createManagingStore(createValidatingStore(inner)));
-			await expect(store.insert({ entry, shape: captor, state: captiveBatch }, { depth: 0 }))
+			await expect(store.insert({ entry, shape: captor, state: captiveBatch }))
 				.rejects.toBeInstanceOf(TraceError);
 			expect(inner.insert).not.toHaveBeenCalled();
 		});

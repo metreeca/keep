@@ -405,8 +405,7 @@ export interface StoreClient {
 	 *
 	 * - {@link ResourceShape | embedded references} — cascades recursively with the same semantics
 	 * - {@link @metreeca/blue/resource!PropertyConstraints.captive | captive references} — accepted only as bare
-	 * IRI references; inline captive batches are rejected, as `state` is always validated at depth `0`. Use
-	 * {@link StoreClient.insert insert} to embed a captive tree in a single batch
+	 * IRI references; inline captive batches are rejected, as `state` is always validated at depth `0`
 	 * - {@link @metreeca/blue/resource!PropertyConstraints.foreign | foreign references} — skipped, as their
 	 * data is owned by the defining resource
 	 *
@@ -440,8 +439,7 @@ export interface StoreClient {
 	 *
 	 * - {@link ResourceShape | embedded references} — cascades recursively with the same semantics
 	 * - {@link @metreeca/blue/resource!PropertyConstraints.captive | captive references} — accepted only as bare
-	 * IRI references; inline captive batches are rejected, as `state` is always validated at depth `0`. Use
-	 * {@link StoreClient.insert insert} to embed a captive tree in a single batch
+	 * IRI references; inline captive batches are rejected, as `state` is always validated at depth `0`
 	 * - {@link @metreeca/blue/resource!PropertyConstraints.foreign | foreign references} — skipped, as their
 	 * data is owned by the defining resource
 	 *
@@ -504,24 +502,15 @@ export interface StoreClient {
 	 * data. Specific reference kinds are handled as follows:
 	 *
 	 * - {@link ResourceShape | embedded references} — cascades recursively with the same semantics
-	 * - {@link @metreeca/blue/resource!PropertyConstraints.captive | captive references} — accepted as bare IRI
-	 * references or, up to `opts.depth` nesting levels, as inline batches creating or updating the captive tree
+	 * - {@link @metreeca/blue/resource!PropertyConstraints.captive | captive references} — accepted only as bare
+	 * IRI references; inline captive batches are rejected, as `state` is always validated at depth `0`
 	 * - {@link @metreeca/blue/resource!PropertyConstraints.foreign | foreign references} — skipped, as their
 	 * data is owned by the defining resource
-	 *
-	 * > [!CAUTION]
-	 * > By default, resources accept captive reference expansion to unbounded depth. To enforce a strict insertion
-	 * > process that admits only bare references, set `opts.depth` to `0` to reject all expansion; set it to a positive
-	 * > value to cap the nesting depth admitted.
 	 *
 	 * @param request - Insertion specifications
 	 * @param request.entry - Absolute identifier of the target resource
 	 * @param request.shape - Resource shape driving the operation
 	 * @param request.state - Complete resource state to be inserted
-	 * @param opts - Optional insertion options
-	 * @param opts.depth - Maximum nesting depth for expanding `captive` reference values as inline target resource
-	 * states, each expansion level counting against the budget; `0` rejects all expansion, accepting bare IRI
-	 * references only; omission leaves expansion unbounded
 	 *
 	 * @returns A promise resolving to the `entry` {@link Reference} of the inserted resource; rejects with a
 	 * `RangeError` if `entry` is not an absolute IRI or if `state` carries an `id` differing from `entry`, a
@@ -538,10 +527,6 @@ export interface StoreClient {
 		readonly entry: Reference;
 		readonly shape: Lazy<ResourceShape>;
 		readonly state: Resource
-
-	}, opts?: {
-
-		readonly depth?: number
 
 	}): Promise<Reference>;
 
