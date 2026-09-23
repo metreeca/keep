@@ -33,12 +33,16 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Deliver a localised property as a single tag-keyed map whatever its declared bounds, and classify a branch from the
   cardinality the property itself declares
 - Track the `@metreeca/qest` module renames to `model` and `state`
+- Track the `@metreeca/core` module rename from `structures` to `values`
 
 ### Removed
 
 - The two retrieval elision filters, following the withdrawal of `isVacuous` from `@metreeca/qest`
 - `@metreeca/keep-suite` — the conformance cases the retrieval rework leaves without a subject: typed-leaf and
   tuple-arity rejections, per-leaf elision, kind-based branch discrimination and per-tag arity mismatches
+- `@metreeca/keep` — the `depth` option of `StoreClient.insert`: like `create` and `update`, `insert` accepts captive
+  references only as bare IRIs and rejects inline captive batches, pending cascading captive writes
+  ([#4](https://github.com/metreeca/keep/issues/4))
 
 ### Fixed
 
