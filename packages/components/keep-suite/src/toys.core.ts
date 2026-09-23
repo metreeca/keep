@@ -18,7 +18,7 @@ import { validate } from "@metreeca/blue";
 import { getShapeId, type ResourceShape } from "@metreeca/blue/resource";
 import { eager, type Instance } from "@metreeca/blue/value";
 import { error, isString, type Lazy, map } from "@metreeca/core";
-import { immutable } from "@metreeca/core/structures";
+import { immutable } from "@metreeca/core/values";
 import { TraceError } from "@metreeca/core/trace";
 import { isReference, type Reference, type Resource } from "@metreeca/qest/state";
 import { base, Category, Image, Product, toys, Vendor, Video } from "./toys.js";

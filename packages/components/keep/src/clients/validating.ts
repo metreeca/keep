@@ -26,7 +26,7 @@
 import { validate } from "@metreeca/blue";
 import type { Delivery } from "@metreeca/blue/value";
 import type { Optional } from "@metreeca/core";
-import { immutable } from "@metreeca/core/structures";
+import { immutable } from "@metreeca/core/values";
 import { TraceError } from "@metreeca/core/trace";
 
 import { isReference, type Reference } from "@metreeca/qest/state";

@@ -17,7 +17,7 @@
 import type { Identifier, Lazy } from "@metreeca/core";
 import type { ResourceShape } from "@metreeca/blue/resource";
 import type { Delivery } from "@metreeca/blue/value";
-import { immutable } from "@metreeca/core/structures";
+import { immutable } from "@metreeca/core/values";
 import type { Reference } from "@metreeca/qest/state";
 import type { Template } from "@metreeca/qest/model";
 import type { Items, Mould } from "../_inference.js";

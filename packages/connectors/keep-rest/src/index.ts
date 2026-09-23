@@ -88,7 +88,7 @@
 import { isError, isObject } from "@metreeca/core";
 import type { Tag } from "@metreeca/core/language";
 import { getIRIBase, resolve } from "@metreeca/core/resource";
-import { immutable } from "@metreeca/core/structures";
+import { immutable } from "@metreeca/core/values";
 import { createFetch } from "@metreeca/http";
 import { type Problem, success } from "@metreeca/http/success";
 import { transport } from "@metreeca/http/transport";

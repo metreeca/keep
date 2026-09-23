@@ -27,7 +27,7 @@ import type { Optional } from "@metreeca/core";
 import { some } from "@metreeca/core/arrays";
 import type { Awaitable } from "@metreeca/core/async";
 import { isNestedIRI } from "@metreeca/core/resource";
-import { immutable } from "@metreeca/core/structures";
+import { immutable } from "@metreeca/core/values";
 
 import type { Reference } from "@metreeca/qest/state";
 

@@ -21,7 +21,7 @@ import { eager, type Instance, type Shape } from "@metreeca/blue/value";
 import { error, isBoolean, isNumber, isString, type Lazy, map, type Scalar } from "@metreeca/core";
 import { xsd } from "@metreeca/core/datatype";
 import { createNamespace } from "@metreeca/core/resource";
-import { immutable } from "@metreeca/core/structures";
+import { immutable } from "@metreeca/core/values";
 import { createSPARQLStore } from "@metreeca/keep-sparql";
 import type { StoreTestScope } from "@metreeca/keep-suite";
 import { testStore } from "@metreeca/keep-suite";

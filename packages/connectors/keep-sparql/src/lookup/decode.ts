@@ -21,7 +21,7 @@ import { type Identifier, isAny, isArray, isObject } from "@metreeca/core";
 import { unique } from "@metreeca/core/arrays";
 import { matchTag, type Tag } from "@metreeca/core/language";
 import type { Scope } from "@metreeca/core/scope";
-import { equals } from "@metreeca/core/structures";
+import { equals } from "@metreeca/core/values";
 import {
 	type Branch,
 	type Flake,

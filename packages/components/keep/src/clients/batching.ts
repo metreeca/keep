@@ -52,7 +52,7 @@ import type { Property, ResourceShape } from "@metreeca/blue/resource";
 import { type Delivery, eager } from "@metreeca/blue/value";
 import type { Lazy, Optional } from "@metreeca/core";
 import type { Tag } from "@metreeca/core/language";
-import { immutable } from "@metreeca/core/structures";
+import { immutable } from "@metreeca/core/values";
 import type { Reference, Resource } from "@metreeca/qest/state";
 import type { Template } from "@metreeca/qest/model";
 import type { Items, Mould } from "../_inference.js";

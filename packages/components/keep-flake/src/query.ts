@@ -38,7 +38,7 @@ import { getShapeProperties } from "@metreeca/blue/resource";
 import { getShapeBranches, type UnionShape } from "@metreeca/blue/union";
 import { type Range, type Shape } from "@metreeca/blue/value";
 import { type Identifier, isIdentifier, isObject } from "@metreeca/core";
-import { immutable } from "@metreeca/core/structures";
+import { immutable } from "@metreeca/core/values";
 import {
 	decodeProbe,
 	isSelector,

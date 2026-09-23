@@ -33,7 +33,7 @@ import type { Member } from "@metreeca/blue/resource";
 import { getShapeBranches } from "@metreeca/blue/union";
 import { type Range, type Shape } from "@metreeca/blue/value";
 import type { Identifier } from "@metreeca/core";
-import { immutable } from "@metreeca/core/structures";
+import { immutable } from "@metreeca/core/values";
 import { getPropertyRange, getRootRange, mergeEntries } from "./index.core.js";
 import { type Entries, type Flake } from "./index.js";
 

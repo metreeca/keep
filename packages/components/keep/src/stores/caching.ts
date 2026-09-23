@@ -29,7 +29,7 @@ import type { ResourceShape } from "@metreeca/blue/resource";
 import type { Delivery } from "@metreeca/blue/value";
 import { isArray, isObject, type Lazy, type Optional } from "@metreeca/core";
 import type { Tag } from "@metreeca/core/language";
-import { immutable } from "@metreeca/core/structures";
+import { immutable } from "@metreeca/core/values";
 import type { Reference } from "@metreeca/qest/state";
 import type { Template } from "@metreeca/qest/model";
 import type { Store } from "../index.js";
