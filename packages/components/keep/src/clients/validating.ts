@@ -60,8 +60,6 @@ import type { Store, StoreClient } from "../index.js";
  *
  * @param store - Inner StoreClient to delegate to after validation
  * @param options - Optional validation options
- * @param options.trusted - When `true`, skips re-validation of the {@link StoreClient.lookup lookup}
- *     response against the shape narrowed by the caller's `model`; defaults to `false`
  *
  * @returns An immutable {@link StoreClient} wrapping `store` with input validation
  */
@@ -71,6 +69,12 @@ export function createValidatingStore(store: StoreClient, {
 
 }: {
 
+	/**
+	 * Whether to skip re-validation of {@link StoreClient.lookup lookup} responses against the shape narrowed by the
+	 * caller's `model`.
+	 *
+	 * @defaultValue `false`, treating the wrapped store as untrusted
+	 */
 	readonly trusted?: boolean
 
 } = {}): StoreClient {

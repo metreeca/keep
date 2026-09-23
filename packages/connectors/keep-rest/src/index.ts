@@ -119,8 +119,6 @@ import { encodeTemplate } from "@metreeca/qest/model";
  * @param fetch - Fetch-compatible transport used for every HTTP request; defaults to the global
  *   `fetch`
  * @param options - Optional proxy options
- * @param options.trusted - When `true`, skips re-validation of {@link Store.lookup lookup} responses against the
- *   projected shape; defaults to `false`, treating the remote endpoint as untrusted
  *
  * @returns An immutable {@link Store} whose methods round-trip every call to the remote
  *   REST service
@@ -131,6 +129,11 @@ export function createRESTStore(fetch: typeof globalThis.fetch = globalThis.fetc
 
 }: {
 
+	/**
+	 * Whether to skip re-validation of {@link Store.lookup lookup} responses against the projected shape.
+	 *
+	 * @defaultValue `false`, treating the remote endpoint as untrusted
+	 */
 	readonly trusted?: boolean
 
 } = {}): Store {

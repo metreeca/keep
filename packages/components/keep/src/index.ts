@@ -207,8 +207,8 @@ import type { Awaitable } from "@metreeca/core/async";
 import type { Tag } from "@metreeca/core/language";
 import type { TraceError } from "@metreeca/core/trace";
 import type { Problem } from "@metreeca/http/success";
-import { type Reference, Resource } from "@metreeca/qest/state";
 import { Template } from "@metreeca/qest/model";
+import { type Reference, Resource } from "@metreeca/qest/state";
 
 import type { createManagingStore } from "./stores/managing.js";
 
@@ -285,7 +285,7 @@ export interface Store extends StoreClient {
 	 * {@link TraceError}) raised by inner {@link StoreClient} calls — no mutations are executed, no events are
 	 * notified, and the error is propagated to the caller as a promise rejection.
 	 *
-	 * The task is handled its own {@link StoreClient} for the transaction. Operations performed through it belong to
+	 * The task is handed its own {@link StoreClient} for the transaction. Operations performed through it belong to
 	 * the transaction and commit together, kept separate from any other `execute` running at the same time.
 	 *
 	 * > [!WARNING]
@@ -340,8 +340,9 @@ export interface StoreClient {
 	/**
 	 * Retrieve a resource.
 	 *
-	 * The result is shaped by the `model` {@link Template}: plain identifier properties are resolved from the
-	 * shape's {@link @metreeca/blue/value!Delivery | Delivery}\<T\> type, while computed bindings are derived from the template value.
+	 * The result is shaped by the `model` {@link Template}: plain identifier properties are resolved from the shape's
+	 * {@link @metreeca/blue/value!Delivery | Delivery}\<T\> type, while computed bindings are derived from the
+	 * template value.
 	 *
 	 * > [!NOTE]
 	 * > `shape` and `model` are kept distinct so that a single `shape` can serve many retrieval templates —
@@ -354,24 +355,12 @@ export interface StoreClient {
 	 * > expansion. When exposing retrieval to untrusted clients, restrict query complexity as required by setting
 	 * > `plain` to `true`, `depth` to `0` or a positive value, and/or `limit` to a maximum result set size.
 	 *
+	 * @typeParam S - The shape driving the retrieval
 	 * @typeParam T - The retrieval template type
 	 *
 	 * @param request - Retrieval specifications
-	 * @param request.entry - Absolute identifier of the resource to be retrieved
-	 * @param request.shape - Resource shape driving the operation
-	 * @param request.model - Retrieval template defining the data envelope
-	 * @param opts - Optional retrieval options
-	 * @param opts.locale - {@link Tag} priority list driving language negotiation for localised content; entries are
-	 * matched in order of preference against the language tags available for each localised value. Implementations
-	 * default this to `["und"]` when omitted
-	 * @param opts.plain - When `true`, rejects `model` templates carrying aggregate transforms (`count`, `sum`, `min`,
-	 * `max`, `avg`); defaults to `false`, admitting the full query language
-	 * @param opts.depth - Maximum depth admitted for nested `model` expansion and query probe paths, each nesting
-	 * level or path segment counting against the budget; `0` rejects any nested template while still accepting IRI
-	 * references; omission leaves expansion unbounded
-	 * @param opts.limit - Maximum value admitted for the `#` pagination constraint in `model` selections; a positive
-	 * value caps the result set, rejecting any `#` exceeding it or set to `0` (unbounded) and injecting itself as a
-	 * default where `#` is absent; omission, like `0`, leaves result sets unbounded
+	 * @param opts - Retrieval options, restricting the query language admitted in `model` and negotiating the
+	 * language of localised content
 	 *
 	 * @returns A promise resolving to an immutable copy of the resource data matching the specified model,
 	 * or to `undefined` if the resource is not present in the store; rejects with a `RangeError` if `entry`
@@ -382,16 +371,56 @@ export interface StoreClient {
 	 */
 	lookup<S extends Lazy<ResourceShape>, T extends Template>(request: {
 
+		/**
+		 * Absolute identifier of the resource to be retrieved.
+		 */
 		readonly entry: Reference;
+
+		/**
+		 * Resource shape the retrieval is validated against, possibly deferred to break definition cycles.
+		 */
 		readonly shape: S;
+
+		/**
+		 * Retrieval template defining the data envelope of the result.
+		 */
 		readonly model: T;
 
 	}, opts?: {
 
+		/**
+		 * {@link Tag} priority list driving language negotiation for localised content.
+		 *
+		 * Entries are matched in order of preference against the language tags available for each localised value.
+		 *
+		 * @defaultValue `["und"]`
+		 */
 		locale?: readonly Tag[]
 
+		/**
+		 * Whether to reject `model` templates carrying aggregate transforms (`count`, `sum`, `min`, `max`, `avg`),
+		 * admitting retrieval but not computation.
+		 *
+		 * @defaultValue `false`, admitting the full query language
+		 */
 		plain?: boolean
+
+		/**
+		 * Maximum nesting admitted for `model` expansion and query probe paths, each nested resource or path segment
+		 * counting against the budget; `0` rejects any nested template while still admitting IRI references.
+		 *
+		 * @defaultValue Unbounded
+		 */
 		depth?: number
+
+		/**
+		 * Maximum page size admitted for the `#` pagination constraint in `model` selections.
+		 *
+		 * A positive value caps the result set: a `#` exceeding it or set to `0` (unbounded) is rejected, and a
+		 * selection with no `#` is held to it. `0` leaves result sets unbounded.
+		 *
+		 * @defaultValue `0`
+		 */
 		limit?: number
 
 	}): Promise<Optional<Delivery<S, T>>>;
@@ -410,9 +439,6 @@ export interface StoreClient {
 	 * data is owned by the defining resource
 	 *
 	 * @param request - Creation specifications
-	 * @param request.entry - Absolute identifier of the target resource
-	 * @param request.shape - Resource shape driving the operation
-	 * @param request.state - Initial property values for the new resource
 	 *
 	 * @returns A promise resolving to the `entry` {@link Reference} of the created resource, or to `undefined`
 	 * if the resource already exists; rejects with a `RangeError` if `entry` is not an absolute IRI or if
@@ -425,8 +451,19 @@ export interface StoreClient {
 	 */
 	create(request: {
 
+		/**
+		 * Absolute identifier of the resource to be created.
+		 */
 		readonly entry: Reference;
+
+		/**
+		 * Resource shape `state` is validated against, possibly deferred to break definition cycles.
+		 */
 		readonly shape: Lazy<ResourceShape>;
+
+		/**
+		 * Initial state of the new resource; its `id`, if stated, must match `entry`.
+		 */
 		readonly state: Resource
 
 	}): Promise<Optional<Reference>>;
@@ -444,9 +481,6 @@ export interface StoreClient {
 	 * data is owned by the defining resource
 	 *
 	 * @param request - Update specifications
-	 * @param request.entry - Absolute identifier of the target resource
-	 * @param request.shape - Resource shape driving the operation
-	 * @param request.state - Complete replacement state for the resource
 	 *
 	 * @returns A promise resolving to the `entry` {@link Reference} of the updated resource, or to `undefined`
 	 * if the resource doesn't exist; rejects with a `RangeError` if `entry` is not an absolute IRI or if
@@ -459,8 +493,19 @@ export interface StoreClient {
 	 */
 	update(request: {
 
+		/**
+		 * Absolute identifier of the resource to be updated.
+		 */
 		readonly entry: Reference;
+
+		/**
+		 * Resource shape `state` is validated against, possibly deferred to break definition cycles.
+		 */
 		readonly shape: Lazy<ResourceShape>;
+
+		/**
+		 * Complete replacement state for the resource; its `id`, if stated, must match `entry`.
+		 */
 		readonly state: Resource
 
 	}): Promise<Optional<Reference>>;
@@ -476,8 +521,6 @@ export interface StoreClient {
 	 * the same semantics
 	 *
 	 * @param request - Deletion specifications
-	 * @param request.entry - Absolute identifier of the target resource
-	 * @param request.shape - Resource shape driving the operation
 	 *
 	 * @returns A promise resolving to the `entry` {@link Reference} of the deleted resource, or to `undefined`
 	 * if the resource doesn't exist; rejects with a `RangeError` if `entry` is not an absolute IRI, or a
@@ -489,7 +532,15 @@ export interface StoreClient {
 	 */
 	delete(request: {
 
+		/**
+		 * Absolute identifier of the resource to be deleted.
+		 */
 		readonly entry: Reference;
+
+		/**
+		 * Resource shape identifying the embedded and captive data cascade-deleted with the resource, possibly
+		 * deferred to break definition cycles.
+		 */
 		readonly shape: Lazy<ResourceShape>;
 
 	}): Promise<Optional<Reference>>;
@@ -508,9 +559,6 @@ export interface StoreClient {
 	 * data is owned by the defining resource
 	 *
 	 * @param request - Insertion specifications
-	 * @param request.entry - Absolute identifier of the target resource
-	 * @param request.shape - Resource shape driving the operation
-	 * @param request.state - Complete resource state to be inserted
 	 *
 	 * @returns A promise resolving to the `entry` {@link Reference} of the inserted resource; rejects with a
 	 * `RangeError` if `entry` is not an absolute IRI or if `state` carries an `id` differing from `entry`, a
@@ -524,8 +572,19 @@ export interface StoreClient {
 	 */
 	insert(request: {
 
+		/**
+		 * Absolute identifier of the resource to be inserted or replaced.
+		 */
 		readonly entry: Reference;
+
+		/**
+		 * Resource shape `state` is validated against, possibly deferred to break definition cycles.
+		 */
 		readonly shape: Lazy<ResourceShape>;
+
+		/**
+		 * Complete state for the resource; its `id`, if stated, must match `entry`.
+		 */
 		readonly state: Resource
 
 	}): Promise<Reference>;
@@ -541,8 +600,6 @@ export interface StoreClient {
 	 * the same semantics
 	 *
 	 * @param request - Removal specifications
-	 * @param request.entry - Absolute identifier of the target resource
-	 * @param request.shape - Resource shape driving the operation
 	 *
 	 * @returns A promise resolving to the `entry` {@link Reference} of the removed resource; rejects with a
 	 * `RangeError` if `entry` is not an absolute IRI, or a {@link Problem} on network, storage, or other
@@ -554,7 +611,15 @@ export interface StoreClient {
 	 */
 	remove(request: {
 
+		/**
+		 * Absolute identifier of the resource to be removed.
+		 */
 		readonly entry: Reference;
+
+		/**
+		 * Resource shape identifying the embedded and captive data cascade-removed with the resource, possibly
+		 * deferred to break definition cycles.
+		 */
 		readonly shape: Lazy<ResourceShape>;
 
 	}): Promise<Reference>;
