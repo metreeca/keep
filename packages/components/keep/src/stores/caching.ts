@@ -65,7 +65,7 @@ import type { Store } from "../index.js";
  * The cache offers three observable guarantees:
  *
  * - **coalescing** — concurrent retrievals for the same key resolve from a single delegate fetch, and a failed
- *   retrieval is never cached, so a later retrieval re-fetches;
+ *   retrieval or one finding no resource is never cached, so a later retrieval re-fetches;
  * - **read-after-write coherence** — a retrieval never returns content staler than the latest write made through this
  *   store: {@link Store.create create}, {@link Store.update update}, {@link Store.delete delete},
  *   {@link Store.insert insert} and {@link Store.remove remove} invalidate matching entries, and a
@@ -244,7 +244,8 @@ export function createCachingStore(store: Store, {
 	 * - **fresh hit** — returns the memoised promise and re-inserts the record to bump its LRU position;
 	 * - **miss / TTL-expired** — runs `miss()`, stores the pending promise under the canonicalised key so
 	 *   concurrent callers share the in-flight request, and enforces TTL/size bounds via {@link purge}; a
-	 *   rejected fetch evicts its record only if an intervening invalidation has not already replaced it.
+	 *   fetch resolving to an absent resource or rejecting evicts its record only if an intervening invalidation
+	 *   has not already replaced it.
 	 *
 	 * @param entry - Resource identifier; paired with the canonicalised model and varying opts to form the cache key
 	 * @param model - Retrieval template, canonicalised so that equivalent templates in different orderings share a key
@@ -298,25 +299,38 @@ export function createCachingStore(store: Store, {
 			} else {
 
 				// miss (or TTL-expired): drop any stale record, run the fetcher, and memoise the pending promise
-				// under the same key so concurrent callers share the in-flight request; a failure evicts its own
-				// record through the catch handler so transient errors are not retained
+				// under the same key so concurrent callers share the in-flight request; an absent resource or a
+				// failure evicts its own record once settled, so neither a missing resource nor a transient error
+				// is retained
 
 				if ( cached ) {
 					cache.delete(key);
 				}
 
-				const value = miss().catch(error => {
+				const value: Promise<Optional<LookedUp<S, T>>> = miss().then(resource => {
 
-					// identity-check: only evict if this promise is still the cached one —
-					// avoids dropping a newer record installed after an intervening invalidate
-
-					if ( cache.get(key)?.value === value ) {
-						cache.delete(key);
+					if ( resource === undefined ) {
+						evict();
 					}
+
+					return resource;
+
+				}, error => {
+
+					evict();
 
 					throw error;
 
 				});
+
+				// identity-check: only evict if this promise is still the cached one, avoiding dropping a newer
+				// record installed after an intervening invalidate
+
+				function evict(): void {
+					if ( cache.get(key)?.value === value ) {
+						cache.delete(key);
+					}
+				}
 
 				cache.set(key, {
 

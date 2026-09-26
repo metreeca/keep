@@ -54,6 +54,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a class-less shape factored under a common supershape no longer retracts types it never wrote
 - `@metreeca/keep-sparql` — drop a nested resource carrying no content on write, rather than minting a subject
   identity with nothing under it
+- `@metreeca/keep` — `createCachingStore` no longer caches a lookup finding no resource, so a later lookup picks up
+  the resource once it exists
 
 ## [0.10.0](https://github.com/metreeca/keep/releases/tag/v0.10.0) - 2026-09-09
 

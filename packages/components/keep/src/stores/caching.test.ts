@@ -19,6 +19,7 @@ import type { Lazy } from "@metreeca/core";
 import type { Reference } from "@metreeca/qest/state";
 import type { Template } from "@metreeca/qest/model";
 import { describe, expect, it, vi } from "vitest";
+import type { LookedUp } from "../_/blue/value/index.js";
 import type { Store, StoreClient, StoreObserver } from "../index.js";
 import { createCachingStore } from "./caching.js";
 
@@ -91,7 +92,8 @@ describe("createCachingStore", () => {
 
 			lookup(specs) {
 				calls.push("lookup");
-				return overrides.lookup?.(specs) ?? Promise.resolve(undefined);
+				// a found resource, cacheable unlike absence; ;(cast) test mock: the payload shape is irrelevant here
+				return overrides.lookup?.(specs) ?? Promise.resolve({} as LookedUp<typeof specs.shape, typeof specs.model>);
 			},
 
 			create(specs) {
@@ -309,6 +311,53 @@ describe("createCachingStore", () => {
 
 			await expect(store.lookup({ entry: "/x", shape, model: {} })).rejects.toThrow("fail");
 			await expect(store.lookup({ entry: "/x", shape, model: {} })).rejects.toThrow("fail");
+
+			expect(callCount).toBe(2);
+
+		});
+
+		it("should not cache absent resources", async () => {
+
+			const mock = MockStore({ lookup: () => Promise.resolve(undefined) });
+			const store = createCachingStore(mock);
+
+			await expect(store.lookup({ entry: "/x", shape, model: {} })).resolves.toBeUndefined();
+			await expect(store.lookup({ entry: "/x", shape, model: {} })).resolves.toBeUndefined();
+
+			expect(mock.calls).toEqual(["lookup", "lookup"]);
+
+		});
+
+		it("should not evict a newer in-flight entry when a replaced entry resolves as absent", async () => {
+
+			const first = defer();
+			const second = defer();
+
+			const responses: Array<Promise<undefined>> = [first.promise, second.promise];
+			let callCount = 0;
+
+			const mock = MockStore({
+				lookup: () => {
+					callCount++;
+					return responses.shift() ?? Promise.resolve(undefined);
+				}
+			});
+
+			const store = createCachingStore(mock);
+
+			const p1 = store.lookup({ entry: "/x", shape, model: {} });
+
+			await store.create({ entry: "/x", shape, state: {} }); // invalidates /x
+
+			const p2 = store.lookup({ entry: "/x", shape, model: {} }); // stores second.promise at /x
+
+			first.resolve(undefined);
+			await p1;
+
+			const p3 = store.lookup({ entry: "/x", shape, model: {} }); // must share second.promise
+
+			second.resolve(undefined);
+			await Promise.all([p2, p3]);
 
 			expect(callCount).toBe(2);
 
