@@ -59,7 +59,9 @@
  *
  * {@link Store.lookup lookup} encodes its `model` as a URL-safe base64 query string, so any template (filter
  * operators such as `~name` and `>=price`, nested shapes, aggregates) survives transport intact; an empty template
- * omits the query string.
+ * omits the query string. Root-relative references (`/…`) in the response are resolved against the origin of the
+ * request `entry`, so the service may return them in place of absolute IRIs; any other relative reference fails
+ * response validation.
  *
  * > [!IMPORTANT]
  * > `entry` parameters MUST be bare absolute IRIs with no query string (`?…`) or fragment (`#…`): a query string
@@ -89,13 +91,13 @@ import { isError, isObject } from "@metreeca/core";
 import type { Tag } from "@metreeca/core/language";
 import { getIRIBase, resolve } from "@metreeca/core/resource";
 import { immutable } from "@metreeca/core/values";
-import { createFetch } from "@metreeca/http";
+import { Conflict, createFetch, NotFound } from "@metreeca/http";
 import { type Problem, success } from "@metreeca/http/success";
 import { transport } from "@metreeca/http/transport";
 import type { Store } from "@metreeca/keep";
 import { createManagingStore } from "@metreeca/keep/managing";
 import { createValidatingStore } from "@metreeca/keep/validating";
-import { encodeResource } from "@metreeca/qest/state";
+import { decodeResource, encodeResource } from "@metreeca/qest/state";
 import { encodeTemplate } from "@metreeca/qest/model";
 
 
@@ -168,15 +170,25 @@ export function createRESTStore({
 
 			}).then(response => {
 
-				return response.json().catch(e => {
+				// ;(cast) the decoded resource is only resolved, not checked: the wrapping validating store validates it
+				// against the requested shape and model, unless the endpoint is trusted to deliver conforming data
+
+				return response.text().then(json => decodeResource(json, {
+
+					lenient: true,
+					base: getIRIBase(entry)
+
+				}) as never).catch(e => {
+
 					throw immutable<Problem>({
 						detail: `malformed JSON in response to GET <${entry}>: ${isError(e) ? e.message : String(e)}`
 					});
+
 				});
 
 			}).catch(e => {
 
-				return isProblem(e, 404) ? undefined : Promise.reject(e);
+				return isProblem(e, NotFound) ? undefined : Promise.reject(e);
 
 			});
 
@@ -207,7 +219,7 @@ export function createRESTStore({
 
 			}).catch(e => {
 
-				return isProblem(e, 409) ? undefined : Promise.reject(e);
+				return isProblem(e, Conflict) ? undefined : Promise.reject(e);
 
 			});
 
@@ -231,7 +243,7 @@ export function createRESTStore({
 
 			}).catch(e => {
 
-				return isProblem(e, 404) ? undefined : Promise.reject(e);
+				return isProblem(e, NotFound) ? undefined : Promise.reject(e);
 
 			});
 
@@ -249,7 +261,7 @@ export function createRESTStore({
 
 			}).catch(e => {
 
-				return isProblem(e, 404) ? undefined : Promise.reject(e);
+				return isProblem(e, NotFound) ? undefined : Promise.reject(e);
 
 			});
 
@@ -297,7 +309,7 @@ export function createRESTStore({
 
 			}).catch(e => {
 
-				return isProblem(e, 404) ? entry : Promise.reject(e); // unconditional remove — 404 is a silent no-op
+				return isProblem(e, NotFound) ? entry : Promise.reject(e); // unconditional remove — 404 is a silent no-op
 
 			});
 

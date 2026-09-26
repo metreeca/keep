@@ -219,6 +219,39 @@ describe("createRESTStore", () => {
 
 		});
 
+		it("should resolve root-relative references in the response against the entry base", async () => {
+
+			const fetcher = mockFetcher(() => jsonResponse({ id: "/products/1", name: "Widget" }));
+			const store = createRESTStore({ fetch: fetcher });
+
+			const result = await store.lookup({ entry: `${base}/catalog/products/1`, shape, model: { id: {}, name: {} } });
+
+			expect(result).toEqual({ id: `${base}/products/1`, name: "Widget" });
+
+		});
+
+		it("should reject with TraceError on path-relative references in the response", async () => {
+
+			const fetcher = mockFetcher(() => jsonResponse({ id: "products/1", name: "Widget" }));
+			const store = createRESTStore({ fetch: fetcher });
+
+			await expect(store.lookup({
+				entry: `${base}/products/1`, shape, model: { id: {}, name: {} }
+			})).rejects.toBeInstanceOf(TraceError);
+
+		});
+
+		it("should reject with TraceError on a response that is not a resource", async () => {
+
+			const fetcher = mockFetcher(() => jsonResponse([{ id: `${base}/products/1`, name: "Widget" }]));
+			const store = createRESTStore({ fetch: fetcher });
+
+			await expect(store.lookup({
+				entry: `${base}/products/1`, shape, model: { id: {}, name: {} }
+			})).rejects.toBeInstanceOf(TraceError);
+
+		});
+
 		it("should return undefined on 404", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(404));

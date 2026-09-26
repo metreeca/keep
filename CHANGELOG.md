@@ -12,6 +12,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `@metreeca/keep-suite` — `Probe`, the fact probe type accepted by `StoreTestOptions.includes` and
   `StoreTestOptions.excludes`, holding each asserted slot to its declared type where the shape is concrete and
   admitting any resource where the shape is left abstract
+- `@metreeca/keep-rest` — `Store.lookup` accepts root-relative references (`/…`) in responses, resolving them
+  against the origin of the request `entry`
 
 ### Changed
 
