@@ -34,6 +34,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   cardinality the property itself declares
 - Track the `@metreeca/qest` module renames to `model` and `state`
 - Track the `@metreeca/core` module rename from `structures` to `values`
+- `@metreeca/keep-rest` — `createRESTStore` takes its `fetch` transport as an option alongside `trusted`, in place of
+  a leading positional argument
 
 ### Removed
 

@@ -101,7 +101,7 @@ describe("createRESTStore", () => {
 			async (_method, _kind, entry, call) => {
 
 				const fetcher = mockFetcher(() => emptyResponse());
-				const store = createRESTStore(fetcher);
+				const store = createRESTStore({ fetch: fetcher });
 
 				await expect(call(store, entry)).rejects.toBeInstanceOf(RangeError);
 				expect(fetcher).not.toHaveBeenCalled();
@@ -116,7 +116,7 @@ describe("createRESTStore", () => {
 		it("should send GET request to entry", async () => {
 
 			const fetcher = mockFetcher(() => jsonResponse({ id: `${base}/products/1`, name: "Widget" }));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			await store.lookup({ entry: `${base}/products/1`, shape, model: { id: {}, name: {} } });
 
@@ -141,7 +141,7 @@ describe("createRESTStore", () => {
 			it.each(cases)("should forward %s as Accept-Language", async (_label, locale, expected) => {
 
 				const fetcher = mockFetcher(() => jsonResponse({ id: `${base}/products/1`, name: "Widget" }));
-				const store = createRESTStore(fetcher);
+				const store = createRESTStore({ fetch: fetcher });
 
 				await store.lookup({ entry: `${base}/products/1`, shape, model: { id: {}, name: {} } }, { locale });
 
@@ -154,7 +154,7 @@ describe("createRESTStore", () => {
 			it("should omit Accept-Language when no locale is supplied", async () => {
 
 				const fetcher = mockFetcher(() => jsonResponse({ id: `${base}/products/1`, name: "Widget" }));
-				const store = createRESTStore(fetcher);
+				const store = createRESTStore({ fetch: fetcher });
 
 				await store.lookup({ entry: `${base}/products/1`, shape, model: { id: {}, name: {} } });
 
@@ -167,7 +167,7 @@ describe("createRESTStore", () => {
 			it("should omit Accept-Language for an empty locale list", async () => {
 
 				const fetcher = mockFetcher(() => jsonResponse({ id: `${base}/products/1`, name: "Widget" }));
-				const store = createRESTStore(fetcher);
+				const store = createRESTStore({ fetch: fetcher });
 
 				await store.lookup({ entry: `${base}/products/1`, shape, model: { id: {}, name: {} } }, { locale: [] });
 
@@ -182,7 +182,7 @@ describe("createRESTStore", () => {
 		it("should encode the model as a base64 query string", async () => {
 
 			const fetcher = mockFetcher(() => jsonResponse({ id: `${base}/products/1`, name: "Widget" }));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			const model = { id: {}, name: {} };
 			await store.lookup({ entry: `${base}/products/1`, shape, model });
@@ -198,7 +198,7 @@ describe("createRESTStore", () => {
 		it("should omit the query string for an empty template", async () => {
 
 			const fetcher = mockFetcher(() => jsonResponse({}));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			await store.lookup({ entry: `${base}/products/1`, shape, model: {} });
 
@@ -211,7 +211,7 @@ describe("createRESTStore", () => {
 		it("should return parsed response data", async () => {
 
 			const fetcher = mockFetcher(() => jsonResponse({ id: `${base}/products/1`, name: "Widget" }));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			const result = await store.lookup({ entry: `${base}/products/1`, shape, model: { id: {}, name: {} } });
 
@@ -222,7 +222,7 @@ describe("createRESTStore", () => {
 		it("should return undefined on 404", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(404));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			const result = await store.lookup({ entry: `${base}/products/999`, shape, model: { id: {}, name: {} } });
 
@@ -233,7 +233,7 @@ describe("createRESTStore", () => {
 		it("should reject with Problem on server error", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(500));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			await expect(store.lookup({
 				entry: `${base}/products/1`, shape, model: { id: {}, name: {} }
@@ -249,7 +249,7 @@ describe("createRESTStore", () => {
 				headers: { "Content-Type": "application/json" }
 			}));
 
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			await expect(store.lookup({
 				entry: `${base}/products/1`, shape, model: { id: {}, name: {} }
@@ -260,7 +260,7 @@ describe("createRESTStore", () => {
 		it("should reject with TraceError on model that doesn't match the shape", async () => {
 
 			const fetcher = mockFetcher(() => jsonResponse({ id: `${base}/products/1`, name: "Widget" }));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			await expect(store.lookup({
 				entry: `${base}/products/1`, shape, model: { id: "", name: 42 } as never // wrong type
@@ -273,7 +273,7 @@ describe("createRESTStore", () => {
 		it("should reject with TraceError on response that doesn't match the shape", async () => {
 
 			const fetcher = mockFetcher(() => jsonResponse({ name: 42 })); // number where string expected
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			await expect(store.lookup({
 				entry: `${base}/products/1`, shape, model: { id: {}, name: {} }
@@ -284,7 +284,7 @@ describe("createRESTStore", () => {
 		it("should skip response validation when trusted", async () => {
 
 			const fetcher = mockFetcher(() => jsonResponse({ name: 42 })); // violates the shape
-			const store = createRESTStore(fetcher, { trusted: true });
+			const store = createRESTStore({ trusted: true, fetch: fetcher });
 
 			const result = await store.lookup({ entry: `${base}/products/1`, shape, model: { id: {}, name: {} } });
 
@@ -295,7 +295,7 @@ describe("createRESTStore", () => {
 		it("should not emit mutation events", async () => {
 
 			const fetcher = mockFetcher(() => jsonResponse({ id: `${base}/x`, name: "W" }));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 			const observer = vi.fn<StoreObserver>();
 
 			store.observe(observer);
@@ -312,7 +312,7 @@ describe("createRESTStore", () => {
 		it("should send POST request with body", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(201, { "Location": `${base}/products/42` }));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			await store.create({ entry: `${base}/products/`, shape, state: { name: "Widget" } });
 
@@ -327,7 +327,7 @@ describe("createRESTStore", () => {
 		it("should return the resolved Location on success", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(201, { "Location": `${base}/products/42` }));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			expect(await store.create({ entry: `${base}/products/`, shape, state: { name: "Widget" } }))
 				.toBe(`${base}/products/42`);
@@ -337,7 +337,7 @@ describe("createRESTStore", () => {
 		it("should return undefined on 409 conflict", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(409));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			expect(await store.create({ entry: `${base}/products/`, shape, state: { name: "Widget" } }))
 				.toBeUndefined();
@@ -347,7 +347,7 @@ describe("createRESTStore", () => {
 		it("should reject with Problem on server error", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(500));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			await expect(store.create({ entry: `${base}/products/`, shape, state: { name: "Widget" } }))
 				.rejects.toMatchObject({ status: 500 });
@@ -357,7 +357,7 @@ describe("createRESTStore", () => {
 		it("should reject with Problem when Location header is missing", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(201));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			await expect(store.create({
 				entry: `${base}/products/`, shape, state: { name: "Widget" }
@@ -368,7 +368,7 @@ describe("createRESTStore", () => {
 		it("should reject with TraceError on state that doesn't match the shape", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(201));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			await expect(store.create({
 				entry: `${base}/products/`, shape, state: { name: 42 } as never // wrong type
@@ -381,7 +381,7 @@ describe("createRESTStore", () => {
 		it("should notify with Location header when present", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(201, { "Location": `${base}/products/42` }));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 			const observer = vi.fn<StoreObserver>();
 
 			store.observe(observer);
@@ -394,7 +394,7 @@ describe("createRESTStore", () => {
 		it("should resolve a relative Location against entry", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(201, { "Location": "/products/42" }));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 			const observer = vi.fn<StoreObserver>();
 
 			store.observe(observer);
@@ -407,7 +407,7 @@ describe("createRESTStore", () => {
 		it("should strip the last path segment when resolving a relative Location against a non-directory entry", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(201, { "Location": "42" }));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			expect(await store.create({ entry: `${base}/products/1`, shape, state: { name: "Widget" } }))
 				.toBe(`${base}/products/42`);
@@ -418,7 +418,7 @@ describe("createRESTStore", () => {
 
 			const foreign = "http://cdn.example.net/products/42";
 			const fetcher = mockFetcher(() => emptyResponse(201, { "Location": foreign }));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			expect(await store.create({ entry: `${base}/products/`, shape, state: { name: "Widget" } }))
 				.toBe(foreign);
@@ -428,7 +428,7 @@ describe("createRESTStore", () => {
 		it("should throw on a malformed Location", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(201, { "Location": "not a url {{{" }));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			await expect(store.create({
 				entry: `${base}/products/`, shape, state: { name: "Widget" }
@@ -443,7 +443,7 @@ describe("createRESTStore", () => {
 		it("should send PUT request with body and no Prefer header", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(204));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			await store.update({ entry: `${base}/products/1`, shape, state: { name: "Updated" } });
 
@@ -459,7 +459,7 @@ describe("createRESTStore", () => {
 		it("should return entry on success", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(204));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			expect(await store.update({ entry: `${base}/products/1`, shape, state: { name: "Updated" } }))
 				.toBe(`${base}/products/1`);
@@ -469,7 +469,7 @@ describe("createRESTStore", () => {
 		it("should return undefined on 404", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(404));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			expect(await store.update({ entry: `${base}/products/999`, shape, state: { name: "X" } }))
 				.toBeUndefined();
@@ -479,7 +479,7 @@ describe("createRESTStore", () => {
 		it("should reject with Problem on server error", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(500));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			await expect(store.update({ entry: `${base}/products/1`, shape, state: { name: "X" } }))
 				.rejects.toMatchObject({ status: 500 });
@@ -489,7 +489,7 @@ describe("createRESTStore", () => {
 		it("should reject with TraceError on state that doesn't match the shape", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(204));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			await expect(store.update({
 				entry: `${base}/products/1`, shape, state: { name: 42 } as never
@@ -502,7 +502,7 @@ describe("createRESTStore", () => {
 		it("should notify observer on update", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(204));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 			const observer = vi.fn<StoreObserver>();
 
 			store.observe(observer);
@@ -519,7 +519,7 @@ describe("createRESTStore", () => {
 		it("should send DELETE request with no Prefer header", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(204));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			await store.delete({ entry: `${base}/products/1`, shape });
 
@@ -534,7 +534,7 @@ describe("createRESTStore", () => {
 		it("should return entry on success", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(204));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			expect(await store.delete({ entry: `${base}/products/1`, shape }))
 				.toBe(`${base}/products/1`);
@@ -544,7 +544,7 @@ describe("createRESTStore", () => {
 		it("should return undefined on 404", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(404));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			expect(await store.delete({ entry: `${base}/products/999`, shape }))
 				.toBeUndefined();
@@ -554,7 +554,7 @@ describe("createRESTStore", () => {
 		it("should reject with Problem on server error", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(500));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			await expect(store.delete({ entry: `${base}/products/1`, shape }))
 				.rejects.toMatchObject({ status: 500 });
@@ -564,7 +564,7 @@ describe("createRESTStore", () => {
 		it("should notify observer on delete", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(204));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 			const observer = vi.fn<StoreObserver>();
 
 			store.observe(observer);
@@ -581,7 +581,7 @@ describe("createRESTStore", () => {
 		it("should PUT resource unconditionally with Prefer: handling=lenient", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(200));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			await store.insert({ entry: `${base}/products/1`, shape, state: { name: "Widget" } });
 
@@ -597,7 +597,7 @@ describe("createRESTStore", () => {
 		it("should return entry on success", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(200));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			expect(await store.insert({ entry: `${base}/products/1`, shape, state: { name: "Widget" } }))
 				.toBe(`${base}/products/1`);
@@ -607,7 +607,7 @@ describe("createRESTStore", () => {
 		it("should propagate 404 from a server that ignores Prefer: handling=lenient", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(404));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			await expect(store.insert({ entry: `${base}/products/1`, shape, state: { name: "Widget" } }))
 				.rejects.toMatchObject({ status: 404 });
@@ -617,7 +617,7 @@ describe("createRESTStore", () => {
 		it("should reject with TraceError on state that doesn't match the shape", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(200));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			await expect(store.insert({
 				entry: `${base}/products/1`, shape, state: { name: 42 } as never
@@ -630,7 +630,7 @@ describe("createRESTStore", () => {
 		it("should notify observer on insert", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(200));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 			const observer = vi.fn<StoreObserver>();
 
 			store.observe(observer);
@@ -647,7 +647,7 @@ describe("createRESTStore", () => {
 		it("should DELETE entry unconditionally with Prefer: handling=lenient", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(204));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			await store.remove({ entry: `${base}/products/1`, shape });
 
@@ -662,7 +662,7 @@ describe("createRESTStore", () => {
 		it("should return entry on success", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(204));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			expect(await store.remove({ entry: `${base}/products/1`, shape }))
 				.toBe(`${base}/products/1`);
@@ -672,7 +672,7 @@ describe("createRESTStore", () => {
 		it("should silently return entry on 404", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(404));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			expect(await store.remove({ entry: `${base}/products/999`, shape }))
 				.toBe(`${base}/products/999`);
@@ -682,7 +682,7 @@ describe("createRESTStore", () => {
 		it("should reject with Problem on server error", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(500));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 
 			await expect(store.remove({ entry: `${base}/products/1`, shape }))
 				.rejects.toMatchObject({ status: 500 });
@@ -692,7 +692,7 @@ describe("createRESTStore", () => {
 		it("should notify observer on 404", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(404));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 			const observer = vi.fn<StoreObserver>();
 
 			store.observe(observer);
@@ -705,7 +705,7 @@ describe("createRESTStore", () => {
 		it("should notify observer on remove", async () => {
 
 			const fetcher = mockFetcher(() => emptyResponse(204));
-			const store = createRESTStore(fetcher);
+			const store = createRESTStore({ fetch: fetcher });
 			const observer = vi.fn<StoreObserver>();
 
 			store.observe(observer);

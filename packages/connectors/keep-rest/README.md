@@ -50,7 +50,7 @@ const product = await store.lookup({
 });
 ```
 
-Pass a custom `fetch`-compatible transport as the first argument to route requests through a configured client; pass
+Pass `{ fetch }` with a `fetch`-compatible transport to route requests through a configured client, and
 `{ trusted: true }` to skip re-validation of retrieval responses when the remote endpoint is trusted to deliver
 shape-conforming data.
 

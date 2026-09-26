@@ -116,16 +116,16 @@ import { encodeTemplate } from "@metreeca/qest/model";
  * > **Mutation Events** — Limited to mutations issued through this store; mutations from other clients
  * > sharing the remote service are not observed.
  *
- * @param fetch - Fetch-compatible transport used for every HTTP request; defaults to the global
- *   `fetch`
  * @param options - Optional proxy options
  *
  * @returns An immutable {@link Store} whose methods round-trip every call to the remote
  *   REST service
  */
-export function createRESTStore(fetch: typeof globalThis.fetch = globalThis.fetch, {
+export function createRESTStore({
 
-	trusted = false
+	trusted = false,
+
+	fetch = globalThis.fetch
 
 }: {
 
@@ -135,6 +135,15 @@ export function createRESTStore(fetch: typeof globalThis.fetch = globalThis.fetc
 	 * @defaultValue `false`, treating the remote endpoint as untrusted
 	 */
 	readonly trusted?: boolean
+
+	/**
+	 * Fetch-compatible transport used for every HTTP request.
+	 *
+	 * Supply a configured client to add authentication, custom headers, or other cross-cutting request handling.
+	 *
+	 * @defaultValue the global `fetch`
+	 */
+	readonly fetch?: typeof globalThis.fetch
 
 } = {}): Store {
 
