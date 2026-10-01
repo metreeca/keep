@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import type { Instance } from "@metreeca/blue/value";
+import type { State } from "@metreeca/blue/value";
 import type { Store, StoreClient } from "@metreeca/keep";
 import { describe, expect, it } from "vitest";
 import { collect, type TestFactory } from "../index.core.js";
-import { collections, testProduct } from "../toys.core.js";
+import { collections, created, testProduct } from "../toys.core.js";
 import { Product } from "../toys.js";
 
 
@@ -31,10 +31,10 @@ const priceModel = { price: {} };
 /**
  * Atomicity conformance tests for {@link Store.execute}.
  *
- * Atomicity is universal: a store buffers writes and commits them only once the task resolves,
- * dropping the buffer on failure — so all-or-nothing holds regardless of the backend's isolation level. Its
- * observable side, the batched mutation event (one event per committed transaction, none on rollback), is part
- * of the same contract and is covered here under `notifications`. These tests run for every connector.
+ * These tests assert all-or-nothing commit: a transaction commits its writes only once the task resolves and discards
+ * them on failure, regardless of the backend's isolation level. The batched mutation event (one event per committed
+ * transaction, none on rollback) is part of the same contract and is covered under `notifications`. Atomicity is
+ * best-effort: a connector applying mutations eagerly, with no rollback, ignores `"ManageExecuteAtomicity"`.
  */
 export function testManageExecuteAtomicity(factory: TestFactory<Store>): void {
 
@@ -53,7 +53,7 @@ export function testManageExecuteAtomicity(factory: TestFactory<Store>): void {
 			const state = testProduct("TXN-001", "Transaction Test Product");
 
 			await store.execute(async (s) => {
-				await s.create({ entry: state.id, shape: Product, state });
+				await created(s, { entry: state.id, shape: Product, state });
 			});
 
 			const retrieved = await store.lookup({ shape: Product, entry: state.id, model: priceModel });
@@ -73,7 +73,7 @@ export function testManageExecuteAtomicity(factory: TestFactory<Store>): void {
 			const state = testProduct(sku, "Rollback Test Product");
 
 			await expect(store.execute(async (s) => {
-				await s.create({ entry: state.id, shape: Product, state });
+				await created(s, { entry: state.id, shape: Product, state });
 				if ( mode === "sync" ) {
 					throw new Error(message);
 				} else {
@@ -101,7 +101,7 @@ export function testManageExecuteAtomicity(factory: TestFactory<Store>): void {
 
 			await expect(store.execute(async (s) => {
 				await s.update({ entry: updateState.id, shape: Product, state: updateState });
-				await s.create({ entry: newState.id, shape: Product, state: newState });
+				await created(s, { entry: newState.id, shape: Product, state: newState });
 				throw new Error("mixed rollback");
 			})).rejects.toThrow("mixed rollback");
 
@@ -130,7 +130,7 @@ export function testManageExecuteAtomicity(factory: TestFactory<Store>): void {
 
 				await store.execute(async (s) => {
 
-					await s.create({ entry: state.id, shape: Product, state });
+					await created(s, { entry: state.id, shape: Product, state });
 
 					// observer must not have been called yet
 
@@ -147,12 +147,12 @@ export function testManageExecuteAtomicity(factory: TestFactory<Store>): void {
 
 				const { changes } = collect(store);
 
-				const created = testProduct("TXN-OBS-002", "Batched Create");
+				const fresh = testProduct("TXN-OBS-002", "Batched Create");
 				const existing = await generate(products[0], Product);
 
 				await store.execute(async (s) => {
 
-					await s.create({ entry: created.id, shape: Product, state: created });
+					await created(s, { entry: fresh.id, shape: Product, state: fresh });
 					await s.update({
 						entry: existing.id,
 						shape: Product,
@@ -166,7 +166,7 @@ export function testManageExecuteAtomicity(factory: TestFactory<Store>): void {
 				expect(changes).toHaveLength(1);
 
 				expect(changes[0]).toEqual({
-					[created.id]: true,
+					[fresh.id]: true,
 					[existing.id]: true
 				});
 
@@ -179,7 +179,7 @@ export function testManageExecuteAtomicity(factory: TestFactory<Store>): void {
 				const state = testProduct("TXN-OBS-003", "Rollback No Notify");
 
 				await expect(store.execute(async (s) => {
-					await s.create({ entry: state.id, shape: Product, state });
+					await created(s, { entry: state.id, shape: Product, state });
 					throw new Error("rollback");
 				})).rejects.toThrow("rollback");
 
@@ -191,12 +191,12 @@ export function testManageExecuteAtomicity(factory: TestFactory<Store>): void {
 
 				const { changes } = collect(store);
 
-				const created = testProduct("TXN-OBS-004", "Batch Mixed");
+				const fresh = testProduct("TXN-OBS-004", "Batch Mixed");
 				const existing = await generate(products[0], Product);
 
 				await store.execute(async (s) => {
 
-					await s.create({ entry: created.id, shape: Product, state: created });
+					await created(s, { entry: fresh.id, shape: Product, state: fresh });
 					await s.delete({ entry: existing.id, shape: Product });
 
 				});
@@ -204,7 +204,7 @@ export function testManageExecuteAtomicity(factory: TestFactory<Store>): void {
 				expect(changes).toHaveLength(1);
 
 				expect(changes[0]).toEqual({
-					[created.id]: true,
+					[fresh.id]: true,
 					[existing.id]: false
 				});
 
@@ -260,7 +260,7 @@ export function testManageExecuteAtomicity(factory: TestFactory<Store>): void {
 						shape: Product,
 						state: { ...existing, price: 0.01 }
 					});
-					await s.create({ entry: unrelated.id, shape: Product, state: unrelated });
+					await created(s, { entry: unrelated.id, shape: Product, state: unrelated });
 
 				});
 
@@ -302,7 +302,7 @@ export function testManageExecuteAtomicity(factory: TestFactory<Store>): void {
 					const state = testProduct(code, "Observer Failure Ignored");
 
 					await store.execute(async (s) => {
-						await s.create({ entry: state.id, shape: Product, state });
+						await created(s, { entry: state.id, shape: Product, state });
 					});
 
 					expect(changes).toContainEqual({ [state.id]: true });
@@ -320,11 +320,10 @@ export function testManageExecuteAtomicity(factory: TestFactory<Store>): void {
 /**
  * Transaction-isolation conformance tests for {@link Store.execute}.
  *
- * These tests assume the suggested **SNAPSHOT** level and assert its read-visibility semantics: reads taken
- * through the per-call `Store` observe the transaction's start snapshot — the transaction's own uncommitted
- * writes stay invisible until commit, and concurrent transactions do not see each other's pending writes. A
- * connector that provides a weaker level excludes this suite via the `ManageExecuteIsolation` filter while keeping
- * the universal atomicity contract.
+ * These tests assume the suggested **SNAPSHOT** level and assert its read-visibility semantics: reads taken through
+ * the client handed to the task observe the transaction's start snapshot. The transaction's own uncommitted writes
+ * stay invisible until commit, and concurrent transactions do not see each other's pending writes. A connector
+ * providing a weaker level ignores `"ManageExecuteIsolation"`, independently of `"ManageExecuteAtomicity"`.
  */
 export function testManageExecuteIsolation(factory: TestFactory<Store>): void {
 
@@ -339,7 +338,7 @@ export function testManageExecuteIsolation(factory: TestFactory<Store>): void {
 
 			await store.execute(async (s) => {
 
-				await s.create({ entry: state.id, shape: Product, state });
+				await created(s, { entry: state.id, shape: Product, state });
 
 				const retrieved = await s.lookup({ shape: Product, entry: state.id, model: priceModel });
 
@@ -350,17 +349,17 @@ export function testManageExecuteIsolation(factory: TestFactory<Store>): void {
 		}));
 
 		it.each([
-			["update", (s: StoreClient, e: Instance<typeof Product>) => s.update({
+			["update", (s: StoreClient, e: State<typeof Product>) => s.update({
 				entry: e.id,
 				shape: Product,
 				state: { ...e, price: 0.01 }
 			})],
-			["insert", (s: StoreClient, e: Instance<typeof Product>) => s.insert({
+			["insert", (s: StoreClient, e: State<typeof Product>) => s.insert({
 				entry: e.id,
 				shape: Product,
 				state: { ...e, price: 0.02 }
 			})],
-			["delete", (s: StoreClient, e: Instance<typeof Product>) => s.delete({ entry: e.id, shape: Product })]
+			["delete", (s: StoreClient, e: State<typeof Product>) => s.delete({ entry: e.id, shape: Product })]
 		] as const)("should not observe an own buffered %s within the transaction", (_op, mutate) => factory(async ({
 			store,
 			generate
@@ -421,7 +420,7 @@ export function testManageExecuteIsolation(factory: TestFactory<Store>): void {
 				const aWaits = new Promise<void>(resolve => { aMayFinish = resolve; });
 
 				const a = store.execute(async (s) => {
-					await s.create({ entry: stateA.id, shape: Product, state: stateA });
+					await created(s, { entry: stateA.id, shape: Product, state: stateA });
 					bEntered();         // hand off to B
 					await aWaits;        // hold A open until B has buffered its write
 					if ( failer === "A" ) {
@@ -431,7 +430,7 @@ export function testManageExecuteIsolation(factory: TestFactory<Store>): void {
 
 				const b = store.execute(async (s) => {
 					await bEnters;       // wait until A has buffered its write
-					await s.create({ entry: stateB.id, shape: Product, state: stateB });
+					await created(s, { entry: stateB.id, shape: Product, state: stateB });
 					aMayFinish();       // release A so it can throw or commit
 					if ( failer === "B" ) {
 						throw new Error("B fails");
@@ -474,14 +473,14 @@ export function testManageExecuteIsolation(factory: TestFactory<Store>): void {
 				const aWaits = new Promise<void>(resolve => { aMayFinish = resolve; });
 
 				const a = store.execute(async (s) => {
-					await s.create({ entry: stateA.id, shape: Product, state: stateA });
+					await created(s, { entry: stateA.id, shape: Product, state: stateA });
 					bEntered();         // hand off to B
 					await aWaits;        // hold A open until B has buffered its write
 				});
 
 				const b = store.execute(async (s) => {
 					await bEnters;       // wait until A has buffered its write
-					await s.create({ entry: stateB.id, shape: Product, state: stateB });
+					await created(s, { entry: stateB.id, shape: Product, state: stateB });
 					aMayFinish();       // release A so it can commit
 				});
 

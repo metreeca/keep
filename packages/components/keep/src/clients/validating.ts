@@ -17,53 +17,51 @@
 /**
  * Validating store wrapper.
  *
- * Wraps a plain {@link StoreClient} with shape-driven validation of entries, models, and states
- * before delegating, and optional re-validation of retrieval responses.
+ * Guards a {@link StoreClient} against malformed requests, checking entries, models and states against the request
+ * shape before they reach the backend. Retrieval responses from untrusted sources can be re-validated as well.
  *
  * @module
  */
 
 import { validate } from "@metreeca/blue";
-import type { Delivery } from "@metreeca/blue/value";
-import type { Optional } from "@metreeca/core";
-import { immutable } from "@metreeca/core/structures";
+import type { ResourceShape } from "@metreeca/blue/resource";
+import { blueprint, type Match } from "@metreeca/blue/value";
+import { error, type Lazy, type Optional } from "@metreeca/core";
+import { isNestedIRI } from "@metreeca/core/resource";
 import { TraceError } from "@metreeca/core/trace";
-
-import { isReference, type Reference } from "@metreeca/qest/state";
-
-import type { Store, StoreClient } from "../index.js";
+import { immutable } from "@metreeca/core/values";
+import type { Template } from "@metreeca/qest/model";
+import { isReference, type Reference, type Resource } from "@metreeca/qest/state";
+import type { Store, StoreClient, StoreScope } from "../index.js";
 
 
 /**
  * Creates a validating store backed by a delegate.
  *
- * Each method validates the relevant inputs against the supplied shape before delegating to `store`:
+ * Each method validates its inputs against the supplied shape before forwarding the request to `store`:
  *
- * - `entry` is checked for absolute-IRI form (no query string, no fragment) — failures rejected as `RangeError`
- * - `state.id`, when present, is checked for equality with `entry` — mismatches rejected as `RangeError`, since
- *   the entry identifies the target and a contradicting payload identity is a caller error
- * - `model` is validated as a {@link @metreeca/blue!validate | template} for
- *   {@link StoreClient.lookup lookup}, with the `lookup` `plain`/`depth`/`limit` opts forwarded as
- *   query-complexity caps
- * - `state` is validated as a resource for {@link StoreClient.create create}/
- *   {@link StoreClient.update update}/{@link StoreClient.insert insert}; `create` and
- * `update` always cap captive expansion at depth `0` (inline captive batches rejected), while `insert` honours its
- * `depth` opt
- *   (omitted leaves expansion unbounded)
+ * - `entry` must be an absolute IRI with no query string and no fragment; otherwise the request is rejected with a
+ *   {@link !RangeError RangeError}
+ * - `model` is validated as a {@link @metreeca/blue!validate | template} for {@link StoreClient.lookup lookup},
+ *   within the query-complexity bounds (`plain`, `depth`, `limit`) of the caller's
+ *   {@link StoreScope | retrieval scope}, and as a collection slice for {@link StoreClient.create create}
+ * - `state.id`, if present, must be nested under `entry` for {@link StoreClient.create create}, and equal to `entry`
+ *   for {@link StoreClient.update update} and {@link StoreClient.insert insert}; otherwise the request is rejected
+ *   with a {@link !RangeError RangeError}
+ * - `state` is validated as a resource with captive expansion capped at depth `0`, so inline captive batches are
+ *   rejected; {@link StoreClient.create create} validates it against the shape of the collected resources, and
+ *   {@link StoreClient.update update} and {@link StoreClient.insert insert} against the supplied shape
  *
- * The `trusted` opt controls whether {@link StoreClient.lookup lookup} responses are re-validated
- * against the shape narrowed by the caller's `model` template before surfacing. Defaults to `false`
- * — connectors whose backing source isn't trusted to deliver shape-conforming data (for example, a
- * remote REST endpoint) get the safe default. Local stores that compute results themselves should
- * pass `trusted: true` to skip the redundant pass.
+ * The `trusted` option controls whether {@link StoreClient.lookup lookup} responses are re-validated against the
+ * shape, as narrowed by the caller's `model`. It defaults to `false`, the safe choice for connectors whose source may
+ * deliver non-conforming data, such as a remote REST endpoint. Local stores that compute results themselves can pass
+ * `trusted: true` to skip the redundant check.
  *
- * Validation failures surface as {@link @metreeca/core!TraceError | TraceError} or `RangeError` rejections per the
- * unified {@link Store} error channel.
+ * Validation failures surface as {@link @metreeca/core!TraceError | TraceError} or {@link !RangeError RangeError}
+ * rejections, in line with the unified {@link Store} error channel.
  *
- * @param store - Inner StoreClient to delegate to after validation
+ * @param store - Inner StoreClient receiving the validated requests
  * @param options - Optional validation options
- * @param options.trusted - When `true`, skips re-validation of the {@link StoreClient.lookup lookup}
- *     response against the shape narrowed by the caller's `model`; defaults to `false`
  *
  * @returns An immutable {@link StoreClient} wrapping `store` with input validation
  */
@@ -73,6 +71,12 @@ export function createValidatingStore(store: StoreClient, {
 
 }: {
 
+	/**
+	 * Whether to skip re-validation of {@link StoreClient.lookup lookup} responses against the shape, as narrowed by
+	 * the caller's `model`.
+	 *
+	 * @defaultValue `false`, treating the wrapped store as untrusted
+	 */
 	readonly trusted?: boolean
 
 } = {}): StoreClient {
@@ -86,52 +90,63 @@ export function createValidatingStore(store: StoreClient, {
 				entry: assertEntry(entry),
 				shape,
 
-				model: validate<typeof model>(model, { ...opts, shape, model: true })({
-					value: value => value,
-					trace: trace => { throw new TraceError("invalid model", trace ?? []); }
-				})
+				model: assertModel(model, shape, opts)
 
 			}, opts).then(result => {
 
-				// ;(cast) blue validates the response against the very shape and model the store was given, so the
-				// value it hands back is the requested instance; blue resolves the leaf types from the shape while
-				// the store's own signature still reads them off the model (see `_inference.ts`)
+				// ;(cast) blue types the validated copy by its own `Delivery` inference rather than by the `Match`
+				// the store states; the copy is returned, rather than the raw response, as it carries the verdict
 
 				return (trusted || result === undefined ? immutable(result) : validate(result, { shape, model })({
 					value: value => value,
 					trace: trace => { throw new TraceError("invalid response", trace ?? []); }
-				})) as Optional<Delivery<typeof shape, typeof model>>;
+				})) as Optional<Match<typeof shape, typeof model>>;
 
 			});
 
 		},
 
+		async create({ entry, shape, model, state }) {
 
-		async create({ entry, shape, state }) {
+			const $entry = assertEntry(entry);
 
-			return store.create({
-
-				entry: assertEntry(entry),
-				shape,
-
-				state: validate(state, { shape, depth: 0 })({
-					value: value => value,
-					trace: trace => { throw new TraceError("invalid state", trace ?? []); }
-				})
-
+			const $model = validate<typeof model>(model, { shape, model: true })({
+				value: value => value,
+				trace: trace => { throw new TraceError("invalid model", trace ?? []); }
 			});
+
+			// the new resource is validated against the shape the collecting property ranges over, and a stated
+			// identifier is held to the collection it is created through
+
+			const plan = blueprint(shape, $model);
+			const { id }: Resource = state;
+
+			const $state: typeof state = id === undefined || isReference(id) && isNestedIRI($entry, id) ? state
+				: error(new RangeError(`state id <${String(id)}> not nested under entry <${entry}>`));
+
+			// the validator hands back the state itself where it passes, so the typed input is relayed as it
+			// stands once the check has run, the blueprint being resolved at runtime rather than typed
+
+			validate($state, { shape: plan, depth: 0 })({
+				value: () => undefined,
+				trace: trace => { throw new TraceError("invalid state", trace ?? []); }
+			});
+
+			return store.create({ entry: $entry, shape, model: $model, state: $state });
 
 		},
 
 		async update({ entry, shape, state }) {
 
+			const $entry = assertEntry(entry);
+
 			return store.update({
 
-				entry: assertEntry(entry),
+				entry: $entry,
 				shape,
 
-				state: validate(state, { shape, depth: 0 })({
-					value: value => value,
+				state: validate(assertIdentity($entry, state), { shape, depth: 0 })({
+					value: () => state,
 					trace: trace => { throw new TraceError("invalid state", trace ?? []); }
 				})
 
@@ -146,19 +161,21 @@ export function createValidatingStore(store: StoreClient, {
 		},
 
 
-		async insert({ entry, shape, state }, opts) {
+		async insert({ entry, shape, state }) {
+
+			const $entry = assertEntry(entry);
 
 			return store.insert({
 
-				entry: assertEntry(entry),
+				entry: $entry,
 				shape,
 
-				state: validate(state, { ...opts, shape })({
-					value: value => value,
+				state: validate(assertIdentity($entry, state), { shape, depth: 0 })({
+					value: () => state,
 					trace: trace => { throw new TraceError("invalid state", trace ?? []); }
 				})
 
-			}, opts);
+			});
 
 		},
 
@@ -187,6 +204,24 @@ export function createValidatingStore(store: StoreClient, {
 		}
 
 		return entry;
+
+	}
+
+	function assertIdentity<T extends Resource>(entry: Reference, state: T): T {
+
+		const { id }: Resource = state;
+
+		return id === undefined || id === entry ? state
+			: error(new RangeError(`mismatched state id <${String(id)}> for entry <${entry}>`));
+
+	}
+
+	function assertModel<T extends Template>(model: T, shape: Lazy<ResourceShape>, opts: StoreScope = {}): T {
+
+		return validate<T>(model, { ...opts, shape, model: true })({
+			value: value => value,
+			trace: trace => { throw new TraceError("invalid model", trace ?? []); }
+		});
 
 	}
 

@@ -5,10 +5,10 @@
 Shape-driven traversal trees for connectors of the [@metreeca/keep](https://github.com/metreeca/keep) model-driven
 linked data storage framework.
 
-Reorganises a resource shape and its optional retrieval model or collection query into a single traversal tree that any
-shape-driven processor walks in place of correlating the raw shape with the raw input at every step. Like every package
-in the framework, the representation is driven entirely by the supplied resource shape, with no hardcoded property names
-or dataset-specific assumptions.
+Gathers a resource shape and its optional retrieval template or collection query into a single traversal tree. A
+connector walks that tree directly, instead of matching the raw shape against the raw request at every step. As
+everywhere in the framework, the tree is driven entirely by the supplied resource shape, with no hardcoded property
+names or dataset-specific assumptions.
 
 # Installation
 
@@ -23,9 +23,16 @@ npm install @metreeca/keep-flake
 > This section introduces essential concepts; for complete coverage, see the
 > [API reference](https://metreeca.github.io/keep/modules/_metreeca_keep-flake.html).
 
-This package is consumed by connector authors building backends for
-[@metreeca/keep](https://github.com/metreeca/keep#installation); it is pulled in automatically as a transitive
-dependency of the connector frameworks and is not normally installed directly by application code.
+This package serves connector authors building backends for
+[@metreeca/keep](https://github.com/metreeca/keep#installation). Connectors depending on it pull it in automatically, so
+application code does not normally install it directly.
+
+The package builds three flavours of traversal tree:
+
+- **shape** — the full structural reach of a resource shape, for operations driven by the shape alone, such as mutations
+- **model** — the properties a retrieval template addresses, each with the retrieval requested for it
+- **query** — a collection member shape tagged with the constraints, ordering, pagination, and projections a collection
+  query states
 
 # Support
 

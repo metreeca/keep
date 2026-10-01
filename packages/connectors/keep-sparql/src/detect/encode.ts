@@ -17,11 +17,9 @@
 /**
  * Detect-pass query encoder.
  *
- * Folds a batch of candidate entries into one batched `select`: a `values` block binds every
- * entry to the subject variable, a single triple pattern joins it as a subject, and `distinct`
- * collapses the multiple triples each present entry produces. The projection returns exactly the
- * entries that are the subject of at least one stored triple. Variables are allocated through the
- * shared {@link Scope} threaded from the driver, so the decoder recovers the same subject token.
+ * Folds a batch of candidate entries into one `select distinct` query returning exactly the entries that are the
+ * subject of at least one stored triple. Variables are allocated through the {@link Scope} shared with the decoder,
+ * so both sides agree on the subject variable.
  *
  * @module
  */
@@ -39,7 +37,7 @@ import { distinct, edge, reference, select, values, variable, where } from "@met
  * @param batch The candidate items to probe, each carrying the `request` whose `entry` is tested for existence
  *
  * @returns A `select distinct` query projecting the subject variable for every entry that is the
- * subject of at least one stored triple; an entry with no triples yields no row
+ * subject of at least one stored triple; an entry with no triples returns no row
  */
 export function encode(
 	scope: Scope<Variable>,

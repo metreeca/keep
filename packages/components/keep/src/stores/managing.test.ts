@@ -15,10 +15,12 @@
  */
 
 import { number } from "@metreeca/blue/number";
-import { id, required, resource } from "@metreeca/blue/resource";
+import { reference } from "@metreeca/blue/reference";
+import { id, multiple, required, resource } from "@metreeca/blue/resource";
 import { string } from "@metreeca/blue/string";
+import type { Resource } from "@metreeca/qest/state";
 import { describe, expect, it, vi } from "vitest";
-import type { StoreClient, StoreObserver } from "../index.js";
+import type { Store, StoreClient, StoreObserver } from "../index.js";
 import { createManagingStore } from "./managing.js";
 
 
@@ -29,6 +31,9 @@ const shape = resource({
 });
 
 const entry = "http://example.com/products/1";
+const catalogue = "http://example.com/products/";
+
+const Catalogue = resource({ items: multiple(reference(shape)) });
 const entryA = "http://example.com/a";
 const entryB = "http://example.com/b";
 
@@ -38,14 +43,22 @@ const fullState = { name: "Widget", price: 1 };
 
 // Localised cast: vi.fn cannot preserve Store["lookup"]'s `<T extends Template>`
 // generic, so the type narrows once here instead of at every call site.
-function retrieveStub(impl: (specs: { entry: string }) => unknown): StoreClient["lookup"] {
-	return vi.fn(async specs => impl(specs)) as unknown as StoreClient["lookup"];
+function retrieveStub(impl: (request: { entry: string }) => unknown): StoreClient["lookup"] {
+	return vi.fn(async request => impl(request)) as unknown as StoreClient["lookup"];
+}
+
+// Localised cast, as for retrieveStub: the stub resolves to the identifier the state states, as a store minting
+// under the collection would, and to the product entry otherwise.
+function createStub(): StoreClient["create"] {
+	return vi.fn(async ({ state }: {
+		readonly state: Resource
+	}) => state.id ?? entry) as unknown as StoreClient["create"];
 }
 
 function stubStore(overrides: Partial<StoreClient> = {}): StoreClient {
 	return {
 		lookup: retrieveStub(({ entry: e }) => ({ id: e, name: "n", price: 1 })),
-		create: vi.fn(async ({ entry: e }) => e),
+		create: createStub(),
 		update: vi.fn(async ({ entry: e }) => e),
 		delete: vi.fn(async ({ entry: e }) => e),
 		insert: vi.fn(async ({ entry: e }) => e),
@@ -54,22 +67,32 @@ function stubStore(overrides: Partial<StoreClient> = {}): StoreClient {
 	};
 }
 
+// wraps `inner` with a non-transactional executor applying each task directly, as a backend with no transaction
+// primitive would supply
+
+function manage(inner: StoreClient = stubStore(), management: Partial<Store> = {}): Store {
+	return createManagingStore({
+		execute: task => Promise.resolve().then(() => task(inner)),
+		...management
+	});
+}
+
 
 describe("createManagingStore", () => {
 
 	describe("delegation", () => {
 
-		it("should forward lookup to the inner store", async () => {
+		it("should forward detail to the inner store", async () => {
 			const inner = stubStore();
-			const store = createManagingStore(inner);
+			const store = manage(inner);
 			await store.lookup({ entry, shape, model: fullModel });
 			expect(inner.lookup).toHaveBeenCalledWith({ entry, shape, model: fullModel }, undefined);
 		});
 
 		it("should forward each mutation to the inner store", async () => {
 			const inner = stubStore();
-			const store = createManagingStore(inner);
-			await store.create({ entry, shape, state: fullState });
+			const store = manage(inner);
+			await store.create({ entry: catalogue, shape: Catalogue, model: { items: {} }, state: fullState });
 			await store.update({ entry, shape, state: fullState });
 			await store.delete({ entry, shape });
 			await store.insert({ entry, shape, state: fullState });
@@ -85,8 +108,8 @@ describe("createManagingStore", () => {
 
 	describe("notifications", () => {
 
-		it("should not notify on lookup", async () => {
-			const store = createManagingStore(stubStore());
+		it("should not notify on detail", async () => {
+			const store = manage();
 			const observer = vi.fn<StoreObserver>();
 			store.observe(observer);
 			await store.lookup({ entry, shape, model: fullModel });
@@ -94,10 +117,10 @@ describe("createManagingStore", () => {
 		});
 
 		it("should notify with upsert flag on create/update/insert", async () => {
-			const store = createManagingStore(stubStore());
+			const store = manage();
 			const observer = vi.fn<StoreObserver>();
 			store.observe(observer);
-			await store.create({ entry, shape, state: fullState });
+			await store.create({ entry: catalogue, shape: Catalogue, model: { items: {} }, state: fullState });
 			await store.update({ entry, shape, state: fullState });
 			await store.insert({ entry, shape, state: fullState });
 			expect(observer).toHaveBeenCalledTimes(3);
@@ -105,7 +128,7 @@ describe("createManagingStore", () => {
 		});
 
 		it("should notify with removal flag on delete/remove", async () => {
-			const store = createManagingStore(stubStore());
+			const store = manage();
 			const observer = vi.fn<StoreObserver>();
 			store.observe(observer);
 			await store.delete({ entry, shape });
@@ -118,7 +141,12 @@ describe("createManagingStore", () => {
 		// resource, update/delete on a missing one); an undefined result records no mutation and fires no event
 
 		const conditional: ReadonlyArray<readonly [string, (store: StoreClient) => Promise<unknown>]> = [
-			["create", store => store.create({ entry, shape, state: fullState })],
+			["create", store => store.create({
+				entry: catalogue,
+				shape: Catalogue,
+				model: { items: {} },
+				state: fullState
+			})],
 			["update", store => store.update({ entry, shape, state: fullState })],
 			["delete", store => store.delete({ entry, shape })]
 		];
@@ -129,7 +157,7 @@ describe("createManagingStore", () => {
 				update: vi.fn(async () => undefined),
 				delete: vi.fn(async () => undefined)
 			});
-			const store = createManagingStore(inner);
+			const store = manage(inner);
 			const observer = vi.fn<StoreObserver>();
 			store.observe(observer);
 			await mutate(store);
@@ -137,7 +165,7 @@ describe("createManagingStore", () => {
 		});
 
 		it("should swallow async observer rejections without breaking other observers", async () => {
-			const store = createManagingStore(stubStore());
+			const store = manage();
 			const calls: string[] = [];
 
 			store.observe(async () => {
@@ -149,7 +177,7 @@ describe("createManagingStore", () => {
 				calls.push("ok");
 			});
 
-			await store.create({ entry, shape, state: fullState });
+			await store.create({ entry: catalogue, shape: Catalogue, model: { items: {} }, state: fullState });
 
 			// let any unhandled rejection surface
 			await new Promise(resolve => setTimeout(resolve, 0));
@@ -158,7 +186,7 @@ describe("createManagingStore", () => {
 		});
 
 		it("should swallow synchronous observer throws without breaking other observers", async () => {
-			const store = createManagingStore(stubStore());
+			const store = manage();
 			const calls: string[] = [];
 
 			store.observe(() => {
@@ -170,7 +198,7 @@ describe("createManagingStore", () => {
 				calls.push("ok");
 			});
 
-			await store.create({ entry, shape, state: fullState });
+			await store.create({ entry: catalogue, shape: Catalogue, model: { items: {} }, state: fullState });
 
 			// let the swallowed rejection settle
 			await new Promise(resolve => setTimeout(resolve, 0));
@@ -179,25 +207,31 @@ describe("createManagingStore", () => {
 		});
 
 		it("should filter mutations to descendants of watched resources", async () => {
-			const store = createManagingStore(stubStore());
+			const store = manage();
 			const observer = vi.fn<StoreObserver>();
 			store.observe(observer, "http://example.com/products/");
 
-			await store.create({ entry, shape, state: fullState });
-			await store.create({ entry: "http://example.com/vendors/acme", shape, state: fullState });
+			await store.create({ entry: catalogue, shape: Catalogue, model: { items: {} }, state: fullState });
+			await store.create({
+				entry: "http://example.com/vendors/", shape: Catalogue, model: { items: {} },
+				state: { ...fullState, id: "http://example.com/vendors/acme" }
+			});
 
 			expect(observer).toHaveBeenCalledTimes(1);
 			expect(observer).toHaveBeenCalledWith({ [entry]: true });
 		});
 
 		it("should treat each observe call as an independent registration", async () => {
-			const store = createManagingStore(stubStore());
+			const store = manage();
 			const observer = vi.fn<StoreObserver>();
 			store.observe(observer, "http://example.com/products/");
 			store.observe(observer, "http://example.com/vendors/");
 
-			await store.create({ entry, shape, state: fullState });
-			await store.create({ entry: "http://example.com/vendors/acme", shape, state: fullState });
+			await store.create({ entry: catalogue, shape: Catalogue, model: { items: {} }, state: fullState });
+			await store.create({
+				entry: "http://example.com/vendors/", shape: Catalogue, model: { items: {} },
+				state: { ...fullState, id: "http://example.com/vendors/acme" }
+			});
 
 			expect(observer).toHaveBeenCalledTimes(2);
 			expect(observer).toHaveBeenNthCalledWith(1, { [entry]: true });
@@ -205,43 +239,46 @@ describe("createManagingStore", () => {
 		});
 
 		it("should detach only the registration of the invoked unsubscribe handle", async () => {
-			const store = createManagingStore(stubStore());
+			const store = manage();
 			const observer = vi.fn<StoreObserver>();
 			const unsub1 = store.observe(observer, "http://example.com/products/");
 			store.observe(observer, "http://example.com/vendors/");
 			unsub1();
 
-			await store.create({ entry, shape, state: fullState });
-			await store.create({ entry: "http://example.com/vendors/acme", shape, state: fullState });
+			await store.create({ entry: catalogue, shape: Catalogue, model: { items: {} }, state: fullState });
+			await store.create({
+				entry: "http://example.com/vendors/", shape: Catalogue, model: { items: {} },
+				state: { ...fullState, id: "http://example.com/vendors/acme" }
+			});
 
 			expect(observer).toHaveBeenCalledTimes(1);
 			expect(observer).toHaveBeenCalledWith({ "http://example.com/vendors/acme": true });
 		});
 
 		it("should be safe to invoke an unsubscribe handle twice", () => {
-			const store = createManagingStore(stubStore());
+			const store = manage();
 			const unsub = store.observe(vi.fn<StoreObserver>());
 			unsub();
 			expect(() => unsub()).not.toThrow();
 		});
 
 		it("should fire nothing for a registration with an empty resources array", async () => {
-			const store = createManagingStore(stubStore());
+			const store = manage();
 			const observer = vi.fn<StoreObserver>();
 			store.observe(observer, []);
 
-			await store.create({ entry, shape, state: fullState });
+			await store.create({ entry: catalogue, shape: Catalogue, model: { items: {} }, state: fullState });
 
 			expect(observer).not.toHaveBeenCalled();
 		});
 
 		it("should detach the registration when the unsubscribe handle is invoked", async () => {
-			const store = createManagingStore(stubStore());
+			const store = manage();
 			const observer = vi.fn<StoreObserver>();
 			const unsubscribe = store.observe(observer);
 			unsubscribe();
 
-			await store.create({ entry, shape, state: fullState });
+			await store.create({ entry: catalogue, shape: Catalogue, model: { items: {} }, state: fullState });
 
 			expect(observer).not.toHaveBeenCalled();
 		});
@@ -253,7 +290,7 @@ describe("createManagingStore", () => {
 
 		it("should forward the observe call to the supplied management.observe", () => {
 			const innerObserve = vi.fn(() => () => {});
-			const store = createManagingStore(stubStore(), { observe: innerObserve });
+			const store = manage(stubStore(), { observe: innerObserve });
 			const observer = vi.fn<StoreObserver>();
 			const resources = "http://example.com/products/";
 			store.observe(observer, resources);
@@ -262,7 +299,7 @@ describe("createManagingStore", () => {
 
 		it("should forward a normalised filter, leaving single-pass iterables intact for the delegate", () => {
 			const innerObserve = vi.fn(() => () => {});
-			const store = createManagingStore(stubStore(), { observe: innerObserve });
+			const store = manage(stubStore(), { observe: innerObserve });
 			const observer = vi.fn<StoreObserver>();
 			const resources = new Set(["http://example.com/products/", "http://example.com/vendors/"]);
 			store.observe(observer, resources.values());
@@ -272,7 +309,7 @@ describe("createManagingStore", () => {
 		it("should also call the inner unsubscribe when the wrapper's unsubscribe is invoked", () => {
 			const innerUnsubscribe = vi.fn();
 			const innerObserve = vi.fn(() => innerUnsubscribe);
-			const store = createManagingStore(stubStore(), { observe: innerObserve });
+			const store = manage(stubStore(), { observe: innerObserve });
 			const unsubscribe = store.observe(vi.fn<StoreObserver>());
 			unsubscribe();
 			expect(innerUnsubscribe).toHaveBeenCalledOnce();
@@ -284,12 +321,17 @@ describe("createManagingStore", () => {
 
 		it("should pass a Store wrapper to the task and batch its mutations into one event", async () => {
 			const inner = stubStore();
-			const store = createManagingStore(inner);
+			const store = manage(inner);
 			const observer = vi.fn<StoreObserver>();
 			store.observe(observer);
 
 			await store.execute(async s => {
-				await s.create({ entry: entryA, shape, state: fullState });
+				await s.create({
+					entry: catalogue,
+					shape: Catalogue,
+					model: { items: {} },
+					state: { ...fullState, id: entryA }
+				});
 				await s.update({ entry: entryB, shape, state: fullState });
 			});
 
@@ -301,12 +343,17 @@ describe("createManagingStore", () => {
 		});
 
 		it("should not notify observer during task execution", async () => {
-			const store = createManagingStore(stubStore());
+			const store = manage();
 			const observer = vi.fn<StoreObserver>();
 			store.observe(observer);
 
 			await store.execute(async s => {
-				await s.create({ entry: entryA, shape, state: fullState });
+				await s.create({
+					entry: catalogue,
+					shape: Catalogue,
+					model: { items: {} },
+					state: { ...fullState, id: entryA }
+				});
 				expect(observer).not.toHaveBeenCalled();
 				await s.update({ entry: entryB, shape, state: fullState });
 				expect(observer).not.toHaveBeenCalled();
@@ -316,12 +363,12 @@ describe("createManagingStore", () => {
 		});
 
 		it("should discard pending events if the task throws", async () => {
-			const store = createManagingStore(stubStore());
+			const store = manage();
 			const observer = vi.fn<StoreObserver>();
 			store.observe(observer);
 
 			await expect(store.execute(async s => {
-				await s.create({ entry, shape, state: fullState });
+				await s.create({ entry: catalogue, shape: Catalogue, model: { items: {} }, state: fullState });
 				throw new Error("boom");
 			})).rejects.toThrow("boom");
 
@@ -329,7 +376,7 @@ describe("createManagingStore", () => {
 		});
 
 		it("should isolate concurrent top-level execute calls", async () => {
-			const store = createManagingStore(stubStore());
+			const store = manage();
 			const batches: Record<string, boolean>[] = [];
 			store.observe(m => { batches.push(m); });
 
@@ -337,12 +384,22 @@ describe("createManagingStore", () => {
 			const firstBlocker = new Promise<void>(resolve => { releaseFirst = resolve; });
 
 			const first = store.execute(async s => {
-				await s.create({ entry: entryA, shape, state: fullState });
+				await s.create({
+					entry: catalogue,
+					shape: Catalogue,
+					model: { items: {} },
+					state: { ...fullState, id: entryA }
+				});
 				await firstBlocker;
 			});
 
 			const second = store.execute(async s => {
-				await s.create({ entry: entryB, shape, state: fullState });
+				await s.create({
+					entry: catalogue,
+					shape: Catalogue,
+					model: { items: {} },
+					state: { ...fullState, id: entryB }
+				});
 			});
 
 			await second;
@@ -358,12 +415,12 @@ describe("createManagingStore", () => {
 		});
 
 		it("should apply last-write-wins for the same resource within a batched event", async () => {
-			const store = createManagingStore(stubStore());
+			const store = manage();
 			const observer = vi.fn<StoreObserver>();
 			store.observe(observer);
 
 			await store.execute(async s => {
-				await s.create({ entry, shape, state: fullState });
+				await s.create({ entry: catalogue, shape: Catalogue, model: { items: {} }, state: fullState });
 				await s.delete({ entry, shape });
 			});
 
@@ -375,11 +432,11 @@ describe("createManagingStore", () => {
 
 	describe("error propagation", () => {
 
-		it("should convert a sync throw from the inner store into a rejection on lookup", async () => {
+		it("should convert a sync throw from the inner store into a rejection on detail", async () => {
 			const inner = stubStore({
 				lookup: (() => { throw new Error("sync"); }) as unknown as StoreClient["lookup"]
 			});
-			const store = createManagingStore(inner);
+			const store = manage(inner);
 
 			const result = store.lookup({ entry, shape, model: fullModel });
 			expect(result).toBeInstanceOf(Promise);
@@ -390,9 +447,9 @@ describe("createManagingStore", () => {
 			const inner = stubStore({
 				create: (() => { throw new Error("sync"); }) as unknown as StoreClient["create"]
 			});
-			const store = createManagingStore(inner);
+			const store = manage(inner);
 
-			const result = store.create({ entry, shape, state: fullState });
+			const result = store.create({ entry: catalogue, shape: Catalogue, model: { items: {} }, state: fullState });
 			expect(result).toBeInstanceOf(Promise);
 			await expect(result).rejects.toBeInstanceOf(Error);
 		});
@@ -403,13 +460,13 @@ describe("createManagingStore", () => {
 
 		it("should delegate to the supplied close callback", async () => {
 			const close = vi.fn(async () => {});
-			const store = createManagingStore(stubStore(), { close });
+			const store = manage(stubStore(), { close });
 			await store.close();
 			expect(close).toHaveBeenCalledOnce();
 		});
 
 		it("should resolve to a no-op when close is omitted", async () => {
-			const store = createManagingStore(stubStore());
+			const store = manage();
 			await expect(store.close()).resolves.toBeUndefined();
 		});
 
@@ -430,10 +487,10 @@ describe("createManagingStore", () => {
 			return <V>(_task: (scope: StoreClient) => V | Promise<V>): Promise<V> => Promise.reject(new Error(message));
 		}
 
-		it("should wrap each standalone lookup in the supplied execute opt", async () => {
+		it("should wrap each standalone detail call in the supplied execute opt", async () => {
 			const inner = stubStore();
 			const execute = executeSpy(inner);
-			const store = createManagingStore(inner, { execute });
+			const store = createManagingStore({ execute });
 			await store.lookup({ entry, shape, model: fullModel });
 			expect(execute.calls).toHaveLength(1);
 		});
@@ -441,8 +498,8 @@ describe("createManagingStore", () => {
 		it("should wrap each standalone mutation in the supplied execute opt", async () => {
 			const inner = stubStore();
 			const execute = executeSpy(inner);
-			const store = createManagingStore(inner, { execute });
-			await store.create({ entry, shape, state: fullState });
+			const store = createManagingStore({ execute });
+			await store.create({ entry: catalogue, shape: Catalogue, model: { items: {} }, state: fullState });
 			await store.update({ entry, shape, state: fullState });
 			await store.delete({ entry, shape });
 			await store.insert({ entry, shape, state: fullState });
@@ -453,10 +510,15 @@ describe("createManagingStore", () => {
 		it("should wrap the entire task in the supplied execute opt and not re-wrap inner calls", async () => {
 			const inner = stubStore();
 			const execute = executeSpy(inner);
-			const store = createManagingStore(inner, { execute });
+			const store = createManagingStore({ execute });
 
 			await store.execute(async s => {
-				await s.create({ entry: entryA, shape, state: fullState });
+				await s.create({
+					entry: catalogue,
+					shape: Catalogue,
+					model: { items: {} },
+					state: { ...fullState, id: entryA }
+				});
 				await s.update({ entry: entryB, shape, state: fullState });
 			});
 
@@ -464,18 +526,23 @@ describe("createManagingStore", () => {
 		});
 
 		it("should propagate execute opt rejection (rollback semantics)", async () => {
-			const store = createManagingStore(stubStore(), { execute: rejectingExecute("rollback") });
+			const store = createManagingStore({ execute: rejectingExecute("rollback") });
 
-			await expect(store.create({ entry, shape, state: fullState })).rejects.toThrow("rollback");
+			await expect(store.create({
+				entry: catalogue,
+				shape: Catalogue,
+				model: { items: {} },
+				state: fullState
+			})).rejects.toThrow("rollback");
 		});
 
 		it("should propagate execute opt rejection from a task (atomic rollback across calls)", async () => {
-			const store = createManagingStore(stubStore(), { execute: rejectingExecute("rollback") });
+			const store = createManagingStore({ execute: rejectingExecute("rollback") });
 			const observer = vi.fn<StoreObserver>();
 			store.observe(observer);
 
 			await expect(store.execute(async s => {
-				await s.create({ entry, shape, state: fullState });
+				await s.create({ entry: catalogue, shape: Catalogue, model: { items: {} }, state: fullState });
 			})).rejects.toThrow("rollback");
 
 			expect(observer).not.toHaveBeenCalled();

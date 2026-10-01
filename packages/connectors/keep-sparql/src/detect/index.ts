@@ -17,20 +17,9 @@
 /**
  * Detect-pass driver.
  *
- * Owns one `select` round per drain iteration covering every queued {@link Detect}. The cycle is:
+ * Settles every queued {@link Detect} request in a batch with a single existence query against the repository.
  *
- *   **plan** → **encode** → `client.select` → **decode**
- *
- *  - the batch's candidate entries are collected;
- *  - {@link encode} folds them into one batched existence `select`;
- *  - `client.select` runs the unified query;
- *  - {@link decode} folds the entries that came back into the present-entry set and resolves each
- *    request to whether its entry is present.
- *
- * Variable allocation across the query is shared between {@link encode} and {@link decode} through
- * a single {@link createScope | Scope}.
- *
- * @module
+ * @module index
  */
 
 import { createScope } from "@metreeca/core/scope";
@@ -41,12 +30,10 @@ import { encode } from "./encode.js";
 
 
 /**
- * Per-batch body for the detect handler.
+ * Resolves a batch of detect requests with one existence query.
  *
- * Two phases run in sequence: **fetch** by folding the batch's candidate entries into one batched
- * existence `select` through {@link encode} and running it; **deliver** by {@link decode | decoding}
- * the solution to the present entries, folding them into a set, and resolving each request to whether
- * its entry is present.
+ * Each request resolves to `true` if its entry is the subject of at least one stored triple, and to `false`
+ * otherwise.
  *
  * @param batch The queued detect requests to resolve
  * @param client The repository the existence query runs against

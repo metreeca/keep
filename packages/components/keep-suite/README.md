@@ -18,14 +18,14 @@ npm install vitest
 
 > [!IMPORTANT]
 > [Vitest](https://vitest.dev/) >= 4.0.0 is a peer dependency and must be installed separately. No special
-> `vitest.config.ts` is required — standard Vitest configuration works.
+> `vitest.config.ts` is required: standard Vitest configuration works.
 
 Connector packages add the suite and Vitest under `devDependencies`:
 
 ```json
 {
   "devDependencies": {
-    "@metreeca/keep-suite": "^0.9.0",
+    "@metreeca/keep-suite": "^0.11.0",
     "vitest": "^4.0.0"
   }
 }
@@ -42,7 +42,7 @@ import { describe } from "vitest";
 describe("my-connector", () => testStore({
 
 	open: () => createMyStore(), // create a store instance with schema but no data
-		
+
 	contains: id => myExists(id), // check if a resource exists at all
 	includes: (resource, shape) => myIncludes(resource, shape), // check if all facts of a resource are present
 	excludes: (resource, shape) => myExcludes(resource, shape), // check if all facts of a resource are absent
@@ -71,6 +71,11 @@ describe("my-connector", () => testStore({
 }));
 ```
 
+> [!IMPORTANT]
+> The `ManageExecuteIsolation` sub-suite assumes snapshot transaction isolation, and the `ManageClose` sub-suite
+> assumes that closing a store makes it reject further operations. A connector whose store provides weaker isolation,
+> or implements `close` as a no-op, adds the matching tag to `ignore`.
+
 ## Test Dataset
 
 Tests run against a toy catalogue dataset with 62 products, 11 hierarchical categories, and 5 vendors. The dataset
@@ -78,11 +83,11 @@ exercises cardinality variants, data types, structural patterns, and query opera
 
 Resource [shapes][shapes] ([source][shapes-src]) are defined using [@metreeca/blue](https://github.com/metreeca/blue),
 the declarative modelling language that drives the entire @metreeca/keep storage framework. [Sample data][data] is
-preloaded by the `populate` callback before each sub-suite.
+loaded by the `populate` callback before each retrieval sub-suite.
 
 [shapes]: https://metreeca.github.io/keep/modules/_metreeca_keep-suite.toys.html
 
-[shapes-src]: https://github.com/metreeca/keep/blob/main/packages/keep-suite/src/toys.ts
+[shapes-src]: https://github.com/metreeca/keep/blob/main/packages/components/keep-suite/src/toys.ts
 
 [data]: https://metreeca.github.io/keep/variables/_metreeca_keep-suite.toys.collections.html
 
@@ -92,7 +97,7 @@ For backends accessed via an external endpoint URL, gate the suite on environmen
 so it skips cleanly when the endpoint is unset:
 
 ```typescript
-const ENDPOINT = process.env.GRAPHDB_ENDPOINT;
+const ENDPOINT = process.env.MY_BACKEND_ENDPOINT;
 
 describe.skipIf(!ENDPOINT)("my-connector", () => testStore({
 
@@ -123,7 +128,7 @@ npm install testcontainers --save-dev
 ```json
 {
   "devDependencies": {
-    "testcontainers": "^11.0.0"
+    "testcontainers": "^12.1.0"
   }
 }
 ```
@@ -161,8 +166,8 @@ describe("my-connector", () => {
 ```
 
 For larger datasets, copy a dump into the container with `withCopyFilesToContainer` and trigger the backend's native
-bulk loader before tests start — typically far faster than per-record inserts, though not worth the overhead for the toy
-fixture.
+bulk loader before tests start. This is typically far faster than per-record inserts, though not worth the overhead for
+the toy fixture.
 
 # Support
 

@@ -52,9 +52,9 @@ export type TestFixture = {
  * filters at the test level. A no-arg `hook` variant is exposed for `beforeAll`/`afterAll`/`beforeEach`/`afterEach`,
  * where vitest refuses fixture access.
  *
- * The test body receives the shared `store` plus `open`, the provisioning callback that mints a fresh store instance —
- * used by lifecycle tests (e.g. `close`) that need a dedicated store they can tear down without affecting the shared
- * one.
+ * The test body receives the shared `store` plus `open`, the provisioning callback that mints a fresh store instance.
+ * Lifecycle tests (for example, `close`) rely on `open` for a dedicated store they can tear down without affecting the
+ * shared one.
  *
  * @typeParam S - The store type under test, defaults to {@link StoreClient}
  */
@@ -68,6 +68,14 @@ export type TestFactory<S extends StoreClient = StoreClient> = (test: (context: 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/**
+ * Selects a fixture from a sample collection.
+ *
+ * @param items - The sample resources to search
+ * @param pattern - The entry values the fixture must carry, or a predicate it must satisfy
+ *
+ * @returns The first matching resource, or `undefined` if none matches
+ */
 export function lookup<T extends Resource>(
 	items: readonly T[],
 	pattern: Partial<T> | ((item: T) => boolean)

@@ -20,8 +20,7 @@ import { id, multiple, optional, required, resource } from "@metreeca/blue/resou
 import { string } from "@metreeca/blue/string";
 import { TraceError } from "@metreeca/core/trace";
 import { describe, expect, it, vi } from "vitest";
-import type { StoreClient } from "../index.js";
-import { createCachingStore } from "../stores/caching.js";
+import type { Store, StoreClient } from "../index.js";
 import { createManagingStore } from "../stores/managing.js";
 import { createValidatingStore } from "./validating.js";
 
@@ -43,13 +42,18 @@ describe("createValidatingStore", () => {
 
 	const Captive = resource({ id: id(), label: required(string()) });
 	const captor = resource({ child: optional(reference(Captive), { captive: true }) });
-	const captiveBatch = { child: { id: "http://example.com/inner/1", label: "x" } };
+	const captors = resource({ items: multiple(reference(captor)) });
+	// ;(cast) test fixture: an inline captive batch the draft type rejects, to exercise the runtime depth cap
+	const captiveBatch = { child: { id: "http://example.com/inner/1", label: "x" } } as never;
+
+	const catalogue = "http://example.com/products/";
+	const Catalogue = resource({ items: multiple(reference(shape)) });
 
 
 	// Localised cast: vi.fn cannot preserve StoreClient["lookup"]'s `<T extends Template>`
 	// generic, so the type narrows once here instead of at every call site.
-	function retrieveStub(impl: (specs: { entry: string }) => unknown): StoreClient["lookup"] {
-		return vi.fn(async specs => impl(specs)) as unknown as StoreClient["lookup"];
+	function retrieveStub(impl: (request: { entry: string }) => unknown): StoreClient["lookup"] {
+		return vi.fn(async request => impl(request)) as unknown as StoreClient["lookup"];
 	}
 
 	function stubStore(overrides: Partial<StoreClient> = {}): StoreClient {
@@ -68,8 +72,8 @@ describe("createValidatingStore", () => {
 	describe("entry validation", () => {
 
 		const callers: ReadonlyArray<[string, (s: StoreClient, e: string) => Promise<unknown>]> = [
-			["lookup", (s, e) => s.lookup({ entry: e, shape, model: fullModel })],
-			["create", (s, e) => s.create({ entry: e, shape, state: fullState })],
+			["detail", (s, e) => s.lookup({ entry: e, shape, model: fullModel })],
+			["create", (s, e) => s.create({ entry: e, shape: Catalogue, model: { items: {} }, state: fullState })],
 			["update", (s, e) => s.update({ entry: e, shape, state: fullState })],
 			["delete", (s, e) => s.delete({ entry: e, shape })],
 			["insert", (s, e) => s.insert({ entry: e, shape, state: fullState })],
@@ -82,7 +86,7 @@ describe("createValidatingStore", () => {
 		});
 
 		it.each([["query", `${entry}?x`], ["fragment", `${entry}#x`]] as const)(
-			"should reject lookup with RangeError on entry with %s", async (_, malformed) => {
+			"should reject detail with RangeError on entry with %s", async (_, malformed) => {
 				const store = createValidatingStore(stubStore());
 				await expect(store.lookup({ entry: malformed, shape, model: fullModel }))
 					.rejects.toBeInstanceOf(RangeError);
@@ -100,8 +104,74 @@ describe("createValidatingStore", () => {
 			})).rejects.toBeInstanceOf(TraceError);
 		});
 
+		it("should reject with TraceError on collection model that doesn't match the shape", async () => {
+			const store = createValidatingStore(stubStore());
+			await expect(store.lookup({
+				entry, shape: nested, model: { items: { name: 42 } } as never
+			})).rejects.toBeInstanceOf(TraceError);
+		});
+
+		it("should reject create with TraceError on a collection slice that doesn't match the shape", async () => {
+			const store = createValidatingStore(stubStore());
+			await expect(store.create({
+				entry: catalogue, shape: Catalogue, model: { itms: {} }, state: fullState
+			} as never)).rejects.toBeInstanceOf(TraceError);
+		});
+
+		it("should reject create with TraceError on a slice naming a property collecting no resources", async () => {
+			const Tagged = resource({ items: multiple(reference(shape)), tags: multiple(string()) });
+			const store = createValidatingStore(stubStore());
+			await expect(store.create({
+				entry: catalogue, shape: Tagged, model: { tags: {} }, state: fullState
+			} as never)).rejects.toBeInstanceOf(TraceError);
+		});
+
+		it("should reject create with RangeError on a state id not nested under the collection", async () => {
+			const inner = stubStore();
+			const store = createValidatingStore(inner);
+			await expect(store.create({
+				entry: catalogue, shape: Catalogue, model: { items: {} },
+				state: { id: "http://example.com/elsewhere/1", ...fullState }
+			})).rejects.toBeInstanceOf(RangeError);
+			expect(inner.create).not.toHaveBeenCalled();
+		});
+
+		it("should hand create the collected shape and the validated state", async () => {
+			const inner = stubStore();
+			const store = createValidatingStore(inner);
+			await store.create({ entry: catalogue, shape: Catalogue, model: { items: {} }, state: fullState });
+			expect(vi.mocked(inner.create).mock.calls[0]?.[0]).toEqual({
+				entry: catalogue, shape: Catalogue, model: { items: {} }, state: fullState
+			});
+		});
+
+		it.each(["update", "insert"] as const)("should reject %s with RangeError on a state id differing from entry",
+			async method => {
+				const inner = stubStore();
+				const store = createValidatingStore(inner);
+				await expect(store[method]({
+					entry,
+					shape,
+					state: { id: "http://example.com/products/2", ...fullState }
+				}))
+					.rejects.toBeInstanceOf(RangeError);
+				expect(inner[method]).not.toHaveBeenCalled();
+			}
+		);
+
+		it.each(["update", "insert"] as const)("should accept %s with a state id matching entry", async method => {
+			const inner = stubStore();
+			const store = createValidatingStore(inner);
+			await expect(store[method]({ entry, shape, state: { id: entry, ...fullState } })).resolves.toBe(entry);
+		});
+
 		const stateCallers: ReadonlyArray<[string, (s: StoreClient) => Promise<unknown>]> = [
-			["create", s => s.create({ entry, shape, state: { name: 42 } as never })],
+			["create", s => s.create({
+				entry: catalogue,
+				shape: Catalogue,
+				model: { items: {} },
+				state: { name: 42 } as never
+			})],
 			["update", s => s.update({ entry, shape, state: { name: 42 } as never })],
 			["insert", s => s.insert({ entry, shape, state: { name: 42 } as never })]
 		];
@@ -116,7 +186,7 @@ describe("createValidatingStore", () => {
 		it("should accept a lazy shape thunk", async () => {
 			const inner = stubStore();
 			const store = createValidatingStore(inner);
-			await store.create({ entry, shape: () => shape, state: fullState });
+			await store.create({ entry: catalogue, shape: () => Catalogue, model: { items: {} }, state: fullState });
 			expect(inner.create).toHaveBeenCalledOnce();
 		});
 
@@ -183,6 +253,20 @@ describe("createValidatingStore", () => {
 			})).rejects.toBeInstanceOf(TraceError);
 		});
 
+		it("should accept a collection conforming to the collected shape", async () => {
+			const inner = stubStore({ lookup: retrieveStub(() => ({ items: [{ name: "x" }] })) });
+			const store = createValidatingStore(inner);
+			await expect(store.lookup({ entry, shape: nested, model: { items: { name: {} } } }))
+				.resolves.toEqual({ items: [{ name: "x" }] });
+		});
+
+		it("should reject a collection with an item not matching the collected shape", async () => {
+			const inner = stubStore({ lookup: retrieveStub(() => ({ items: [{ name: 42 }] })) });
+			const store = createValidatingStore(inner);
+			await expect(store.lookup({ entry, shape: nested, model: { items: { name: {} } } }))
+				.rejects.toBeInstanceOf(TraceError);
+		});
+
 	});
 
 	// Trusted source: the inner store is assumed to return shape-conforming data
@@ -213,12 +297,27 @@ describe("createValidatingStore", () => {
 
 	describe("delegate store inside execute task", () => {
 
+		function manage(inner: StoreClient): Store {
+
+			const validating = createValidatingStore(inner);
+
+			return createManagingStore({
+				execute: task => Promise.resolve().then(() => task(validating))
+			});
+
+		}
+
 		it("should validate state on calls made through the task's store parameter", async () => {
 			const inner = stubStore();
-			const store = createManagingStore(createValidatingStore(inner));
+			const store = manage(inner);
 
 			await expect(store.execute(async s => {
-				await s.create({ entry, shape, state: { name: 42 } as never });
+				await s.create({
+					entry: catalogue,
+					shape: Catalogue,
+					model: { items: {} },
+					state: { name: 42 } as never
+				});
 			})).rejects.toBeInstanceOf(TraceError);
 
 			expect(inner.create).not.toHaveBeenCalled();
@@ -226,10 +325,10 @@ describe("createValidatingStore", () => {
 
 		it("should validate entry on calls made through the task's store parameter", async () => {
 			const inner = stubStore();
-			const store = createManagingStore(createValidatingStore(inner));
+			const store = manage(inner);
 
 			await expect(store.execute(async s => {
-				await s.create({ entry: "/relative", shape, state: fullState });
+				await s.create({ entry: "/relative", shape: Catalogue, model: { items: {} }, state: fullState });
 			})).rejects.toBeInstanceOf(RangeError);
 
 			expect(inner.create).not.toHaveBeenCalled();
@@ -237,7 +336,7 @@ describe("createValidatingStore", () => {
 
 	});
 
-	// Query safety caps: opts.plain/depth/limit are forwarded into the model template validation,
+	// Query safety caps: the retrieval scope plain/depth/limit are forwarded into the model template validation,
 	// restricting query complexity for untrusted clients. Enforced on the input model, independently
 	// of response re-validation, so the cases pin them with trusted: true.
 	describe("query safety caps", () => {
@@ -282,14 +381,13 @@ describe("createValidatingStore", () => {
 
 	});
 
-	// Captive expansion depth: create/update always validate state at depth 0, rejecting inline captive
-	// batches (single-resource paths); insert carries a caller-configurable opts.depth (omitted = unbounded)
-	// for batch upserts embedding captive trees, threaded through every wrapper down to the validation.
+	// Captive expansion depth: create/update/insert always validate state at depth 0, rejecting inline captive
+	// batches until cascading captive writes are supported (https://github.com/metreeca/keep/issues/4).
 	describe("captive expansion depth cap", () => {
 
 		it("should reject an inline captive batch on create (always capped at depth 0)", async () => {
 			const store = createValidatingStore(stubStore());
-			await expect(store.create({ entry, shape: captor, state: captiveBatch }))
+			await expect(store.create({ entry: catalogue, shape: captors, model: { items: {} }, state: captiveBatch }))
 				.rejects.toBeInstanceOf(TraceError);
 		});
 
@@ -299,40 +397,10 @@ describe("createValidatingStore", () => {
 				.rejects.toBeInstanceOf(TraceError);
 		});
 
-		it("should reject an inline captive batch on insert when depth is zero", async () => {
-			const store = createValidatingStore(stubStore());
-			await expect(store.insert({ entry, shape: captor, state: captiveBatch }, { depth: 0 }))
-				.rejects.toBeInstanceOf(TraceError);
-		});
-
-		it("should accept an inline captive batch on insert when depth is unbounded", async () => {
+		it("should reject an inline captive batch on insert (always capped at depth 0)", async () => {
 			const inner = stubStore();
 			const store = createValidatingStore(inner);
-			await store.insert({ entry, shape: captor, state: captiveBatch });
-			expect(inner.insert).toHaveBeenCalledOnce();
-		});
-
-		it("should enforce insert depth through the managed wrapper", async () => {
-			const inner = stubStore();
-			const store = createManagingStore(createValidatingStore(inner));
-			await expect(store.insert({ entry, shape: captor, state: captiveBatch }, { depth: 0 }))
-				.rejects.toBeInstanceOf(TraceError);
-			expect(inner.insert).not.toHaveBeenCalled();
-		});
-
-		it("should enforce insert depth through the execute task store", async () => {
-			const inner = stubStore();
-			const store = createManagingStore(createValidatingStore(inner));
-			await expect(store.execute(async s => {
-				await s.insert({ entry, shape: captor, state: captiveBatch }, { depth: 0 });
-			})).rejects.toBeInstanceOf(TraceError);
-			expect(inner.insert).not.toHaveBeenCalled();
-		});
-
-		it("should enforce insert depth through the cache wrapper", async () => {
-			const inner = stubStore();
-			const store = createCachingStore(createManagingStore(createValidatingStore(inner)));
-			await expect(store.insert({ entry, shape: captor, state: captiveBatch }, { depth: 0 }))
+			await expect(store.insert({ entry, shape: captor, state: captiveBatch }))
 				.rejects.toBeInstanceOf(TraceError);
 			expect(inner.insert).not.toHaveBeenCalled();
 		});

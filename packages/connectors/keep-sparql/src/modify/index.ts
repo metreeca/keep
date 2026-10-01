@@ -14,6 +14,14 @@
  * limitations under the License.
  */
 
+/**
+ * Modify-pass driver.
+ *
+ * Applies every queued {@link Modify} request in a batch as a single SPARQL update against the repository.
+ *
+ * @module index
+ */
+
 import { createScope } from "@metreeca/core/scope";
 import { createFlake } from "@metreeca/keep-flake";
 import type { Deferred, Modify } from "@metreeca/keep/batching";
@@ -24,15 +32,14 @@ import { encode } from "./encode.js";
 /**
  * Applies a batch of {@link Modify} requests against a repository as a single update.
  *
- * Each request is encoded by the presence of its `state`: a present `state` inserts (creates or
- * updates) the entry, an omitted `state` removes it. Every request's operations are folded into one
- * SPARQL update joined in submission order, so the backend applies them sequentially
- * ({@link https://www.w3.org/TR/sparql11-update/#updateLanguage SPARQL 1.1 Update §3}) and, where
- * supported, atomically (§3.2). The batch arrives pre-validated by the batching layer, which rejects
- * any request whose `state` carries an `id` other than its `entry` (§4.1) before it reaches here, so
- * every request is applied unconditionally; each batched {@link Deferred} resolves to its entry once
- * the update completes, while a backend failure propagates for the batching layer to settle as a
- * rejection across the batch.
+ * A request carrying a `link` asserts the membership edge from its entry to an item. A request carrying a `state`
+ * creates or replaces the entry, and a request with no `state` removes it. The backend applies the requests in
+ * submission order ({@link https://www.w3.org/TR/sparql11-update/#updateLanguage SPARQL 1.1 Update §3}) and, where
+ * supported, atomically.
+ *
+ * Every request is applied unconditionally: the batching layer has already rejected any request whose `state`
+ * carries an `id` other than its `entry` (§4.1). Each {@link Deferred} resolves to its entry once the update
+ * completes. A backend failure propagates, and the batching layer settles it as a rejection across the batch.
  *
  * @param batch The modify requests to apply
  * @param client The repository the mutations are applied against

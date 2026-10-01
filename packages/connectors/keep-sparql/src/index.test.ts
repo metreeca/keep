@@ -15,18 +15,31 @@
  */
 
 
-import { getShapeClass, getShapeClasses, getShapeType, type ResourceShape } from "@metreeca/blue/resource";
-import type { StringShape } from "@metreeca/blue/string";
-import { eager, type Instance, type Shape } from "@metreeca/blue/value";
+import { reference } from "@metreeca/blue/reference";
+import {
+	getShapeClass,
+	getShapeClasses,
+	getShapeType,
+	id,
+	multiple,
+	required,
+	resource as shaped,
+	type ResourceShape
+} from "@metreeca/blue/resource";
+import { string, type StringShape } from "@metreeca/blue/string";
+import { eager, type Shape, type State } from "@metreeca/blue/value";
 import { error, isBoolean, isNumber, isString, type Lazy, map, type Scalar } from "@metreeca/core";
+import { some, type Some } from "@metreeca/core/arrays";
 import { xsd } from "@metreeca/core/datatype";
+import type { Tag } from "@metreeca/core/language";
 import { createNamespace } from "@metreeca/core/resource";
-import { immutable } from "@metreeca/core/structures";
+import { immutable } from "@metreeca/core/values";
 import { createSPARQLStore } from "@metreeca/keep-sparql";
 import type { StoreTestScope } from "@metreeca/keep-suite";
 import { testStore } from "@metreeca/keep-suite";
 import {
 	base,
+	catalogues,
 	Category,
 	clone,
 	collections,
@@ -36,15 +49,17 @@ import {
 	PostalAddress,
 	Product,
 	rdfs,
+	Resources,
 	Review,
 	toys,
 	Vendor,
+	Vendors,
 	Video
 } from "@metreeca/keep-suite/toys";
 import { type Reference, type Resource } from "@metreeca/qest/state";
 import { log } from "@metreeca/tape";
-import { blank, skolemize, type Triple, typed } from "@metreeca/trio";
-import { data, description as resource, link, property, resource as about, term, text } from "@metreeca/trio/builder";
+import { blank, skolemize, tagged, type Tagged, type Triple, typed } from "@metreeca/trio";
+import { data, description as resource, link, property, resource as about, term } from "@metreeca/trio/builder";
 import type { Repository } from "@metreeca/wire-sparql";
 import { createHTTPRepository } from "@metreeca/wire-sparql-http";
 import { createOxiRepository } from "@metreeca/wire-sparql-oxigraph";
@@ -809,9 +824,9 @@ const rdf = createNamespace("http://www.w3.org/1999/02/22-rdf-syntax-ns#", ["typ
 
 
 /**
- * A deeply-partial {@link Instance} of a toys resource shape, the input form accepted by the `encode*` encoders.
+ * A deeply-partial {@link State} of a toys resource shape, the input form accepted by the `encode*` encoders.
  */
-type Fragment<T extends Lazy<Shape>> = Partial<Instance<T>>;
+type Fragment<T extends Lazy<Shape>> = Partial<State<T>>;
 
 
 /**
@@ -823,7 +838,12 @@ const dataset: readonly Triple[] = immutable([
 	...collections.vendors.flatMap(encodeVendor),
 	...collections.products.flatMap(encodeProduct),
 	...collections.images.flatMap(encodeImage),
-	...collections.videos.flatMap(encodeVideo)
+	...collections.videos.flatMap(encodeVideo),
+
+	...encodeCatalogue(catalogues.resources),
+	...encodeCatalogue(catalogues.categories),
+	...encodeCatalogue(catalogues.vendors),
+	...encodeCatalogue(catalogues.products)
 
 ]);
 
@@ -835,6 +855,7 @@ const encoders = (() => {
 
 	return immutable(Object.fromEntries([
 
+		encoder(Resources, encodeCatalogue),
 		encoder(Category, encodeCategory),
 		encoder(Vendor, encodeVendor),
 		encoder(PostalAddress, encodePostalAddress),
@@ -880,7 +901,7 @@ const encoders = (() => {
 function isInstance<S extends Lazy<ResourceShape>>(
 	shape: S,
 	resource: Resource
-): resource is Instance<S> & Resource {
+): resource is State<S> & Resource {
 
 	return map(eager(shape), shape =>
 		(resource[getShapeType(shape) ?? ""] ?? shape.class) === shape.class
@@ -995,7 +1016,7 @@ function testSPARQLStore(factory: () => Repository, {
 
 		},
 
-		async generate<S extends Lazy<ResourceShape>>(sample: Instance<S> & Resource, shape: S) {
+		async generate<S extends Lazy<ResourceShape>>(sample: State<S> & Resource, shape: S) {
 
 			const clazz = map(eager(shape), shape => shape.class);
 			const encoder = encoders[clazz ?? ""];
@@ -1006,7 +1027,10 @@ function testSPARQLStore(factory: () => Repository, {
 
 			const entry = clone(sample, shape);
 
-			await insert(encoder(entry));
+			// a generated resource is linked into the catalogues collecting its type, as a store creating it
+			// through them would, so that a catalogue retrieval reaches it as it reaches the sample resources
+
+			await insert([...encoder(entry), ...membership(entry, shape)]);
 
 			return entry;
 
@@ -1017,11 +1041,11 @@ function testSPARQLStore(factory: () => Repository, {
 
 	describe("sparql storage", () => {
 
-		it("should store und-tagged text as a plain literal", async () => {
+		it("should store und-tagged text as an und-tagged literal", async () => {
 
-			// synthetic mutation on a fresh, un-populated repository: a localised value tagged `und` MUST be
-			// stored as a plain xsd:string literal — never as a language-tagged `"…"@und` — since RDF treats
-			// `und` (undetermined) as an absent language.
+			// synthetic mutation on a fresh, un-populated repository: a localised value tagged `und` is stored as
+			// a language-tagged `"…"@und` literal like any other tag, never as a plain literal, which a string
+			// variant sharing the property would claim on read (§3.1)
 
 			const probe = factory();
 			const store = createSPARQLStore(probe);
@@ -1030,8 +1054,9 @@ function testSPARQLStore(factory: () => Repository, {
 
 			await store.create({
 
-				entry: id,
-				shape: Vendor,
+				entry: `${base}vendors/`,
+				shape: Vendors,
+				model: { members: {} },
 
 				state: {
 					id,
@@ -1046,8 +1071,33 @@ function testSPARQLStore(factory: () => Repository, {
 
 			});
 
-			expect(await probe.ask(`ask { <${id}> <${rdfs.label}> "Plain Label" }`)).toBe(true);
-			expect(await probe.ask(`ask { <${id}> <${rdfs.label}> ?o filter(lang(?o) = "und") }`)).toBe(false);
+			expect(await probe.ask(`ask { <${id}> <${rdfs.label}> "Plain Label"@und }`)).toBe(true);
+			expect(await probe.ask(`ask { <${id}> <${rdfs.label}> "Plain Label" }`)).toBe(false);
+
+		});
+
+		it("should link a created resource into the plain collection holding it", async () => {
+
+			// synthetic mutation on a fresh repository: a resource created through a collection a plain forward
+			// property holds is asserted as a member of it, so that the holder reaches it as any other value
+
+			const Note = shaped({ id: id(), text: required(string()) });
+			const Bin = shaped({ notes: multiple(reference(Note), { forward: `${base}toys#note` }) });
+
+			const probe = factory();
+			const store = createSPARQLStore(probe);
+
+			const holder: Reference = `${base}bins/1`;
+
+			const created = await store.create({
+				entry: holder,
+				shape: Bin,
+				model: { notes: {} },
+				state: { text: "linked" }
+			});
+
+			expect(created?.startsWith(`${holder}/`)).toBe(true);
+			expect(await probe.ask(`ask { <${holder}> <${base}toys#note> <${created}> }`)).toBe(true);
 
 		});
 
@@ -1057,6 +1107,45 @@ function testSPARQLStore(factory: () => Repository, {
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * Encodes a language map as language-tagged literals, the `und` tag included, as the store writes them.
+ */
+function text(text: undefined | Some<{ readonly [tag: Tag]: Some<string> }>): readonly Tagged[] {
+	return some(text).flatMap(text => Object.entries(text).flatMap(([tag, content]) =>
+		some(content).map(value => tagged(value, tag))
+	));
+}
+
+/**
+ * Encodes the membership edges linking a resource into the catalogues collecting its type.
+ */
+function membership(entry: Resource, shape: Lazy<ResourceShape>): readonly Triple[] {
+
+	const lineage = [getShapeClass(shape), ...(getShapeClasses(shape) ?? [])];
+
+	const holders = [
+		...(lineage.includes(toys.Resource) ? [catalogues.resources] : []),
+		...(lineage.includes(toys.Category) ? [catalogues.categories] : []),
+		...(lineage.includes(toys.Vendor) ? [catalogues.vendors] : []),
+		...(lineage.includes(toys.Product) ? [catalogues.products] : [])
+	];
+
+	return holders.flatMap(catalogue =>
+		identify(entry, shape, id => property(link(catalogue.id), rdfs.member, link(id)))
+	);
+
+}
+
+function encodeCatalogue(catalogue: Fragment<typeof Resources>) {
+	return identify(catalogue, Resources, entry => about(entry, id => resource(
+		property(id, rdf.type, catalogue.type && getShapeClass(Resources)),
+		property(id, rdf.type, catalogue.type && getShapeClasses(Resources)),
+		property(id, rdfs.label, text(catalogue.label)),
+		property(id, toys.created, data(catalogue.created, xsd.dateTime)),
+		property(id, rdfs.member, link(catalogue.members))
+	)));
+}
 
 function encodeCategory(category: Fragment<typeof Category>) {
 	return identify(category, Category, entry => about(entry, id => resource(
@@ -1096,6 +1185,9 @@ function encodeVendor(vendor: Fragment<typeof Vendor>) {
 		property(id, toys.score, term(vendor.score, score)),
 		property(id, toys.certified, term(vendor.certified, certified)),
 		property(id, toys.audited, term(vendor.audited, audited)),
+		property(id, toys.origin, isPlace(vendor.origin) ? vendor.origin : [], encodePlace),
+		property(id, toys.origin, isPlace(vendor.origin) ? [] : text(vendor.origin)),
+		property(id, toys.tagline, isString(vendor.tagline) ? data(vendor.tagline) : text(vendor.tagline)),
 		property(id, toys.address, vendor.address, encodeLocation),
 		property(id, toys.contacts, vendor.contacts, encodeLocation)
 	)));
@@ -1120,6 +1212,10 @@ function encodeVendor(vendor: Fragment<typeof Vendor>) {
 		return typed(audited,
 			isBoolean(audited) ? xsd.boolean : xsd.date
 		);
+	}
+
+	function isPlace(origin: Fragment<typeof Vendor>["origin"]): origin is State<typeof Place> {
+		return origin !== undefined && "latitude" in origin;
 	}
 
 }

@@ -14,37 +14,16 @@
  * limitations under the License.
  */
 
-import { dictionary } from "@metreeca/blue/dictionary";
-import { byte, decimal, integer } from "@metreeca/blue/number";
-import { reference } from "@metreeca/blue/reference";
-import { id, multiple, optional, required, resource, type } from "@metreeca/blue/resource";
-import { date, instant, string, url } from "@metreeca/blue/string";
-import { union } from "@metreeca/blue/union";
-import { isObject, isString, type Optional } from "@metreeca/core";
-import type { Resource } from "@metreeca/qest/state";
-import type { Template } from "@metreeca/qest/model";
+import { isObject, isString } from "@metreeca/core";
 import { beforeAll, describe, expect, it } from "vitest";
-import { model } from "../_model.js";
 import { lookup, type TestFactory } from "../index.core.js";
 import { collections } from "../toys.core.js";
-import {
-	Address,
-	Category,
-	Certified,
-	Contacts,
-	PostalAddress,
-	Product,
-	Products,
-	Score,
-	toys,
-	Vendor
-} from "../toys.js";
+import { Category, Product, Products, Vendor, Vendors } from "../toys.js";
 
 
 const { categories, products, vendors } = collections;
 
 
-const withAddress = lookup(vendors, v => v.address !== undefined);
 const withContacts = lookup(vendors, v => (v.contacts?.length ?? 0) > 0);
 
 
@@ -53,116 +32,12 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 	const AF001 = lookup(products, { sku: "AF-001" })!;
 
 
-	describe("lookup template", () => {
+	describe("template", () => {
 
 		beforeAll(factory(async ({ populate }) => { await populate(); }).hook);
 
 
-		describe("contract", () => {
-
-			// Each case pairs an entry+model with an assertion run against the awaited
-			// `store.lookup` invocation: rejection cases assert via `rejects`, success
-			// cases assert against the resolved value.
-
-			type ContractCase = {
-				readonly entry: string;
-				readonly model: Template;
-				readonly assert: (call: Promise<Optional<Resource>>) => Promise<unknown>;
-			};
-
-			const cases: ReadonlyArray<readonly [string, ContractCase]> = [
-
-				// the model-typing cases the previous notation carried — a typed leaf stating the wrong type, a
-				// query tuple over a single-valued property, an over-length collection tuple — have no subject
-				// under the reworked model: every leaf is the atomic `{}` and a collection carries its criteria
-				// on the entry naming it, so none of those forms is statable
-
-				["reject with RangeError for a relative IRI", {
-					entry: "relative/path",
-					model: { price: {} },
-					assert: call => expect(call).rejects.toBeInstanceOf(RangeError)
-				}],
-
-				["reject with RangeError for an empty IRI", {
-					entry: "",
-					model: { price: {} },
-					assert: call => expect(call).rejects.toBeInstanceOf(RangeError)
-				}],
-
-				["reject with RangeError for an entry with a query string", {
-					entry: `${AF001.id}?probe=1`,
-					model: { price: {} },
-					assert: call => expect(call).rejects.toBeInstanceOf(RangeError)
-				}],
-
-				["reject with RangeError for an entry with a fragment", {
-					entry: `${AF001.id}#probe`,
-					model: { price: {} },
-					assert: call => expect(call).rejects.toBeInstanceOf(RangeError)
-				}],
-
-				["return undefined for unknown ids", {
-					entry: "https://data.example.net/products/UNKNOWN",
-					model: model(resource({ price: required(decimal()) })),
-					assert: async call => expect(await call).toBeUndefined()
-				}],
-
-				["project only id", {
-					entry: AF001.id,
-					model: model(resource({ id: id() })),
-					assert: async call => expect((await call)?.id).toBe(AF001.id)
-				}],
-
-				["project only type", {
-					entry: AF001.id,
-					model: model(resource({ class: toys.Product }, { type: type() })),
-					assert: async call => expect((await call)?.type).toBe(AF001.type)
-				}],
-
-				["project id and type together", {
-					entry: AF001.id,
-					model: model(resource({ class: toys.Product }, { id: id(), type: type() })),
-					assert: async call => {
-						const result = await call;
-						expect(result?.id).toBe(AF001.id);
-						expect(result?.type).toBe(AF001.type);
-					}
-				}]
-
-			];
-
-			it.each(cases)("should %s", (_, { entry, model: m, assert }) => factory(async ({ store }) => {
-
-				// ;(cast) a contract case states its model as the wide `Template`, so the delivery it resolves is
-				// the wide resource the assertions read values off
-
-				await assert(store.lookup({ shape: Product, entry, model: m }) as Promise<Optional<Resource>>);
-
-			})());
-
-			it("should return an immutable copy", factory(async ({ store }) => {
-
-				const result = await store.lookup({
-					entry: AF001.id,
-					shape: Product,
-					model: { price: {}, vendor: { name: {} } }
-				});
-
-				expect(result?.vendor).toBeDefined();
-
-				expect(() => {
-					(result as any).price = 0; // ;(cast) runtime immutability probe past readonly typing
-				}).toThrow();
-
-				expect(() => {
-					(result?.vendor as any).name = ""; // ;(cast) runtime immutability probe past readonly typing
-				}).toThrow();
-
-			}));
-
-		});
-
-		describe("scalar properties — §5.2", () => {
+		describe("scalar properties — §5.3", () => {
 
 			describe("literals", () => {
 
@@ -171,12 +46,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 					const result = await store.lookup({
 						entry: AF001.id,
 						shape: Product,
-						model: model(resource({
-							sku: required(string()),
-							price: required(decimal()),
-							stock: required(integer()),
-							condition: required(string())
-						}))
+						model: { sku: {}, price: {}, stock: {}, condition: {} }
 					});
 
 					expect(result?.sku).toBe(AF001.sku);
@@ -191,9 +61,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 					const result = await store.lookup({
 						entry: AF001.id,
 						shape: Product,
-						model: model(resource({
-							price: required(decimal())
-						}))
+						model: { price: {} }
 					});
 
 					expect(result?.price).toBe(AF001.price);
@@ -227,10 +95,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 					const result = await store.lookup({
 						entry: noLaunched.id,
 						shape: Product,
-						model: model(resource({
-							sku: required(string()),
-							launched: optional(date())
-						}))
+						model: { sku: {}, launched: {} }
 					});
 
 					expect(result?.sku).toBe(noLaunched.sku);
@@ -247,9 +112,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 					const result = await store.lookup({
 						entry: AF001.id,
 						shape: Product,
-						model: model(resource({
-							vendor: required(reference(Vendor))
-						}))
+						model: { vendor: {} }
 					});
 
 					expect(result?.vendor).toBe(AF001.vendor);
@@ -263,9 +126,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 					const result = await store.lookup({
 						entry: child.id,
 						shape: Category,
-						model: model(resource({
-							broader: optional(reference(Category))
-						}))
+						model: { broader: {} }
 					});
 
 					expect(result?.broader).toBe(child.broader);
@@ -279,18 +140,12 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 					const result = await store.lookup({
 						entry: root.id,
 						shape: Category,
-						model: model(resource({
-							broader: optional(reference(Category))
-						}))
+						model: { broader: {} }
 					});
 
 					expect(result?.broader).toBeUndefined();
 
 				}));
-
-				// the reference-placeholder cases the previous notation carried — any string satisfying the
-				// IRI-reference production accepted as a placeholder, anything else rejected — have no subject:
-				// a placeholder carries no value of its own, so a reference is asked for through the atomic `{}`
 
 			});
 
@@ -303,13 +158,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 					const result = await store.lookup({
 						entry: AF001.id,
 						shape: Product,
-						model: model(resource({
-							vendor: required(resource({
-								name: required(string()),
-								email: required(string()),
-								code: required(string())
-							}))
-						}))
+						model: { vendor: { name: {}, email: {}, code: {} } }
 					});
 
 					expect(result?.vendor?.name).toBe(expected.name);
@@ -323,11 +172,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 					const result = await store.lookup({
 						entry: AF001.id,
 						shape: Product,
-						model: model(resource({
-							vendor: required(resource({
-								name: required(string())
-							}))
-						}))
+						model: { vendor: { name: {} } }
 					});
 
 					expect(result?.vendor?.name).toBeDefined();
@@ -344,12 +189,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 					const result = await store.lookup({
 						entry: child.id,
 						shape: Category,
-						model: model(resource({
-							broader: optional(resource({
-								code: required(string()),
-								title: required(dictionary({ uniqueLang: true, languageIn: ["en"] }))
-							}))
-						}))
+						model: { broader: { code: {}, title: { en: {} } } }
 					});
 
 					expect(result?.broader?.code).toBe(parent.code);
@@ -366,15 +206,10 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 					const result = await store.lookup({
 						entry: leaf.id,
 						shape: Category,
-						model: model(resource({
-							title: required(dictionary({ uniqueLang: true, languageIn: ["en"] })),
-							broader: optional(resource({
-								title: required(dictionary({ uniqueLang: true, languageIn: ["en"] })),
-								broader: optional(resource({
-									title: required(dictionary({ uniqueLang: true, languageIn: ["en"] }))
-								}))
-							}))
-						}))
+						model: {
+							title: { en: {} },
+							broader: { title: { en: {} }, broader: { title: { en: {} } } }
+						}
 					});
 
 					expect(result?.title?.en).toBe(leaf.title.en);
@@ -390,13 +225,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 					const result = await store.lookup({
 						entry: AF001.id,
 						shape: Product,
-						model: model(resource({ class: toys.Product }, {
-							id: id(),
-							type: type(),
-							vendor: required(resource({
-								name: required(string())
-							}))
-						}))
+						model: { id: {}, type: {}, vendor: { name: {} } }
 					});
 
 					expect(result?.id).toBe(AF001.id);
@@ -409,7 +238,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 
 		});
 
-		describe("array properties — §5.2", () => {
+		describe("array properties — §5.3", () => {
 
 			describe("literals", () => {
 
@@ -418,9 +247,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 					const result = await store.lookup({
 						entry: AF001.id,
 						shape: Product,
-						model: model(resource({
-							documents: multiple(url())
-						}))
+						model: { documents: {} }
 					});
 
 					expect(result?.documents).toBeInstanceOf(Array);
@@ -440,9 +267,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 					const result = await store.lookup({
 						entry: noAliases.id,
 						shape: Vendor,
-						model: model(resource({
-							aliases: multiple(string())
-						}))
+						model: { aliases: {} }
 					});
 
 					expect(result).not.toHaveProperty("aliases");
@@ -458,9 +283,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 					const result = await store.lookup({
 						entry: AF001.id,
 						shape: Product,
-						model: model(resource({
-							categories: multiple(reference(Category))
-						}))
+						model: { categories: {} }
 					});
 
 					expect(result?.categories).toBeInstanceOf(Array);
@@ -481,12 +304,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 					const result = await store.lookup({
 						entry: AF001.id,
 						shape: Product,
-						model: model(resource({
-							categories: multiple(resource({
-								code: required(string()),
-								title: required(dictionary({ uniqueLang: true, languageIn: ["en"] }))
-							}))
-						}))
+						model: { categories: { code: {}, title: { en: {} } } }
 					});
 
 					expect(result?.categories).toHaveLength(AF001.categories.length);
@@ -502,19 +320,14 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 
 			describe("embedded resources", () => {
 
-				it("should lookup embedded resources inline", factory(async ({ store }) => {
+				it("should detail embedded resources inline", factory(async ({ store }) => {
 
 					const reviews = AF001.reviews!;
 
 					const result = await store.lookup({
 						entry: AF001.id,
 						shape: Product,
-						model: model(resource({
-							reviews: multiple(resource({
-								author: required(string()),
-								rating: required(byte({ minInclusive: 1, maxInclusive: 5 }))
-							}))
-						}))
+						model: { reviews: { author: {}, rating: {} } }
 					});
 
 					expect(result?.reviews).toBeInstanceOf(Array);
@@ -524,21 +337,14 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 
 				}));
 
-				it("should lookup all fields of embedded resources", factory(async ({ store }) => {
+				it("should detail all fields of embedded resources", factory(async ({ store }) => {
 
 					const reviews = AF001.reviews!;
 
 					const result = await store.lookup({
 						entry: AF001.id,
 						shape: Product,
-						model: model(resource({
-							reviews: multiple(resource({
-								author: required(string()),
-								posted: required(instant()),
-								rating: required(byte({ minInclusive: 1, maxInclusive: 5 })),
-								content: required(dictionary({ uniqueLang: true, languageIn: ["en"] }))
-							}))
-						}))
+						model: { reviews: { author: {}, posted: {}, rating: {}, content: { en: {} } } }
 					});
 
 					expect(result?.reviews).toHaveLength(reviews.length);
@@ -561,12 +367,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 					const result = await store.lookup({
 						entry: noReviews.id,
 						shape: Product,
-						model: model(resource({
-							reviews: multiple(resource({
-								author: required(string()),
-								rating: required(integer({ minInclusive: 1, maxInclusive: 5 }))
-							}))
-						}))
+						model: { reviews: { author: {}, rating: {} } }
 					});
 
 					expect(result).not.toHaveProperty("reviews");
@@ -577,18 +378,16 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 
 		});
 
-		describe("localised properties — §5.3", () => {
+		describe("localised properties — §5.4", () => {
 
 			describe("canonical map form", () => {
 
-				it("should lookup single-valued localised by language range", factory(async ({ store }) => {
+				it("should detail single-valued localised by language range", factory(async ({ store }) => {
 
 					const result = await store.lookup({
 						entry: AF001.id,
 						shape: Product,
-						model: model(resource({
-							name: required(dictionary({ uniqueLang: true, languageIn: ["en"] }))
-						}))
+						model: { name: { en: {} } }
 					});
 
 					expect(result?.name?.en).toBe(AF001.name.en);
@@ -604,16 +403,14 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 					const result = await store.lookup({
 						entry: multiTag.id,
 						shape: Product,
-						model: model(resource({
-							name: required(dictionary({ uniqueLang: true, languageIn: ["en"] }))
-						}))
+						model: { name: { en: {} } }
 					});
 
 					expect(Object.keys(result?.name ?? {})).toEqual(["en"]);
 
 				}));
 
-				it("should lookup exactly the requested tag subset", factory(async ({ store }) => {
+				it("should detail exactly the requested tag subset", factory(async ({ store }) => {
 
 					const enDe = lookup(products, p => ["en", "de"].every(t => t in (p.name ?? {})));
 
@@ -622,18 +419,16 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 					const result = await store.lookup({
 						entry: enDe.id,
 						shape: Product,
-						model: model(resource({
-							name: required(dictionary({ uniqueLang: true, languageIn: ["en", "de"] }))
-						}))
+						model: { name: { en: {}, de: {} } }
 					});
 
 					expect(Object.keys(result?.name ?? {}).sort()).toEqual(["de", "en"]);
 
 				}));
 
-				it("should include regional subtags matching a basic language range (§5.3)", factory(async ({ store }) => {
+				it("should include regional subtags matching a basic language range (§5.4)", factory(async ({ store }) => {
 
-					// §5.3 / RFC 4647 basic filtering: a tag-range key matches a tag when equal to it or
+					// §5.4 / RFC 4647 basic filtering: a tag-range key matches a tag when equal to it or
 					// carrying it as a subtag prefix, returning ALL matching tags. The `en` range therefore
 					// retrieves both the `en` and the regional `en-US` entries of a product carrying one,
 					// never just the exact `en` tag.
@@ -652,9 +447,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 					const result = await store.lookup({
 						entry: regional.id,
 						shape: Product,
-						model: model(resource({
-							name: required(dictionary({ uniqueLang: true, languageIn: ["en"] }))
-						}))
+						model: { name: { en: {} } }
 					});
 
 					expect(Object.keys(result?.name ?? {}).map(tag => tag.toLowerCase()).sort())
@@ -664,9 +457,9 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 
 				}));
 
-				it("should lookup multi-valued localised by language range", factory(async ({ store }) => {
+				it("should detail multi-valued localised by language range", factory(async ({ store }) => {
 
-					// §5.3: a multi-valued localised slot is retrieved as one tag-keyed map whose value is
+					// §5.4: a multi-valued localised slot is retrieved as one tag-keyed map whose value is
 					// the tag's string array (`{ en: [...] }`), not an array of singleton maps.
 
 					const keywords = AF001.keywords?.en ?? [];
@@ -674,9 +467,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 					const result = await store.lookup({
 						entry: AF001.id,
 						shape: Product,
-						model: model(resource({
-							keywords: multiple(dictionary({ languageIn: ["en"] }))
-						}))
+						model: { keywords: { en: {} } }
 					});
 
 					expect(result?.keywords?.en).toEqual(expect.arrayContaining([...keywords]));
@@ -684,9 +475,9 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 
 				}));
 
-				it("should include regional subtags in an array-per-tag basic language range (§5.3)", factory(async ({ store }) => {
+				it("should include regional subtags in an array-per-tag basic language range (§5.4)", factory(async ({ store }) => {
 
-					// §5.3 / RFC 4647 basic filtering on the array-per-tag path: the `en` range retrieves
+					// §5.4 / RFC 4647 basic filtering on the array-per-tag path: the `en` range retrieves
 					// both the `en` and the regional `en-US` keyword sets of a product carrying one, each
 					// under its own tag; language tags are case-insensitive (RFC 5646 §2.1.1).
 
@@ -702,9 +493,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 					const result = await store.lookup({
 						entry: regional.id,
 						shape: Product,
-						model: model(resource({
-							keywords: multiple(dictionary({ languageIn: ["en"] }))
-						}))
+						model: { keywords: { en: {} } }
 					});
 
 					expect(Object.keys(result?.keywords ?? {}).map(tag => tag.toLowerCase()).sort())
@@ -718,23 +507,21 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 
 			describe("wildcard tag range", () => {
 
-				it("should lookup single-valued localised as full tag-range map", factory(async ({ store }) => {
+				it("should detail single-valued localised as full tag-range map", factory(async ({ store }) => {
 
 					const result = await store.lookup({
 						entry: AF001.id,
 						shape: Product,
-						model: model(resource({
-							name: required(dictionary({ uniqueLang: true }))
-						}))
+						model: { name: { "*": {} } }
 					});
 
 					expect(result?.name).toEqual(AF001.name);
 
 				}));
 
-				it("should lookup multi-valued localised as full tag-range map", factory(async ({ store }) => {
+				it("should detail multi-valued localised as full tag-range map", factory(async ({ store }) => {
 
-					// §5.3: under the `*` wildcard range the multi-valued localised slot returns its full
+					// §5.4: under the `*` wildcard range the multi-valued localised slot returns its full
 					// tag-keyed map, each tag carrying its string array.
 
 					const keywords = AF001.keywords?.en ?? [];
@@ -742,9 +529,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 					const result = await store.lookup({
 						entry: AF001.id,
 						shape: Product,
-						model: model(resource({
-							keywords: multiple(dictionary())
-						}))
+						model: { keywords: { "*": {} } }
 					});
 
 					expect(result?.keywords?.en).toEqual(expect.arrayContaining([...keywords]));
@@ -765,9 +550,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 					const result = await store.lookup({
 						entry: noDescription.id,
 						shape: Product,
-						model: model(resource({
-							description: optional(dictionary({ uniqueLang: true, languageIn: ["en"] }))
-						}))
+						model: { description: { en: {} } }
 					});
 
 					expect(result).not.toHaveProperty("description");
@@ -778,28 +561,26 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 
 		});
 
-		describe("union properties — §5.4", () => {
+		describe("union properties — §5.5", () => {
 
-			// §5.4: a union-typed property is addressable only through the keyed form, an object whose
-			// keys are opaque non-negative integer strings. The active branch is NOT fixed by the key
-			// (keys carry no positional meaning) but by matching each alternative placeholder against
-			// the property's declared variants BY KIND, its value immaterial: a literal alternative
-			// matches every variant of its processing kind, a reference alternative every reference
-			// variant, and a template alternative every nested-resource variant its structure fits.
-			// An alternative MAY match several variants, retrieving each, but MUST match at least one —
-			// one matching no variant is unsatisfiable and rejected. A literal or reference alternative
-			// does not tell same-kind variants apart and so requests them all; a template's structure
-			// discriminates the resource variants it fits. Union no longer admits a localised branch
-			// (qest redefinition), so the former "localised variant" test has been removed.
+			// §5.5: a union-typed property is addressed directly by a single placeholder or through the
+			// keyed form, an object whose keys are opaque non-negative integer strings. The active branch
+			// is NOT fixed by the key (keys carry no positional meaning) but by matching each alternative
+			// placeholder against the property's declared variants BY FORM (§5.3): the atomic matches
+			// every variant it can stand for, and a template alternative every nested-resource variant
+			// its properties are valid on. An alternative MAY match several variants, retrieving each,
+			// but MUST match at least one — one matching no variant is unsatisfiable and rejected. The
+			// atomic does not tell variants apart and so requests them all; a template's structure
+			// discriminates the resource variants it fits.
 
 			describe("via union shape", () => {
 
 				// model derives the keyed form from the union() shape, emitting one placeholder per branch;
-				// each placeholder matches its branch by kind (literal, reference) or structure (template),
-				// its value immaterial, and retrieval returns whichever branch the stored value belongs to,
-				// not by the slot key.
+				// each placeholder matches the branches it fits by form (§5.5: the atomic every branch it can
+				// stand for, a template the nested-resource branches it is valid on), and retrieval returns
+				// whichever branch the stored value belongs to, not by the slot key.
 
-				it("should lookup a single-valued union via the union shape", factory(async ({ store }) => {
+				it("should detail a single-valued union via the union shape", factory(async ({ store }) => {
 
 					const addressed = vendors.filter(v => v.address !== undefined);
 
@@ -808,9 +589,26 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 						const result = await store.lookup({
 							entry: vendor.id,
 							shape: Vendor,
-							model: model(resource({
-								address: optional(Address)
-							}))
+							model: {
+								address: {
+									"0": {},
+									"1": {
+										label: { und: {}, en: {}, de: {}, fr: {}, it: {} },
+										street: {},
+										city: {},
+										zip: {},
+										country: {},
+										comment: { en: {}, de: {}, fr: {}, it: {} }
+									},
+									"2": {
+										label: { und: {}, en: {}, de: {}, fr: {}, it: {} },
+										latitude: {},
+										longitude: {},
+										opened: {},
+										comment: { en: {}, de: {}, fr: {}, it: {} }
+									}
+								}
+							}
 						});
 
 						expect(result?.address).toBeDefined();
@@ -841,6 +639,72 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 
 				}));
 
+				it("should detail each member's single-valued union independently across a collection", factory(async ({ store }) => {
+
+					// the members of a collection are expanded together, so each must come back under the branch
+					// its own stored value singles out, never under the branch of a sibling member sharing the union
+
+					const result = await store.lookup({
+						entry: "https://data.example.net/vendors/",
+						shape: Vendors,
+						model: {
+							members: {
+								id: {},
+								address: {
+									"0": {},
+									"1": { street: {}, city: {} },
+									"2": { latitude: {}, longitude: {} }
+								}
+							}
+						}
+					});
+
+					expect(result?.members).toHaveLength(vendors.length);
+
+					vendors.forEach(vendor => {
+
+						const address = result?.members?.find(member => member.id === vendor.id)?.address;
+
+						if ( isString(vendor.address) ) {
+							expect(address).toBe(vendor.address);
+						} else if ( isObject(vendor.address) && "street" in vendor.address ) {
+							expect(isObject(address) && "street" in address ? address.street : undefined).toBe(vendor.address.street);
+						} else if ( isObject(vendor.address) && "latitude" in vendor.address ) {
+							expect(isObject(address) && "latitude" in address ? address.latitude : undefined).toBe(vendor.address.latitude);
+						} else {
+							expect(address).toBeUndefined();
+						}
+
+					});
+
+				}));
+
+				it("should detail two union properties sharing variant shapes independently", factory(async ({ store }) => {
+
+					// `address` and `contacts` both carry the PostalAddress and Place variants: each slot must come
+					// back from its own stored values, the shared variant shapes never conflating the two
+
+					const target = lookup(vendors, v =>
+						isObject(v.address) && "street" in v.address && (v.contacts ?? []).some(c => isObject(c))
+					);
+
+					if ( target === undefined || !isObject(target.address) || !("street" in target.address) ) { return; }
+
+					const result = await store.lookup({
+						entry: target.id,
+						shape: Vendor,
+						model: {
+							address: { "0": {}, "1": { street: {} }, "2": { latitude: {} } },
+							contacts: { "0": {}, "1": {}, "2": { street: {} }, "3": { latitude: {} } }
+						}
+					});
+
+					expect(isObject(result?.address) && "street" in result.address ? result.address.street : undefined)
+						.toBe(target.address.street);
+					expect(result?.contacts).toHaveLength(target.contacts?.length ?? 0);
+
+				}));
+
 				it("should accept an atomic placeholder over a union-typed property (§5.3)", factory(async ({ store }) => {
 
 					// §5.3: the atomic placeholder asks for the value as it stands and so reaches every variant
@@ -861,16 +725,34 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 
 				}));
 
-				it("should lookup a multi-valued union via the union shape", factory(async ({ store }) => {
+				it("should detail a multi-valued union via the union shape", factory(async ({ store }) => {
 
 					if ( !withContacts ) { return; }
 
 					const result = await store.lookup({
 						entry: withContacts.id,
 						shape: Vendor,
-						model: model(resource({
-							contacts: multiple(Contacts)
-						}))
+						model: {
+							contacts: {
+								"0": {},
+								"1": {},
+								"2": {
+									label: { und: {}, en: {}, de: {}, fr: {}, it: {} },
+									street: {},
+									city: {},
+									zip: {},
+									country: {},
+									comment: { en: {}, de: {}, fr: {}, it: {} }
+								},
+								"3": {
+									label: { und: {}, en: {}, de: {}, fr: {}, it: {} },
+									latitude: {},
+									longitude: {},
+									opened: {},
+									comment: { en: {}, de: {}, fr: {}, it: {} }
+								}
+							}
+						}
 					});
 
 					expect(result?.contacts).toBeInstanceOf(Array);
@@ -887,9 +769,26 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 					const result = await store.lookup({
 						entry: noAddress.id,
 						shape: Vendor,
-						model: model(resource({
-							address: optional(Address)
-						}))
+						model: {
+							address: {
+								"0": {},
+								"1": {
+									label: { und: {}, en: {}, de: {}, fr: {}, it: {} },
+									street: {},
+									city: {},
+									zip: {},
+									country: {},
+									comment: { en: {}, de: {}, fr: {}, it: {} }
+								},
+								"2": {
+									label: { und: {}, en: {}, de: {}, fr: {}, it: {} },
+									latitude: {},
+									longitude: {},
+									opened: {},
+									comment: { en: {}, de: {}, fr: {}, it: {} }
+								}
+							}
+						}
 					});
 
 					expect(result?.address).toBeUndefined();
@@ -905,9 +804,27 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 					const result = await store.lookup({
 						entry: noContacts.id,
 						shape: Vendor,
-						model: model(resource({
-							contacts: multiple(Contacts)
-						}))
+						model: {
+							contacts: {
+								"0": {},
+								"1": {},
+								"2": {
+									label: { und: {}, en: {}, de: {}, fr: {}, it: {} },
+									street: {},
+									city: {},
+									zip: {},
+									country: {},
+									comment: { en: {}, de: {}, fr: {}, it: {} }
+								},
+								"3": {
+									label: { und: {}, en: {}, de: {}, fr: {}, it: {} },
+									latitude: {},
+									longitude: {},
+									opened: {},
+									comment: { en: {}, de: {}, fr: {}, it: {} }
+								}
+							}
+						}
 					});
 
 					expect(result).not.toHaveProperty("contacts");
@@ -920,8 +837,8 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 
 				it("should single out the embedded branch by structure under an opaque key", factory(async ({ store }) => {
 
-					// The slot key "0" carries no positional meaning; the nested Template derived from the
-					// PostalAddress shape via model() is what singles out the PostalAddress branch among the
+					// The slot key "0" carries no positional meaning; the nested Template addressing the
+					// PostalAddress members is what singles out the PostalAddress branch among the
 					// string / PostalAddress / Place variants — proving discrimination is by structure, not by
 					// key index. Partial keyed form (one alternative) so only that branch is requested.
 
@@ -936,7 +853,18 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 					const result = await store.lookup({
 						entry: withPostalAddress.id,
 						shape: Vendor,
-						model: model(resource({ address: optional(union(PostalAddress)) }))
+						model: {
+							address: {
+								"0": {
+									label: { und: {}, en: {}, de: {}, fr: {}, it: {} },
+									street: {},
+									city: {},
+									zip: {},
+									country: {},
+									comment: { en: {}, de: {}, fr: {}, it: {} }
+								}
+							}
+						}
 					});
 
 					expect(isObject(result?.address)).toBe(true);
@@ -950,8 +878,8 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 
 				it("should single out a multi-valued embedded branch by structure", factory(async ({ store }) => {
 
-					// Same opaque-key discrimination over a multi-valued union: the nested Template derived
-					// from the PostalAddress shape via model() singles out the PostalAddress branch of
+					// Same opaque-key discrimination over a multi-valued union: the nested Template addressing
+					// the PostalAddress members singles out the PostalAddress branch of
 					// Vendor.contacts regardless of the slot key "0". Partial keyed form (one alternative)
 					// so only the postal branch is requested and the other contact branches are skipped.
 
@@ -966,7 +894,18 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 					const result = await store.lookup({
 						entry: withPostalContact.id,
 						shape: Vendor,
-						model: model(resource({ contacts: multiple(union(PostalAddress)) }))
+						model: {
+							contacts: {
+								"0": {
+									label: { und: {}, en: {}, de: {}, fr: {}, it: {} },
+									street: {},
+									city: {},
+									zip: {},
+									country: {},
+									comment: { en: {}, de: {}, fr: {}, it: {} }
+								}
+							}
+						}
 					});
 
 					expect(result?.contacts).toBeInstanceOf(Array);
@@ -974,17 +913,10 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 
 				}));
 
-				// the branch-skipping case the previous notation carried singled a branch out by the kind of its
-				// placeholder value; the atomic `{}` reaches every variant coming back as a value (§5.3), so a
-				// branch is no longer skipped by the placeholder
+				it("should reject an alternative matching no variant (§5.5)", factory(async ({ store }) => {
 
-				// the out-of-domain case the previous notation carried stated a placeholder value outside the
-				// variant domain; a placeholder carries no value of its own any more (§5.3)
-
-				it("should reject an alternative whose kind matches no variant (§5.4)", factory(async ({ store }) => {
-
-					// §5.4: score is union(decimal, grade string); a boolean placeholder matches neither
-					// the number nor the string variant by kind, so it is unsatisfiable and rejected.
+					// §5.3, §5.5: score is union(decimal, grade string); a template alternative matches only
+					// nested-resource variants, and score declares none, so it is unsatisfiable and rejected.
 
 					const vendor = lookup(vendors, v => v.score !== undefined);
 
@@ -993,8 +925,213 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 					await expect(store.lookup({
 						entry: vendor.id,
 						shape: Vendor,
-						model: { score: { "0": true } }
+						// @ts-expect-error the unsatisfiable alternative is rejected by the type as well
+						model: { score: { "0": { name: {} } } }
 					})).rejects.toBeInstanceOf(RangeError);
+
+				}));
+
+			});
+
+			describe("text variant — §3.2", () => {
+
+				// §3.2, §5.5: `Vendor.origin` pairs a text variant with the Place variant. Folding recasts the text
+				// variant as an ordinary string branch carrying its coalesced value (§6.2) before retrieval reaches
+				// it, so an atomic alternative addresses the region name as its coalesced label, and a template
+				// alternative the Place. A locale alternative is admitted only within a projection binding.
+
+				const regions = vendors.filter(v => isObject(v.origin) && !("latitude" in v.origin));
+				const places = vendors.filter(v => isObject(v.origin) && "latitude" in v.origin);
+
+				it("should retrieve each member's origin under the branch its stored value singles out", factory(async ({ store }) => {
+
+					const result = await store.lookup({
+						entry: "https://data.example.net/vendors/",
+						shape: Vendors,
+						model: {
+							members: {
+								id: {},
+								origin: { "0": {}, "1": { latitude: {}, longitude: {} } }
+							}
+						}
+					}, { locale: ["en"] });
+
+					expect(result?.members).toHaveLength(vendors.length);
+
+					vendors.forEach(vendor => {
+
+						const origin = result?.members?.find(member => member.id === vendor.id)?.origin;
+
+						if ( isObject(vendor.origin) && "latitude" in vendor.origin ) {
+							expect(origin).toEqual({
+								latitude: vendor.origin.latitude,
+								longitude: vendor.origin.longitude
+							});
+						} else if ( isObject(vendor.origin) ) {
+							expect(origin).toBe(vendor.origin.en);
+						} else {
+							expect(origin).toBeUndefined();
+						}
+
+					});
+
+				}));
+
+				it("should omit a folded text branch whose coalescing yields no value", factory(async ({ store }) => {
+
+					// §3.2: the text variant contributes nothing where coalescing yields undefined
+
+					const target = lookup(regions, v => isObject(v.origin) && !("de" in v.origin));
+
+					if ( target === undefined ) { return; }
+
+					const result = await store.lookup({
+						entry: target.id,
+						shape: Vendor,
+						model: { origin: { "0": {}, "1": { latitude: {}, longitude: {} } } }
+					}, { locale: ["de"] });
+
+					expect(result).not.toHaveProperty("origin");
+
+				}));
+
+				it("should coalesce an und region name under the default priority (§6.2)", factory(async ({ store }) => {
+
+					// §3.1, §6.2: an `und` entry is text like any other tag, matched by the text variant alongside
+					// the Place variant and coalesced under the default priority, the single tag `und`
+
+					const target = lookup(regions, v => isObject(v.origin) && "und" in v.origin);
+
+					if ( target === undefined || !isObject(target.origin) || !("und" in target.origin) ) { return; }
+
+					const result = await store.lookup({
+						entry: target.id,
+						shape: Vendor,
+						model: { origin: { "0": {}, "1": { latitude: {}, longitude: {} } } }
+					});
+
+					expect(result?.origin).toBe(target.origin.und);
+
+				}));
+
+				it("should skip the folded text branch when only the Place is requested", factory(async ({ store }) => {
+
+					// §5.5: variants left unmatched are skipped at retrieval, contributing no values
+
+					const [region] = regions;
+					const [place] = places;
+
+					if ( region === undefined || place === undefined
+						|| !isObject(place.origin) || !("latitude" in place.origin) ) { return; }
+
+					const model = { origin: { "0": { latitude: {}, longitude: {} } } };
+
+					const [regionResult, placeResult] = await Promise.all([
+						store.lookup({ entry: region.id, shape: Vendor, model }, { locale: ["en"] }),
+						store.lookup({ entry: place.id, shape: Vendor, model }, { locale: ["en"] })
+					]);
+
+					expect(regionResult).not.toHaveProperty("origin");
+					expect(placeResult?.origin).toEqual({
+						latitude: place.origin.latitude,
+						longitude: place.origin.longitude
+					});
+
+				}));
+
+				it("should reject a locale alternative outside a projection binding (§5.5)", factory(async ({ store }) => {
+
+					const [region] = regions;
+
+					if ( region === undefined ) { return; }
+
+					await expect(store.lookup({
+						entry: region.id,
+						shape: Vendor,
+						// @ts-expect-error the locale alternative is rejected by the type as well
+						model: { origin: { "0": { "*": {} } } }
+					})).rejects.toBeInstanceOf(RangeError);
+
+				}));
+
+				it("should reject a direct locale over a union pairing text and resource variants (§5.4)", factory(async ({ store }) => {
+
+					// §5.4: a property declaring both a text variant and a nested-resource variant leaves the object
+					// form ambiguous, and must be addressed through the keyed form
+
+					const [region] = regions;
+
+					if ( region === undefined ) { return; }
+
+					await expect(store.lookup({
+						entry: region.id,
+						shape: Vendor,
+						model: { origin: { "*": {} } }
+					})).rejects.toBeInstanceOf(RangeError);
+
+				}));
+
+			});
+
+			describe("string and text variants — §3.2", () => {
+
+				// §3.1, §3.2: `Vendor.tagline` pairs a string variant with a text variant admitting `und` entries.
+				// The two are told apart by wire form on ingress and fold into one string branch on retrieval: the
+				// string variant contributes its plain value whatever the request priority, the text variant its
+				// coalesced label under that priority (§6.2), an `und` entry included
+
+				const undetermined = lookup(vendors, v => isObject(v.tagline) && Object.keys(v.tagline).join() === "und");
+
+				it("should retrieve each member's tagline under the branch its stored value singles out", factory(async ({ store }) => {
+
+					const result = await store.lookup({
+						entry: "https://data.example.net/vendors/",
+						shape: Vendors,
+						model: { members: { id: {}, tagline: {} } }
+					}, { locale: ["en"] });
+
+					expect(result?.members).toHaveLength(vendors.length);
+
+					vendors.forEach(vendor => {
+
+						const tagline = result?.members?.find(member => member.id === vendor.id)?.tagline;
+
+						expect(tagline).toEqual(isObject(vendor.tagline) ? vendor.tagline.en : vendor.tagline);
+
+					});
+
+				}));
+
+				it("should not read an und text back as a plain string under a priority omitting und (§3.1)", factory(async ({ store }) => {
+
+					// §3.1: the text variant is never matched by a plain string, so an `und` entry stays text and
+					// coalesces only under a priority naming `und`
+
+					if ( undetermined === undefined ) { return; }
+
+					const result = await store.lookup({
+						entry: undetermined.id,
+						shape: Vendor,
+						model: { tagline: {} }
+					}, { locale: ["en"] });
+
+					expect(result).not.toHaveProperty("tagline");
+
+				}));
+
+				it("should coalesce an und text under the default priority (§6.2)", factory(async ({ store }) => {
+
+					// §6.2: with no priority supplied, the whole priority defaults to the single tag `und`
+
+					if ( undetermined === undefined || !isObject(undetermined.tagline) ) { return; }
+
+					const result = await store.lookup({
+						entry: undetermined.id,
+						shape: Vendor,
+						model: { tagline: {} }
+					});
+
+					expect(result?.tagline).toBe(undetermined.tagline.und);
 
 				}));
 
@@ -1004,14 +1141,10 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 
 		describe("empty-form elision", () => {
 
-			// Per `@metreeca/qest/model` (resource.ts): empty `Template` / `Union` / `Locale`
-			// / `Projection` payloads, and collection tuples whose element object is empty (an
-			// empty `{}` element optionally paired with a `Criteria` in the second slot),
-			// are vacuous — processors must ignore them as if the owning property were omitted
-			// from the enclosing template, discarding any attached `Criteria` constraints.
-			// At the top level, form-serialised selection-only substitution is a server concern;
-			// the storage layer returns an empty object after the existence test succeeds, and
-			// `undefined` otherwise (assumed true for virtual resources).
+			// A top-level template stating no property requests nothing of the resource (§5.1): the storage
+			// layer returns an empty object after the existence test succeeds, and `undefined` otherwise.
+			// Below the top level `{}` is the atomic (§5.3), a request
+			// for the property's own value rather than an omission.
 
 			describe("top-level", () => {
 
@@ -1039,10 +1172,10 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 
 				}));
 
-				it("should return empty object for empty template on virtual resource", factory(async ({ store }) => {
+				it("should return empty object for empty template on a collection resource", factory(async ({ store }) => {
 
-					// Virtual collections have no backing triples — the existence test is assumed
-					// true, so the empty-template shortcut must still yield `{}`.
+					// a catalogue is a stored resource like any other, so the empty-template shortcut yields `{}`
+					// once its existence test succeeds
 
 					const result = await store.lookup({
 						entry: "https://data.example.net/products/",
@@ -1055,10 +1188,6 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 				}));
 
 			});
-			// The per-leaf elision cases the previous notation carried have no subject under the reworked
-			// model: `{}` is the atomic placeholder, a request for the property's own value, so no template
-			// fragment states an omission any more and a key left out is the only way to not ask for a slot.
-
 
 		});
 
@@ -1090,9 +1219,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 					const result = await store.lookup({
 						entry: parent.id,
 						shape: Category,
-						model: model(resource({
-							narrower: multiple(reference(Category))
-						}))
+						model: { narrower: {} }
 					});
 
 					expect(result?.narrower).toBeInstanceOf(Array);
@@ -1115,12 +1242,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 					const result = await store.lookup({
 						entry: parent.id,
 						shape: Category,
-						model: model(resource({
-							narrower: multiple(resource({
-								code: required(string()),
-								title: required(dictionary({ uniqueLang: true, languageIn: ["en"] }))
-							}))
-						}))
+						model: { narrower: { code: {}, title: { en: {} } } }
 					});
 
 					expect(result?.narrower).toHaveLength(children.length);
@@ -1139,9 +1261,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 					const result = await store.lookup({
 						entry: leaf.id,
 						shape: Category,
-						model: model(resource({
-							narrower: multiple(reference(Category))
-						}))
+						model: { narrower: {} }
 					});
 
 					expect(result).not.toHaveProperty("narrower");
@@ -1173,9 +1293,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 					await store.lookup({
 						entry: parent.id,
 						shape: Category,
-						model: model(resource({
-							narrower: multiple(reference(Category))
-						}))
+						model: { narrower: {} }
 					});
 
 					expect(await contains(parent.id)).toBe(beforeExists);
