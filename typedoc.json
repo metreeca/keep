@@ -3,7 +3,10 @@
     "packages/*/*"
   ],
   "entryPointStrategy": "packages",
-  "name": "Metreeca Keep",
+  "plugin": [
+    "./typedoc.mjs"
+  ],
+  "name": "@metreeca/keep",
   "out": "docs",
   "readme": "README.md",
   "hostedBaseUrl": "https://metreeca.github.io/keep/",
@@ -88,10 +91,6 @@
     "@metreeca/trio": {
       "Triple": "https://metreeca.github.io/trio/types/index.Triple.html",
       "Term": "https://metreeca.github.io/trio/types/index.Term.html",
-      "Blank": "https://metreeca.github.io/trio/types/index.Blank.html",
-      "Named": "https://metreeca.github.io/trio/types/index.Named.html",
-      "Tagged": "https://metreeca.github.io/trio/types/index.Tagged.html",
-      "Typed": "https://metreeca.github.io/trio/types/index.Typed.html",
       "named": "https://metreeca.github.io/trio/functions/index.named.html",
       "tagged": "https://metreeca.github.io/trio/functions/index.tagged.html",
       "typed": "https://metreeca.github.io/trio/functions/index.typed.html"
