@@ -14,32 +14,59 @@
  * limitations under the License.
  */
 
-import { boolean } from "@metreeca/blue/boolean";
-import { decimal } from "@metreeca/blue/number";
-import { reference } from "@metreeca/blue/reference";
-import { id, multiple, nonempty, optional, required, resource } from "@metreeca/blue/resource";
-import { date, string, url } from "@metreeca/blue/string";
 import { isObject } from "@metreeca/core";
 import { ascending, by, compound, descending, reverse } from "@metreeca/core/order";
 import type { Criteria } from "@metreeca/qest/model";
 import { beforeAll, describe, expect, it } from "vitest";
 import { lookup, type TestFactory } from "../index.core.js";
 import { collections } from "../toys.core.js";
-import { Categories, Category, Products, Resources, toys, Vendor, Vendors } from "../toys.js";
+import { Categories, Products, Resources, toys, Vendors } from "../toys.js";
 import { catalogue, members } from "./index.js";
 
 
 const { categories, products, vendors, images, videos } = collections;
 
 
-export function testRetrieveSelection(factory: TestFactory): void {
+export function testRetrieveCriteria(factory: TestFactory): void {
 
 	const Catalogue = "https://data.example.net/products/";
 	const CategoryCatalogue = "https://data.example.net/categories/";
 	const VendorCatalogue = "https://data.example.net/vendors/";
 
 
-	describe("lookup selection", () => {
+	// §5.7.5 total-order oracles over the union-typed vendor leaves: undefined first, then by processing type,
+	// then within each type by comparison (§5.7.1); `certified` spans the ladder xsd:boolean < numeric <
+	// xsd:string, where the string tier holds both grade strings and gYear values, a gYear being an opaque
+	// xsd:string rather than a processing type (§3, Appendix A.1.1), so it ranks and compares lexically alongside
+	// the grades ("2020" before "A" by codepoint)
+
+	function certifiedTier(v: undefined | boolean | number | string): number {
+		return v === undefined ? 0
+			: typeof v === "boolean" ? 1
+				: typeof v === "number" ? 2
+					: 3;
+	}
+
+	function certifiedOrder(
+		a: undefined | boolean | number | string,
+		b: undefined | boolean | number | string
+	): number {
+		return certifiedTier(a)-certifiedTier(b)
+			|| (typeof a === "boolean" && typeof b === "boolean" ? Number(a)-Number(b) : 0)
+			|| (typeof a === "number" && typeof b === "number" ? a-b : 0)
+			|| (typeof a === "string" && typeof b === "string" ? ascending(a, b) : 0);
+	}
+
+	function scoreOrder(a: undefined | number | string, b: undefined | number | string): number {
+		const tier = (s: undefined | number | string): number =>
+			s === undefined ? 0 : typeof s === "number" ? 1 : 2;
+		return tier(a)-tier(b)
+			|| (typeof a === "number" && typeof b === "number" ? a-b : 0)
+			|| (typeof a === "string" && typeof b === "string" ? ascending(a, b) : 0);
+	}
+
+
+	describe("criteria", () => {
 
 		beforeAll(factory(async ({ populate }) => { await populate(); }).hook);
 
@@ -66,10 +93,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: Catalogue,
 							shape: Products,
-							model: catalogue(resource({
-								id: id(),
-								price: required(decimal())
-							}), selection)
+							model: catalogue({ id: {}, price: {} }, selection)
 						}));
 
 						expect(result).toHaveLength(expected.length);
@@ -103,10 +127,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: Catalogue,
 							shape: Products,
-							model: catalogue(resource({
-								id: id(),
-								launched: optional(date())
-							}), selection)
+							model: catalogue({ id: {}, launched: {} }, selection)
 						}));
 
 						expect(result).toHaveLength(expected.length);
@@ -135,10 +156,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: Catalogue,
 							shape: Products,
-							model: catalogue(resource({
-								id: id(),
-								condition: required(string())
-							}), selection)
+							model: catalogue({ id: {}, condition: {} }, selection)
 						}));
 
 						expect(result).toHaveLength(expected.length);
@@ -159,10 +177,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: CategoryCatalogue,
 						shape: Categories,
-						model: catalogue(resource({
-							id: id(),
-							featured: required(boolean)
-						}), {
+						model: catalogue({ id: {}, featured: {} }, {
 							"<featured": true
 						})
 					}));
@@ -185,10 +200,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							id: id(),
-							launched: optional(date())
-						}), {
+						model: catalogue({ id: {}, launched: {} }, {
 							">launched": "1900-01-01"
 						})
 					}));
@@ -214,7 +226,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({ id: id() }), {
+						model: catalogue({ id: {} }, {
 							">documents": bound
 						})
 					}));
@@ -240,7 +252,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: VendorCatalogue,
 						shape: Vendors,
-						model: catalogue(resource({ id: id() }), { ">address.latitude": 0 })
+						model: catalogue({ id: {} }, { ">address.latitude": 0 })
 					}));
 
 					expect(result?.map(v => v.id).sort()).toEqual(expected);
@@ -285,7 +297,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: VendorCatalogue,
 							shape: Vendors,
-							model: catalogue(resource({ id: id() }), {
+							model: catalogue({ id: {} }, {
 								"~aliases": query
 							})
 						}));
@@ -316,17 +328,17 @@ export function testRetrieveSelection(factory: TestFactory): void {
 					const matched = members(await store.lookup({
 						entry: VendorCatalogue,
 						shape: Vendors,
-						model: catalogue(resource({ id: id() }), { "~address.city": "NÜRNBERG" })
+						model: catalogue({ id: {} }, { "~address.city": "NÜRNBERG" })
 					}));
 
 					const stripped = members(await store.lookup({
 						entry: VendorCatalogue,
 						shape: Vendors,
-						model: catalogue(resource({ id: id() }), { "~address.city": "nurnberg" })
+						model: catalogue({ id: {} }, { "~address.city": "nurnberg" })
 					}));
 
 					expect(matched?.map(v => v.id).sort()).toEqual(expected);
-					expect(stripped).toHaveLength(0);
+					expect(stripped ?? []).toHaveLength(0);
 
 				}));
 
@@ -347,7 +359,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: VendorCatalogue,
 						shape: Vendors,
-						model: catalogue(resource({ id: id() }), { "~address": query })
+						model: catalogue({ id: {} }, { "~address": query })
 					}));
 
 					expect(result?.map(v => v.id).sort()).toEqual(expected);
@@ -375,7 +387,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: VendorCatalogue,
 						shape: Vendors,
-						model: catalogue(resource({ id: id() }), { "~address.label": query })
+						model: catalogue({ id: {} }, { "~address.label": query })
 					}));
 
 					expect(result?.map(v => v.id).sort()).toEqual(expected);
@@ -395,10 +407,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							id: id(),
-							condition: required(string())
-						}), {
+						model: catalogue({ id: {}, condition: {} }, {
 							"?condition": ["new", "refurbished"]
 						})
 					}));
@@ -416,10 +425,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							id: id(),
-							discount: optional(decimal())
-						}), {
+						model: catalogue({ id: {}, discount: {} }, {
 							"?discount": [null]
 						})
 					}));
@@ -438,10 +444,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							id: id(),
-							discount: optional(decimal())
-						}), {
+						model: catalogue({ id: {}, discount: {} }, {
 							"?discount": [null, -5]
 						})
 					}));
@@ -459,7 +462,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({ id: id() }), {
+						model: catalogue({ id: {} }, {
 							"?id": [first, second]
 						})
 					}));
@@ -476,10 +479,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							id: id(),
-							condition: required(string())
-						}), {
+						model: catalogue({ id: {}, condition: {} }, {
 							"?condition": []
 						})
 					}));
@@ -499,10 +499,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							id: id(),
-							condition: required(string())
-						}), {
+						model: catalogue({ id: {}, condition: {} }, {
 							"?condition": "new"
 						})
 					}));
@@ -530,7 +527,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({ id: id() }), {
+						model: catalogue({ id: {} }, {
 							"?reviews.posted": [option]
 						})
 					}));
@@ -559,10 +556,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							id: id(),
-							categories: nonempty(reference(Category))
-						}), {
+						model: catalogue({ id: {}, categories: {} }, {
 							"!categories": [category1100.id, category1110.id]
 						})
 					}));
@@ -579,6 +573,36 @@ export function testRetrieveSelection(factory: TestFactory): void {
 
 				}));
 
+				it("should conjunctively match across a multi-step multi-valued path", factory(async ({ store }) => {
+
+					// §5.7.3 over §5.8.1: the path `categories.code` resolves to the whole set of codes across a
+					// product's categories, so the conjunction holds when every option is carried by some
+					// category, never by one category alone
+
+					const category1100 = lookup(categories, { code: "1100" });
+					const category1110 = lookup(categories, { code: "1110" });
+
+					if ( category1100 === undefined || category1110 === undefined ) { return; }
+
+					const expected = products
+						.filter(p => p.categories.includes(category1100.id) && p.categories.includes(category1110.id))
+						.map(p => p.id).sort();
+
+					expect(expected.length).toBeGreaterThan(0);
+					expect(expected.length).toBeLessThan(products.filter(p => p.categories.includes(category1100.id)).length);
+
+					const result = members(await store.lookup({
+						entry: Catalogue,
+						shape: Products,
+						model: catalogue({ id: {} }, {
+							"!categories.code": [category1100.code, category1110.code]
+						})
+					}));
+
+					expect(result?.map(p => p.id).sort()).toEqual(expected);
+
+				}));
+
 				it("should select unset values with a null option", factory(async ({ store }) => {
 
 					// §5.7.3: under `!` every option must hold, so `[null]` selects resources whose target
@@ -590,10 +614,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							id: id(),
-							discount: optional(decimal())
-						}), {
+						model: catalogue({ id: {}, discount: {} }, {
 							"!discount": [null]
 						})
 					}));
@@ -611,10 +632,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							id: id(),
-							categories: nonempty(reference(Category))
-						}), {
+						model: catalogue({ id: {}, categories: {} }, {
 							"!categories": []
 						})
 					}));
@@ -631,15 +649,12 @@ export function testRetrieveSelection(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							id: id(),
-							discount: optional(decimal())
-						}), {
+						model: catalogue({ id: {}, discount: {} }, {
 							"!discount": [null, -5]
 						})
 					}));
 
-					expect(result).toHaveLength(0);
+					expect(result ?? []).toHaveLength(0);
 
 				}));
 
@@ -651,15 +666,12 @@ export function testRetrieveSelection(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							id: id(),
-							condition: required(string())
-						}), {
+						model: catalogue({ id: {}, condition: {} }, {
 							"!condition": ["new", "used"]
 						})
 					}));
 
-					expect(result).toHaveLength(0);
+					expect(result ?? []).toHaveLength(0);
 
 				}));
 
@@ -687,10 +699,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							id: id(),
-							price: required(decimal())
-						}), {
+						model: catalogue({ id: {}, price: {} }, {
 							"^price": value
 						})
 					}));
@@ -708,10 +717,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						id: id(),
-						condition: required(string())
-					}), {
+					model: catalogue({ id: {}, condition: {} }, {
 						"^condition": 1
 					})
 				}));
@@ -731,10 +737,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						id: id(),
-						launched: optional(date())
-					}), {
+					model: catalogue({ id: {}, launched: {} }, {
 						"^launched": 1
 					})
 				}));
@@ -758,10 +761,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: CategoryCatalogue,
 					shape: Categories,
-					model: catalogue(resource({
-						id: id(),
-						featured: required(boolean)
-					}), {
+					model: catalogue({ id: {}, featured: {} }, {
 						"^featured": 1
 					})
 				}));
@@ -805,11 +805,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							id: id(),
-							condition: required(string()),
-							price: required(decimal())
-						}), selection)
+						model: catalogue({ id: {}, condition: {}, price: {} }, selection)
 					}));
 
 					const rows = result?.map(p => ({ condition: p.condition, price: p.price })) ?? [];
@@ -829,7 +825,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({ id: id() }), { "^price": 0 })
+					model: catalogue({ id: {} }, { "^price": 0 })
 				}));
 
 				expect(result?.map(p => p.id).sort()).toEqual(products.map(p => p.id).sort());
@@ -839,38 +835,6 @@ export function testRetrieveSelection(factory: TestFactory): void {
 		});
 
 		describe("union-typed sort order — §5.7.5", () => {
-
-			// §5.7.5 total-order oracles: undefined first, then by processing type, then within each
-			// type by comparison (§5.7.1); `certified` spans the ladder xsd:boolean < numeric < xsd:string,
-			// where the string tier holds both grade strings and gYear values — a gYear is not a processing
-			// type but an opaque xsd:string (§3, Appendix A.1.1), so it ranks and compares lexically alongside
-			// the grades ("2020" before "A" by codepoint)
-
-			function certifiedTier(v: undefined | boolean | number | string): number {
-				return v === undefined ? 0
-					: typeof v === "boolean" ? 1
-						: typeof v === "number" ? 2
-							: 3;
-			}
-
-			function certifiedOrder(
-				a: undefined | boolean | number | string,
-				b: undefined | boolean | number | string
-			): number {
-				return certifiedTier(a)-certifiedTier(b)
-					|| (typeof a === "boolean" && typeof b === "boolean" ? Number(a)-Number(b) : 0)
-					|| (typeof a === "number" && typeof b === "number" ? a-b : 0)
-					|| (typeof a === "string" && typeof b === "string" ? ascending(a, b) : 0);
-			}
-
-			function scoreOrder(a: undefined | number | string, b: undefined | number | string): number {
-				const tier = (s: undefined | number | string): number =>
-					s === undefined ? 0 : typeof s === "number" ? 1 : 2;
-				return tier(a)-tier(b)
-					|| (typeof a === "number" && typeof b === "number" ? a-b : 0)
-					|| (typeof a === "string" && typeof b === "string" ? ascending(a, b) : 0);
-			}
-
 
 			it("should order a union-typed column across processing-type tiers", factory(async ({ store }) => {
 
@@ -886,7 +850,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: VendorCatalogue,
 					shape: Vendors,
-					model: catalogue(resource({ id: id() }), { "^score": 1 })
+					model: catalogue({ id: {} }, { "^score": 1 })
 				})) ?? [];
 
 				expect(result.map(r => r.id)).toEqual(expected);
@@ -906,7 +870,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: VendorCatalogue,
 					shape: Vendors,
-					model: catalogue(resource({ id: id() }), { "^certified": 1 })
+					model: catalogue({ id: {} }, { "^certified": 1 })
 				})) ?? [];
 
 				expect(result.map(r => r.id)).toEqual(expected);
@@ -927,7 +891,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: VendorCatalogue,
 					shape: Vendors,
-					model: catalogue(resource({ id: id() }), { "^certified": -1 })
+					model: catalogue({ id: {} }, { "^certified": -1 })
 				})) ?? [];
 
 				expect(result.map(r => r.id)).toEqual(expected);
@@ -948,7 +912,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: VendorCatalogue,
 					shape: Vendors,
-					model: catalogue(resource({ id: id() }), { "^score": 1, "^code": 2 })
+					model: catalogue({ id: {} }, { "^score": 1, "^code": 2 })
 				})) ?? [];
 
 				expect(result.map(r => r.id)).toEqual(expected);
@@ -968,7 +932,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: VendorCatalogue,
 					shape: Vendors,
-					model: catalogue(resource({ id: id() }), { "^score": 1, "@": 2, "#": 2 })
+					model: catalogue({ id: {} }, { "^score": 1, "@": 2, "#": 2 })
 				})) ?? [];
 
 				expect(result.map(r => r.id)).toEqual(expected);
@@ -989,14 +953,14 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				await expect(store.lookup({
 					entry: VendorCatalogue,
 					shape: Vendors,
-					model: catalogue(resource({ id: id() }), { "?score": [true] })
+					model: catalogue({ id: {} }, { "?score": [true] })
 				})).rejects.toThrow();
 
 			}));
 
 			it("should accept a null option as typeless and select absent values", factory(async ({ store }) => {
 
-				// union.md (selection operands and text search): a bound or option over a union
+				// blue Unions (constraint operands and text search): a bound or option over a union
 				// follows the state rule (exactly one branch), EXCEPT a `null` option, which is
 				// typeless and exempt: it is not rejected as matching no variant but selects
 				// resources whose union-typed value is absent.
@@ -1006,7 +970,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: VendorCatalogue,
 					shape: Vendors,
-					model: catalogue(resource({ id: id() }), { "?score": [null] })
+					model: catalogue({ id: {} }, { "?score": [null] })
 				}));
 
 				expect(expected.length).toBeGreaterThan(0);
@@ -1029,7 +993,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: VendorCatalogue,
 					shape: Vendors,
-					model: catalogue(resource({ id: id() }), { "?score": [numeric, grade] })
+					model: catalogue({ id: {} }, { "?score": [numeric, grade] })
 				}));
 
 				expect(result?.map(v => v.id).sort()).toEqual(expected);
@@ -1047,7 +1011,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: VendorCatalogue,
 					shape: Vendors,
-					model: catalogue(resource({ id: id() }), { "!score": [grade] })
+					model: catalogue({ id: {} }, { "!score": [grade] })
 				}));
 
 				expect(result?.map(v => v.id).sort()).toEqual(expected);
@@ -1067,7 +1031,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: VendorCatalogue,
 					shape: Vendors,
-					model: catalogue(resource({ id: id() }), { "?audited": ["2023-06-15"] })
+					model: catalogue({ id: {} }, { "?audited": ["2023-06-15"] })
 				}));
 
 				expect(result?.map(v => v.id).sort()).toEqual(expected);
@@ -1086,7 +1050,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: VendorCatalogue,
 					shape: Vendors,
-					model: catalogue(resource({ id: id() }), { "?audited": [true] })
+					model: catalogue({ id: {} }, { "?audited": [true] })
 				}));
 
 				expect(result?.map(v => v.id).sort()).toEqual(expected);
@@ -1107,7 +1071,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: VendorCatalogue,
 					shape: Vendors,
-					model: catalogue(resource({ id: id() }), { ">=audited": "2023-06-15" })
+					model: catalogue({ id: {} }, { ">=audited": "2023-06-15" })
 				}));
 
 				expect(result?.map(v => v.id).sort()).toEqual(expected);
@@ -1123,7 +1087,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: VendorCatalogue,
 					shape: Vendors,
-					model: catalogue(resource({ id: id() }), { "!audited": ["2023-06-15"] })
+					model: catalogue({ id: {} }, { "!audited": ["2023-06-15"] })
 				}));
 
 				expect(result?.map(v => v.id).sort()).toEqual(expected);
@@ -1141,7 +1105,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: VendorCatalogue,
 					shape: Vendors,
-					model: catalogue(resource({ id: id() }), { "+audited": [focus] })
+					model: catalogue({ id: {} }, { "+audited": [focus] })
 				})) ?? [];
 
 				// fixture invariant: every retrieved id is a sample vendor, and the focal date is the id-last one
@@ -1176,7 +1140,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: VendorCatalogue,
 					shape: Vendors,
-					model: catalogue(resource({ id: id() }), { "^audited": 1 })
+					model: catalogue({ id: {} }, { "^audited": 1 })
 				})) ?? [];
 
 				expect(result.map(r => r.id)).toEqual(expected);
@@ -1191,7 +1155,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: VendorCatalogue,
 					shape: Vendors,
-					model: catalogue(resource({ id: id() }), { ">score": 3 })
+					model: catalogue({ id: {} }, { ">score": 3 })
 				}));
 
 				expect(expected.length).toBeGreaterThan(0);
@@ -1207,7 +1171,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: VendorCatalogue,
 					shape: Vendors,
-					model: catalogue(resource({ id: id() }), { ">=score": "B" })
+					model: catalogue({ id: {} }, { ">=score": "B" })
 				}));
 
 				expect(expected.length).toBeGreaterThan(0);
@@ -1224,7 +1188,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: VendorCatalogue,
 					shape: Vendors,
-					model: catalogue(resource({ id: id() }), { "+score": [grade] })
+					model: catalogue({ id: {} }, { "+score": [grade] })
 				})) ?? [];
 
 				// fixture invariant: every retrieved id is a sample vendor
@@ -1239,7 +1203,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 
 			it("should search every string branch of a union existentially", factory(async ({ store }) => {
 
-				// union.md (selection operands and text search): a `~` operand over a union-typed
+				// blue Unions (constraint operands and text search): a `~` operand over a union-typed
 				// property is not matched against the branches: it applies to every string branch
 				// at once, filtering their values existentially. `Vendor.contacts` carries email and
 				// phone string branches, so a token found in any email or phone contact matches.
@@ -1252,7 +1216,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: VendorCatalogue,
 					shape: Vendors,
-					model: catalogue(resource({ id: id() }), { "~contacts": "toymaster" })
+					model: catalogue({ id: {} }, { "~contacts": "toymaster" })
 				}));
 
 				expect(expected.length).toBeGreaterThan(0);
@@ -1262,7 +1226,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 
 			it("should not match a substring carried only by a node branch", factory(async ({ store }) => {
 
-				// union.md: the non-string branches do not support `~`. A token present only in a
+				// blue Unions: the non-string branches do not support `~`. A token present only in a
 				// node-branch entry (a PostalAddress `city`) but in no email or phone contact filters
 				// no branch, so the union-typed `~contacts` search returns nothing.
 
@@ -1280,10 +1244,10 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: VendorCatalogue,
 					shape: Vendors,
-					model: catalogue(resource({ id: id() }), { "~contacts": token })
+					model: catalogue({ id: {} }, { "~contacts": token })
 				}));
 
-				expect(result).toHaveLength(0);
+				expect(result ?? []).toHaveLength(0);
 
 			}));
 
@@ -1318,7 +1282,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 
 			describe("through a union member", () => {
 
-				// §5.7 over §5.4: the path steps through the union-typed `address` slot into a variant's
+				// §5.7 over §5.5: the path steps through the union-typed `address` slot into a variant's
 				// own sub-property, present only on vendors whose address resolves through that variant —
 				// `city` on the PostalAddress branch, `latitude` on the Place branch, `label` (localised)
 				// on both node branches. Vendors carrying another branch (or no address) never match.
@@ -1361,7 +1325,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 							const result = members(await store.lookup({
 								entry: VendorCatalogue,
 								shape: Vendors,
-								model: catalogue(resource({ id: id() }), selection)
+								model: catalogue({ id: {} }, selection)
 							}));
 
 							expect(result?.map(v => v.id).sort()).toEqual(expected);
@@ -1391,7 +1355,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: VendorCatalogue,
 							shape: Vendors,
-							model: catalogue(resource({ id: id() }), { "^address.city": 1 })
+							model: catalogue({ id: {} }, { "^address.city": 1 })
 						})) ?? [];
 
 						expect(vendors.some(v => cityOf(v) !== undefined)).toBe(true);
@@ -1417,7 +1381,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: VendorCatalogue,
 							shape: Vendors,
-							model: catalogue(resource({ id: id() }), { "^address.city": -1 })
+							model: catalogue({ id: {} }, { "^address.city": -1 })
 						})) ?? [];
 
 						expect(vendors.some(v => cityOf(v) !== undefined)).toBe(true);
@@ -1438,7 +1402,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: VendorCatalogue,
 							shape: Vendors,
-							model: catalogue(resource({ id: id() }), { "?address.city": ["Nürnberg"] })
+							model: catalogue({ id: {} }, { "?address.city": ["Nürnberg"] })
 						}));
 
 						expect(result?.map(v => v.id).sort()).toEqual(expected);
@@ -1456,7 +1420,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: VendorCatalogue,
 							shape: Vendors,
-							model: catalogue(resource({ id: id() }), { "?address.city": ["Nürnberg", "Firenze"] })
+							model: catalogue({ id: {} }, { "?address.city": ["Nürnberg", "Firenze"] })
 						}));
 
 						expect(result?.map(v => v.id).sort()).toEqual(expected);
@@ -1472,7 +1436,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: VendorCatalogue,
 							shape: Vendors,
-							model: catalogue(resource({ id: id() }), { "?address.latitude": [40.758] })
+							model: catalogue({ id: {} }, { "?address.latitude": [40.758] })
 						}));
 
 						expect(result?.map(v => v.id).sort()).toEqual(expected);
@@ -1492,7 +1456,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: VendorCatalogue,
 							shape: Vendors,
-							model: catalogue(resource({ id: id() }), { "?address.opened": ["2018-06-01"] })
+							model: catalogue({ id: {} }, { "?address.opened": ["2018-06-01"] })
 						}));
 
 						expect(result?.map(v => v.id).sort()).toEqual(expected);
@@ -1512,7 +1476,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: VendorCatalogue,
 							shape: Vendors,
-							model: catalogue(resource({ id: id() }), { "?address.label": { und: "Nürnberg, Germany" } })
+							model: catalogue({ id: {} }, { "?address.label": { und: "Nürnberg, Germany" } })
 						}));
 
 						expect(result?.map(v => v.id).sort()).toEqual(expected);
@@ -1533,7 +1497,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: VendorCatalogue,
 							shape: Vendors,
-							model: catalogue(resource({ id: id() }), {
+							model: catalogue({ id: {} }, {
 								"?address.label": { und: ["Nürnberg, Germany", "Firenze, Italy"] }
 							})
 						}));
@@ -1555,7 +1519,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: VendorCatalogue,
 							shape: Vendors,
-							model: catalogue(resource({ id: id() }), { "?address.city": [null] })
+							model: catalogue({ id: {} }, { "?address.city": [null] })
 						}));
 
 						expect(result?.map(v => v.id).sort()).toEqual(expected);
@@ -1575,7 +1539,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: VendorCatalogue,
 							shape: Vendors,
-							model: catalogue(resource({ id: id() }), { "!address.city": ["Nürnberg"] })
+							model: catalogue({ id: {} }, { "!address.city": ["Nürnberg"] })
 						}));
 
 						expect(result?.map(v => v.id).sort()).toEqual(expected);
@@ -1593,10 +1557,10 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: VendorCatalogue,
 							shape: Vendors,
-							model: catalogue(resource({ id: id() }), { "!address.city": ["Nürnberg", "Firenze"] })
+							model: catalogue({ id: {} }, { "!address.city": ["Nürnberg", "Firenze"] })
 						}));
 
-						expect(result).toHaveLength(0);
+						expect(result ?? []).toHaveLength(0);
 
 					}));
 
@@ -1609,7 +1573,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: VendorCatalogue,
 							shape: Vendors,
-							model: catalogue(resource({ id: id() }), { "!address.label": { und: "Nürnberg, Germany" } })
+							model: catalogue({ id: {} }, { "!address.label": { und: "Nürnberg, Germany" } })
 						}));
 
 						expect(result?.map(v => v.id).sort()).toEqual(expected);
@@ -1625,7 +1589,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: VendorCatalogue,
 							shape: Vendors,
-							model: catalogue(resource({ id: id() }), { "+address.city": ["Nürnberg"] })
+							model: catalogue({ id: {} }, { "+address.city": ["Nürnberg"] })
 						})) ?? [];
 
 						// fixture invariant: every retrieved id is a sample vendor
@@ -1644,7 +1608,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: VendorCatalogue,
 							shape: Vendors,
-							model: catalogue(resource({ id: id() }), { "+address.label": { und: "Nürnberg, Germany" } })
+							model: catalogue({ id: {} }, { "+address.label": { und: "Nürnberg, Germany" } })
 						})) ?? [];
 
 						// fixture invariant: every retrieved id is a sample vendor
@@ -1671,32 +1635,6 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				// union", which always carries a pipe). §5.7 per-branch semantics then apply: a typed
 				// bound or option resolves in its own variant, other branches contributing no match.
 
-				function certifiedTier(v: undefined | boolean | number | string): number {
-					return v === undefined ? 0
-						: typeof v === "boolean" ? 1
-							: typeof v === "number" ? 2
-								: 3;
-				}
-
-				function certifiedOrder(
-					a: undefined | boolean | number | string,
-					b: undefined | boolean | number | string
-				): number {
-					return certifiedTier(a)-certifiedTier(b)
-						|| (typeof a === "boolean" && typeof b === "boolean" ? Number(a)-Number(b) : 0)
-						|| (typeof a === "number" && typeof b === "number" ? a-b : 0)
-						|| (typeof a === "string" && typeof b === "string" ? ascending(a, b) : 0);
-				}
-
-				function scoreOrder(a: undefined | number | string, b: undefined | number | string): number {
-					const tier = (s: undefined | number | string): number =>
-						s === undefined ? 0 : typeof s === "number" ? 1 : 2;
-					return tier(a)-tier(b)
-						|| (typeof a === "number" && typeof b === "number" ? a-b : 0)
-						|| (typeof a === "string" && typeof b === "string" ? ascending(a, b) : 0);
-				}
-
-
 				describe("comparison — §5.7.1", () => {
 
 					it("should compare only the numeric branch through a union-valued path", factory(async ({ store }) => {
@@ -1712,7 +1650,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: Catalogue,
 							shape: Products,
-							model: catalogue(resource({ id: id() }), { ">vendor.score": 3 })
+							model: catalogue({ id: {} }, { ">vendor.score": 3 })
 						}));
 
 						expect(result?.map(p => p.id).sort()).toEqual(expected);
@@ -1732,7 +1670,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: Catalogue,
 							shape: Products,
-							model: catalogue(resource({ id: id() }), { ">=vendor.score": "B" })
+							model: catalogue({ id: {} }, { ">=vendor.score": "B" })
 						}));
 
 						expect(result?.map(p => p.id).sort()).toEqual(expected);
@@ -1752,7 +1690,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: Catalogue,
 							shape: Products,
-							model: catalogue(resource({ id: id() }), { "^vendor.score": 1 })
+							model: catalogue({ id: {} }, { "^vendor.score": 1 })
 						})) ?? [];
 
 						expect(result.map(r => r.id)).toEqual(expected);
@@ -1768,7 +1706,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: Catalogue,
 							shape: Products,
-							model: catalogue(resource({ id: id() }), { "^vendor.certified": 1 })
+							model: catalogue({ id: {} }, { "^vendor.certified": 1 })
 						})) ?? [];
 
 						expect(result.map(r => r.id)).toEqual(expected);
@@ -1784,7 +1722,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: Catalogue,
 							shape: Products,
-							model: catalogue(resource({ id: id() }), { "^vendor.certified": -1 })
+							model: catalogue({ id: {} }, { "^vendor.certified": -1 })
 						})) ?? [];
 
 						expect(result.map(r => r.id)).toEqual(expected);
@@ -1804,7 +1742,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: Catalogue,
 							shape: Products,
-							model: catalogue(resource({ id: id() }), { "?vendor.score": [4.5] })
+							model: catalogue({ id: {} }, { "?vendor.score": [4.5] })
 						}));
 
 						expect(result?.map(p => p.id).sort()).toEqual(expected);
@@ -1820,7 +1758,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: Catalogue,
 							shape: Products,
-							model: catalogue(resource({ id: id() }), { "?vendor.score": ["A"] })
+							model: catalogue({ id: {} }, { "?vendor.score": ["A"] })
 						}));
 
 						expect(result?.map(p => p.id).sort()).toEqual(expected);
@@ -1838,7 +1776,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: Catalogue,
 							shape: Products,
-							model: catalogue(resource({ id: id() }), { "?vendor.score": [4.5, "B"] })
+							model: catalogue({ id: {} }, { "?vendor.score": [4.5, "B"] })
 						}));
 
 						expect(result?.map(p => p.id).sort()).toEqual(expected);
@@ -1854,7 +1792,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: Catalogue,
 							shape: Products,
-							model: catalogue(resource({ id: id() }), { "?vendor.certified": [true] })
+							model: catalogue({ id: {} }, { "?vendor.certified": [true] })
 						}));
 
 						expect(result?.map(p => p.id).sort()).toEqual(expected);
@@ -1875,7 +1813,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: Catalogue,
 							shape: Products,
-							model: catalogue(resource({ id: id() }), { "?vendor.certified": [3.8] })
+							model: catalogue({ id: {} }, { "?vendor.certified": [3.8] })
 						}));
 
 						expect(result?.map(p => p.id).sort()).toEqual(expected);
@@ -1893,7 +1831,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: Catalogue,
 							shape: Products,
-							model: catalogue(resource({ id: id() }), { "?vendor.certified": [true, 3.8] })
+							model: catalogue({ id: {} }, { "?vendor.certified": [true, 3.8] })
 						}));
 
 						expect(result?.map(p => p.id).sort()).toEqual(expected);
@@ -1909,7 +1847,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: Catalogue,
 							shape: Products,
-							model: catalogue(resource({ id: id() }), { "?vendor.score": [null] })
+							model: catalogue({ id: {} }, { "?vendor.score": [null] })
 						}));
 
 						expect(result?.map(p => p.id).sort()).toEqual(expected);
@@ -1929,7 +1867,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: Catalogue,
 							shape: Products,
-							model: catalogue(resource({ id: id() }), { "!vendor.score": ["A"] })
+							model: catalogue({ id: {} }, { "!vendor.score": ["A"] })
 						}));
 
 						expect(result?.map(p => p.id).sort()).toEqual(expected);
@@ -1945,7 +1883,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: Catalogue,
 							shape: Products,
-							model: catalogue(resource({ id: id() }), { "!vendor.certified": [true] })
+							model: catalogue({ id: {} }, { "!vendor.certified": [true] })
 						}));
 
 						expect(result?.map(p => p.id).sort()).toEqual(expected);
@@ -1961,7 +1899,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: Catalogue,
 							shape: Products,
-							model: catalogue(resource({ id: id() }), { "+vendor.score": ["A"] })
+							model: catalogue({ id: {} }, { "+vendor.score": ["A"] })
 						})) ?? [];
 
 						// fixture invariant: every retrieved id is a sample product
@@ -1980,7 +1918,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: Catalogue,
 							shape: Products,
-							model: catalogue(resource({ id: id() }), { "+vendor.certified": [true] })
+							model: catalogue({ id: {} }, { "+vendor.certified": [true] })
 						})) ?? [];
 
 						// fixture invariant: every retrieved id is a sample product
@@ -2026,7 +1964,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({ id: id() }), { "!abs:reviews.rating": [4, 5] })
+					model: catalogue({ id: {} }, { "!abs:reviews.rating": [4, 5] })
 				}));
 
 				expect(result?.map(p => p.id).sort()).toEqual(expected);
@@ -2054,7 +1992,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({ id: id() }), { "!max:reviews.rating": [4, 5] })
+					model: catalogue({ id: {} }, { "!max:reviews.rating": [4, 5] })
 				}));
 
 				expect(result ?? []).toHaveLength(0);
@@ -2078,7 +2016,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({ id: id() }), { "?id": [target.id] })
+					model: catalogue({ id: {} }, { "?id": [target.id] })
 				}));
 
 				expect(result?.map(p => p.id)).toEqual([target.id]);
@@ -2096,7 +2034,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({ id: id() }), { "!id": [target.id] })
+					model: catalogue({ id: {} }, { "!id": [target.id] })
 				}));
 
 				expect(result?.map(p => p.id)).toEqual([target.id]);
@@ -2111,7 +2049,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({ id: id() }), { "!type": [toys.Product, toys.Category] })
+					model: catalogue({ id: {} }, { "!type": [toys.Product, toys.Category] })
 				}));
 
 				expect(result ?? []).toHaveLength(0);
@@ -2124,7 +2062,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({ id: id() }), { "?type": [toys.Category] })
+					model: catalogue({ id: {} }, { "?type": [toys.Category] })
 				}));
 
 				expect(result ?? []).toHaveLength(0);
@@ -2154,7 +2092,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: CategoryCatalogue2,
 					shape: Categories,
-					model: catalogue(resource({ id: id() }), { "?lower": [child.id] })
+					model: catalogue({ id: {} }, { "?lower": [child.id] })
 				}));
 
 				expect(result?.map(cat => cat.id).sort()).toEqual(expected);
@@ -2175,7 +2113,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: CategoryCatalogue2,
 					shape: Categories,
-					model: catalogue(resource({ id: id() }), { "!lower": [child.id] })
+					model: catalogue({ id: {} }, { "!lower": [child.id] })
 				}));
 
 				expect(result?.map(cat => cat.id).sort()).toEqual(expected);
@@ -2190,7 +2128,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 			// staged constraint), so a term-sensitive operand is typed value-driven and mistyped. Numeric
 			// transforms are masked by SPARQL value-equality; a temporal transform (min/max over the
 			// single-valued Product.launched date) is not, so `!`/`+` over it must currently fail. The
-			// compare/`?` witnesses live in lookup/expression.ts; these close the `!` and `+` operators.
+			// compare/`?` witnesses live in expression.ts; these close the `!` and `+` operators.
 
 			it("should conjunctively match a temporal-valued transform", factory(async ({ store }) => {
 
@@ -2205,7 +2143,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({ id: id() }), { "!min:launched": [target] })
+					model: catalogue({ id: {} }, { "!min:launched": [target] })
 				}));
 
 				expect(result?.map(p => p.id).sort()).toEqual(expected);
@@ -2223,7 +2161,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({ id: id() }), { "+min:launched": [target] })
+					model: catalogue({ id: {} }, { "+min:launched": [target] })
 				})) ?? [];
 
 				// fixture invariant: every retrieved id is a sample product
@@ -2249,10 +2187,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						id: id(),
-						condition: required(string())
-					}), {
+					model: catalogue({ id: {}, condition: {} }, {
 						"+condition": ["refurbished"]
 					})
 				}));
@@ -2275,10 +2210,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						id: id(),
-						vendor: required(reference(Vendor))
-					}), {
+					model: catalogue({ id: {}, vendor: {} }, {
 						"+vendor": [vendorFixture.id]
 					})
 				}));
@@ -2300,10 +2232,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						id: id(),
-						discount: optional(decimal())
-					}), {
+					model: catalogue({ id: {}, discount: {} }, {
 						"+discount": [null]
 					})
 				}));
@@ -2325,10 +2254,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						id: id(),
-						condition: required(string())
-					}), {
+					model: catalogue({ id: {}, condition: {} }, {
 						"+condition": ["refurbished"],
 						"^condition": 1
 					})
@@ -2357,10 +2283,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 					const bounded = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							id: id(),
-							price: required(decimal())
-						}), {
+						model: catalogue({ id: {}, price: {} }, {
 							"^price": 1,
 							"@": 0,
 							"#": 5
@@ -2370,7 +2293,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 					const beyond = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({ id: id() }), {
+						model: catalogue({ id: {} }, {
 							"@": 10000,
 							"#": 10
 						})
@@ -2379,7 +2302,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 					const limited = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({ id: id() }), {
+						model: catalogue({ id: {} }, {
 							"#": 5
 						})
 					}));
@@ -2387,20 +2310,20 @@ export function testRetrieveSelection(factory: TestFactory): void {
 					const unlimited = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({ id: id() }))
+						model: catalogue({ id: {} })
 					}));
 
 					const zeros = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({ id: id() }), {
+						model: catalogue({ id: {} }, {
 							"@": 0,
 							"#": 0
 						})
 					}));
 
 					expect(bounded?.length ?? 0).toBeLessThanOrEqual(5);
-					expect(beyond).toHaveLength(0);
+					expect(beyond ?? []).toHaveLength(0);
 					expect(unlimited?.length ?? 0).toBeGreaterThanOrEqual(limited?.length ?? 0);
 					expect(zeros).toHaveLength(products.length);
 
@@ -2415,16 +2338,16 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const page = (offset: number) => store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({ id: id() }), { "^price": 1, "@": offset, "#": 10 })
-				});
+					model: catalogue({ id: {} }, { "^price": 1, "@": offset, "#": 10 })
+				}).then(members);
 
-				const ids1 = (members(await page(0)) ?? []).map(p => p.id);
-				const ids2 = (members(await page(10)) ?? []).map(p => p.id);
+				const ids1 = (await page(0) ?? []).map(p => p.id);
+				const ids2 = (await page(10) ?? []).map(p => p.id);
 
 				const full = (members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({ id: id() }), { "^price": 1 })
+					model: catalogue({ id: {} }, { "^price": 1 })
 				})) ?? []).map(p => p.id);
 
 				expect(ids1).toHaveLength(10);
@@ -2436,7 +2359,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 
 			it("should limit by member, not by fanned row, when a member carries a multi-valued slot (§5.7.6)", factory(async ({ store }) => {
 
-				// §5.5/§5.7.6: the limit bounds the collection's members, not the fanned SELECT rows. A member
+				// §5.6/§5.7.6: the limit bounds the collection's members, not the fanned SELECT rows. A member
 				// carrying a multi-valued slot fans into one row per value, so a row-level limit returns fewer
 				// whole members than requested. AF-001 alone carries three documents, so `#: 3` over the
 				// document-bearing element must still yield three distinct members, each with all its documents.
@@ -2446,11 +2369,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const sliced = members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						id: id(),
-						sku: required(string()),
-						documents: multiple(url())
-					}), { "^sku": 1, "#": limit })
+					model: catalogue({ id: {}, sku: {}, documents: {} }, { "^sku": 1, "#": limit })
 				})) ?? [];
 
 				expect(sliced).toHaveLength(Math.min(limit, products.length));
@@ -2467,7 +2386,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 
 			it("should offset by member, not by fanned row, when a member carries a multi-valued slot (§5.7.6)", factory(async ({ store }) => {
 
-				// §5.5/§5.7.6: the offset skips whole members, not fanned rows. The id-only element binds one
+				// §5.6/§5.7.6: the offset skips whole members, not fanned rows. The id-only element binds one
 				// row per member, fixing the member window after the offset; the document-bearing element under
 				// the same order and offset must skip the same members, never a fraction of one member's rows.
 
@@ -2476,17 +2395,13 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const identities = (members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({ id: id(), sku: required(string()) }), order)
+					model: catalogue({ id: {}, sku: {} }, order)
 				})) ?? []).map(member => member.id);
 
 				const documented = (members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						id: id(),
-						sku: required(string()),
-						documents: multiple(url())
-					}), order)
+					model: catalogue({ id: {}, sku: {}, documents: {} }, order)
 				})) ?? []).map(member => member.id);
 
 				expect(documented).toEqual(identities);
@@ -2506,11 +2421,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						id: id(),
-						price: required(decimal()),
-						condition: required(string())
-					}), {
+					model: catalogue({ id: {}, price: {}, condition: {} }, {
 						">=price": 10,
 						"<=price": 50,
 						"?condition": ["new"]
@@ -2529,10 +2440,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						id: id(),
-						price: required(decimal())
-					}), {
+					model: catalogue({ id: {}, price: {} }, {
 						">=price": 20,
 						"^price": 1
 					})
@@ -2550,10 +2458,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						id: id(),
-						price: required(decimal())
-					}), {
+					model: catalogue({ id: {}, price: {} }, {
 						">=price": 10,
 						"^price": 1,
 						"@": 0,
@@ -2581,7 +2486,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({ id: id() }), {})
+					model: catalogue({ id: {} }, {})
 				}));
 
 				expect(result).toHaveLength(products.length);
@@ -2614,7 +2519,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				await expect(store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({ id: id() }), selection)
+					model: catalogue({ id: {} }, selection)
 				})).rejects.toThrow();
 
 			})());
@@ -2675,7 +2580,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: Catalogue,
 							shape: Products,
-							model: catalogue(resource({ id: id() }), selection)
+							model: catalogue({ id: {} }, selection)
 						}));
 
 						// regression guard: a per-item reduction selects a proper non-empty subset,
@@ -2693,12 +2598,12 @@ export function testRetrieveSelection(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({ id: id() }), {
+						model: catalogue({ id: {} }, {
 							">count:categories": 1000
 						})
 					}));
 
-					expect(result).toHaveLength(0);
+					expect(result ?? []).toHaveLength(0);
 
 				}));
 
@@ -2732,7 +2637,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 						const result = members(await store.lookup({
 							entry: Catalogue,
 							shape: Products,
-							model: catalogue(resource({ id: id() }), selection)
+							model: catalogue({ id: {} }, selection)
 						})) ?? [];
 
 						// fixture invariant: every retrieved id is a sample product
@@ -2744,6 +2649,30 @@ export function testRetrieveSelection(factory: TestFactory): void {
 					}));
 
 				});
+
+				it("should window items ordered by a per-item reduction (§5.7.6)", factory(async ({ store }) => {
+
+					// §5.7.6 over §5.8.2.1: the window applies to the items ordered by their own reduced value, so a
+					// descending count with a limit yields the most-categorised products, every one of them above
+					// the count of any product left out
+
+					const limit = 3;
+
+					const result = members(await store.lookup({
+						entry: Catalogue,
+						shape: Products,
+						model: catalogue({ id: {} }, { "^count:categories": -1, "#": limit })
+					})) ?? [];
+
+					const counts = result.map(r => lookup(products, { id: r.id })!.categories.length);
+					const floor = Math.min(...counts);
+					const left = products.filter(p => !result.some(r => r.id === p.id)).map(p => p.categories.length);
+
+					expect(result).toHaveLength(limit);
+					expect(counts).toEqual([...counts].sort(descending));
+					expect(left.every(n => n <= floor)).toBe(true);
+
+				}));
 
 			});
 
@@ -2760,7 +2689,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: ResourceCatalogue,
 					shape: Resources,
-					model: catalogue(resource({ id: id() }))
+					model: catalogue({ id: {} })
 				})) ?? [];
 
 				expect(new Set(result.map(r => r.id)))
@@ -2773,7 +2702,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: ResourceCatalogue,
 					shape: Resources,
-					model: catalogue(resource({ id: id() }), { "?type": [toys.Resource] })
+					model: catalogue({ id: {} }, { "?type": [toys.Resource] })
 				})) ?? [];
 
 				expect(new Set(result.map(r => r.id)))
@@ -2786,7 +2715,7 @@ export function testRetrieveSelection(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: ResourceCatalogue,
 					shape: Resources,
-					model: catalogue(resource({ id: id() }), { "?type": [toys.Category] })
+					model: catalogue({ id: {} }, { "?type": [toys.Category] })
 				})) ?? [];
 
 				expect(new Set(result.map(r => r.id)))

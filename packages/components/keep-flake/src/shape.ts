@@ -17,8 +17,8 @@
 /**
  * Shape-mode walk for {@link createFlake}.
  *
- * Walks every entry of `shape.entries` (id, type, property) and recurses through embedded resources
- * and captive references. Plain and foreign references stay as leaves: crossing them would reach into
+ * Walks every member of the shape (`id`, `type`, and properties) and recurses through embedded resources
+ * and captive references. Other references stay as leaves: crossing them would reach into resources with
  * their own independent identity.
  *
  * Produces an immutable {@link Flake} carrying only the structural reach, with no {@link Flake.drain | drain},
@@ -33,16 +33,15 @@ import type { Member } from "@metreeca/blue/resource";
 import { getShapeBranches } from "@metreeca/blue/union";
 import { type Range, type Shape } from "@metreeca/blue/value";
 import type { Identifier } from "@metreeca/core";
-import { immutable } from "@metreeca/core/structures";
-import { getPropertyRange, getRootRange, mergeEntries } from "./index.core.js";
+import { immutable } from "@metreeca/core/values";
+import { getPropertyRange, getRootRange } from "./index.core.js";
 import { type Entries, type Flake } from "./index.js";
 
 
 /**
  * Builds the shape-mode {@link Flake} from a root shape.
  *
- * Internal entry point: public callers go through the dispatcher in {@link createFlake}, which routes
- * the no-input call shape here.
+ * Internal entry point: public callers go through {@link createFlake}, which routes the shape-only call here.
  *
  * A non-resource root yields a degenerate leaf flake with no property branches.
  *
@@ -68,10 +67,11 @@ export function createShapeFlake(shape: Shape): Flake {
 /**
  * Builds the property-major {@link Entries} of a node from its effective {@link Range}.
  *
- * Each owned variant of the range — an embedded resource or a captive reference — contributes its target's
- * declared properties, merged across variants; plain and foreign references keep their independent identity
- * and contribute none. Every declared entry becomes a single-element `[Branch]` carrying its range (stepped
- * one property from the node range) and recursing into that child's own owned structure. Cyclic captive
+ * Each owned variant of the range (an embedded resource or a captive reference) contributes its target's
+ * declared properties, merged across variants; other references keep their independent identity and contribute
+ * none. Every declared name becomes one {@link Branch} carrying its range (stepped one property
+ * from the node range) and recursing into that child's own owned structure; a name declared by several variants
+ * is one property (union coherence, §3.2), entered through the first declaring variant's member. Cyclic captive
  * shapes are unsupported: the walk performs no cycle detection.
  *
  * `owner` is the member the node's range was stepped from, carrying the captive flag that decides whether a
@@ -81,7 +81,7 @@ function shapeEntriesOf(path: readonly Identifier[], range: Range, owner?: Membe
 
 	const captive = owner?.kind === "property" && owner.captive === true;
 
-	return mergeEntries(getShapeBranches(range.shape).flatMap(variant => {
+	const targets = getShapeBranches(range.shape).flatMap(variant => {
 
 		// shape-mode reaches a variant's structure only through ownership: an embedded resource or a
 		// captive reference; plain and foreign references stay leaves
@@ -91,21 +91,30 @@ function shapeEntriesOf(path: readonly Identifier[], range: Range, owner?: Membe
 
 		const target = owned ? getShapeTarget(variant) : undefined;
 
-		return target === undefined ? [] : [Object.fromEntries(Object.entries(target.members).map(([key, entry]) => {
+		return target === undefined ? [] : [target];
 
-			const branchPath: readonly Identifier[] = [...path, key];
-			const child = getPropertyRange(range, key);
-			const entries = shapeEntriesOf(branchPath, child, entry);
+	});
 
-			return [key, [{
-				entry,
-				path: branchPath,
-				pipe: [],
-				range: child,
-				...(entries ? { entries } : {})
-			}]];
+	// a name declared by several variants is one property: its first declaring member enters it
 
-		}))];
+	const declared = targets.flatMap(target => Object.entries(target.members)).reduce<Readonly<Record<Identifier, Member>>>(
+		(members, [key, entry]) => key in members ? members : { ...members, [key]: entry },
+		{}
+	);
+
+	return targets.length === 0 ? undefined : Object.fromEntries(Object.entries(declared).map(([key, entry]) => {
+
+		const branchPath: readonly Identifier[] = [...path, key];
+		const child = getPropertyRange(range, key);
+		const entries = shapeEntriesOf(branchPath, child, entry);
+
+		return [key, {
+			entry,
+			path: branchPath,
+			pipe: [],
+			range: child,
+			...(entries ? { entries } : {})
+		}];
 
 	}));
 

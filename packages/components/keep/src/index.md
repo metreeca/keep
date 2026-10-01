@@ -8,20 +8,26 @@ description: >-
 
 # Design Rationale
 
-The `Store` interface extends `StoreClient` with the ability to group multiple operations into an atomic unit of work.
+The `Store` interface extends `StoreClient` with the ability to group multiple operations into a single unit of work.
 Transaction semantics follow the same cross-backend principle adopted by
 [@metreeca/qest](https://metreeca.github.io/qest/documents/model.Model_Design.html): each connector targets the
-strongest guarantees its backend supports — drawn from the well-defined counterparts across
-[SQL:2011](https://www.iso.org/standard/53681.html),
-[GQL:2024](https://www.iso.org/standard/76120.html), and [SPARQL 1.1](https://www.w3.org/TR/sparql11-update/) (
-via [RDF4J](https://rdf4j.org/)) — and documents the result.
+strongest guarantees its backend supports and documents the result. The guarantees are drawn from the well-defined
+counterparts across [SQL:2011](https://www.iso.org/standard/53681.html),
+[GQL:2024](https://www.iso.org/standard/76120.html), and [SPARQL 1.1](https://www.w3.org/TR/sparql11-update/) (via
+[RDF4J](https://rdf4j.org/)).
 
 # Adopted Semantics
 
 ## Atomicity
 
-All operations within a transaction either succeed together or are rolled back as a whole. If the task function throws
-or its returned promise rejects, the transaction is rolled back and the error is propagated to the caller.
+Implementations provide **best-effort** atomicity: each connector targets all-or-nothing commit, so that the operations
+within a transaction either succeed together or are rolled back as a whole. If the task function throws or its returned
+promise rejects, the transaction is rolled back where the connector supports it, and the error is propagated to the
+caller in every case.
+
+Where the backend offers neither native transactions nor a feasible way to emulate them (see
+[Write Semantics](#write-semantics)), mutations apply eagerly and a failing task may leave earlier mutations in place.
+Whether a failing transaction rolls back is implementation-defined and **must** be documented by each backend connector.
 
 ## Non-Reentrancy
 
@@ -31,10 +37,11 @@ of scope.
 
 ## Isolation
 
-Implementations provide **best-effort** isolation: each connector targets the strongest level its backend supports —
-ideally **snapshot isolation**, where the transaction observes a consistent snapshot of the store as of its start time
-with no phantom or non-repeatable reads — and degrades gracefully to the maximum level achievable by the underlying
-storage, down to no isolation at all when the backend offers no transactional guarantees.
+Implementations provide **best-effort** isolation: each connector targets the strongest level its backend supports,
+ideally **snapshot isolation**. Under snapshot isolation, the transaction observes a consistent snapshot of the store as
+of its start time, with no phantom or non-repeatable reads. Where the backend falls short, the connector degrades
+gracefully to the maximum level achievable by the underlying storage, down to no isolation at all when the backend
+offers no transactional guarantees.
 
 The exact isolation level is implementation-defined and **must** be documented by each backend connector.
 
@@ -53,11 +60,11 @@ below it.
 
 - **Dirty read**: reading data written by a concurrent uncommitted transaction
 - **Non-repeatable read**: reading the same row twice within a transaction yields different values because a concurrent
-  transaction committed an update between the two reads
+	transaction committed an update between the two reads
 - **Phantom read**: re-executing a query within a transaction yields additional rows because a concurrent transaction
-  committed an insert matching the query predicate
+	committed an insert matching the query predicate
 - **Write skew**: two concurrent transactions read overlapping data, make disjoint writes based on stale reads, and both
-  commit — leaving the store in a state neither transaction would have allowed alone
+	commit, leaving the store in a state neither transaction would have allowed alone
 
 > [!NOTE]
 > Snapshot isolation is not part of the SQL standard, which was defined before SI existed. Several engines label their
@@ -77,19 +84,19 @@ Levels map to the [reference table](#isolation-level-reference) above.
 | Engine                 | [RU] | [RC] | [RR] | [SI] | [SER] |
 |------------------------|------|------|------|------|-------|
 | **SQL:2011**           |      |      |      |      |       |
-| PostgreSQL             | ☆ ¹  | ★    | ☆ ²  | ·    | ☆     |
-| MySQL/InnoDB           | ☆    | ☆    | ★ ³  | ·    | ☆     |
-| SQL Server             | ☆    | ★    | ☆    | ☆ ⁴  | ☆     |
-| SQLite                 | ·    | ·    | ·    | ·    | ★     |
+| PostgreSQL             | ☆ ¹ | ★   | ☆ ² | ·    | ☆    |
+| MySQL/InnoDB           | ☆   | ☆   | ★ ³ | ·    | ☆    |
+| SQL Server             | ☆   | ★   | ☆   | ☆ ⁴ | ☆    |
+| SQLite                 | ·    | ·    | ·    | ·    | ★    |
 | **GQL:2024**           |      |      |      |      |       |
-| Neo4j                  | ·    | ★    | ·    | ·    | ·     |
-| Memgraph               | ☆    | ☆    | ·    | ★    | ·     |
+| Neo4j                  | ·    | ★   | ·    | ·    | ·     |
+| Memgraph               | ☆   | ☆   | ·    | ★   | ·     |
 | **SPARQL 1.1 (RDF4J)** |      |      |      |      |       |
-| RDF4J MemoryStore      | ☆    | ☆    | ★ ⁵  | ☆ ⁵  | ☆     |
-| RDF4J NativeStore      | ☆    | ☆    | ★ ⁵  | ☆ ⁵  | ☆ ⁶   |
-| RDF4J LmdbStore        | ☆    | ☆    | ★ ⁵  | ☆ ⁵  | ☆     |
-| GraphDB                | ☆    | ★    | ·    | ·    | ·     |
-| Amazon Neptune         | ·    | ☆ ⁷  | ·    | ★ ⁷  | ·     |
+| RDF4J MemoryStore      | ☆   | ☆   | ★ ⁵ | ☆ ⁵ | ☆    |
+| RDF4J NativeStore      | ☆   | ☆   | ★ ⁵ | ☆ ⁵ | ☆ ⁶  |
+| RDF4J LmdbStore        | ☆   | ☆   | ★ ⁵ | ☆ ⁵ | ☆    |
+| GraphDB                | ☆   | ★   | ·    | ·    | ·     |
+| Amazon Neptune         | ·    | ☆ ⁷ | ·    | ★ ⁷ | ·     |
 
 [RU]: #isolation-level-reference
 
@@ -123,7 +130,7 @@ entire transaction, closest to SI) as separate levels. Stores declare supported 
 ⁶ RDF4J NativeStore `SERIALIZABLE` had memory leak issues tracked in
 [eclipse-rdf4j#1031](https://github.com/eclipse-rdf4j/rdf4j/issues/1031).
 
-⁷ Amazon Neptune's isolation level is not configurable — it is determined automatically by query type. Read-only queries
+⁷ Amazon Neptune's isolation level is not configurable: it is determined automatically by query type. Read-only queries
 (SELECT, ASK, CONSTRUCT, DESCRIBE) run at snapshot isolation via MVCC. Mutation queries (INSERT, DELETE) run at an
 enhanced Read Committed with range locks that prevent phantoms and non-repeatable reads, effectively approaching
 Serialisable. Neptune does not implement the RDF4J transaction API; isolation semantics are baked into the engine.
@@ -131,13 +138,13 @@ Serialisable. Neptune does not implement the RDF4J transaction API; isolation se
 ### Notable Limitations
 
 - **SQLite**: only Serialisable; no configurable isolation levels. Single-writer constraint; Write-Ahead Logging (WAL)
-  mode gives SI-like behaviour for readers
+	mode gives SI-like behaviour for readers
 - **Neo4j**: only Read Committed; serialisable-like behaviour requires explicit write locks on shared nodes
 - **GraphDB**: only supports up to Read Committed natively. Does not guarantee a consistent snapshot within a single
-  transaction. Stricter levels can be layered via RDF4J's stackable Storage And Inference Layer (SAIL) interface but are
-  not natively supported
-- **Amazon Neptune**: isolation levels are not configurable — determined automatically by query type. Does not implement
-  the RDF4J transaction API. Applications must handle `ConcurrentModificationException` with retry logic
+	transaction. Stricter levels can be layered via RDF4J's stackable Storage And Inference Layer (SAIL) interface but are
+	not natively supported
+- **Amazon Neptune**: isolation levels are not configurable, but determined automatically by query type. Does not
+  implement the RDF4J transaction API. Applications must handle `ConcurrentModificationException` with retry logic
 
 ## Concurrency Models
 
@@ -148,12 +155,12 @@ Serialisable. Neptune does not implement the RDF4J transaction API; isolation se
 | **GQL** (Neo4j)             | Optimistic locking                  | Write-write conflict → abort            |
 | **GQL** (Memgraph)          | MVCC                                | Serialisation failure → abort           |
 | **RDF4J** (native stores)   | Versioning, single writer           | Writer queue; readers never blocked     |
-| **RDF4J** (GraphDB)         | Sequential writes, parallel reads   | No conflict — writes are serialised     |
+| **RDF4J** (GraphDB)         | Sequential writes, parallel reads   | No conflict: writes are serialised      |
 | **RDF4J** (Neptune)         | MVCC reads, pessimistic write locks | ConcurrentModificationException → retry |
 
 # Adopted Targets
 
-Given the backend landscape, the framework does not impose a uniform isolation floor — each connector targets the
+Given the backend landscape, the framework does not impose a uniform isolation floor: each connector targets the
 strongest level its backend supports and documents the resulting guarantee. Most backends natively provide snapshot
 isolation or better; outliers like GraphDB cap at read-committed and connectors built on them inherit that ceiling.
 
@@ -162,20 +169,19 @@ isolation or better; outliers like GraphDB cap at read-committed and connectors 
 Read visibility within a transaction depends on the connector's implementation strategy:
 
 - Connectors layered on a backend with **native** atomic transactions delegate read visibility to the backend, observing
-  whatever the configured isolation level provides — including read-your-own-writes when the underlying engine offers
-  it.
+	whatever the configured isolation level provides, including read-your-own-writes when the underlying engine offers it.
 - Connectors that **emulate** atomicity by buffering mutations until commit (see [Write Semantics](#write-semantics))
-  deliberately bypass their buffer on read, so a transaction observes only the snapshot and not its own pending writes.
-  This is stricter than standard snapshot isolation but is a direct consequence of the buffer-and-flush pattern;
-  connectors adopting this pattern **must** document the restriction.
+	deliberately bypass their buffer on read, so a transaction observes only the snapshot and not its own pending writes.
+	This is stricter than standard snapshot isolation but is a direct consequence of the buffer-and-flush pattern;
+	connectors adopting this pattern **must** document the restriction.
 
 ## Write Semantics
 
 When the backend supports atomic transactions natively, connectors route mutations directly through the backend's
 transaction primitive and commit atomically.
 
-When it does not, the `Store` interface requires connectors to **emulate** atomicity by buffering all mutation requests
-in memory during the transaction and flushing them in order at commit time. This pattern:
+When it does not, connectors should **emulate** atomicity by buffering all mutation requests in memory during the
+transaction and flushing them in order at commit time. This pattern:
 
 - Preserves strict snapshot read semantics by deferring writes until after all reads complete
 - Reduces commit overhead by grouping multiple mutations into a single round-trip
@@ -184,6 +190,11 @@ in memory during the transaction and flushing them in order at commit time. This
 Buffering shifts memory pressure to the client: callers are responsible for sizing transactions according to available
 memory. For bulk data loading, this means splitting large batches of `insert` or `remove` calls across multiple
 transactions.
+
+Buffering is infeasible where a mutation needs a result only the backend can produce mid-transaction, such as an
+identifier assigned by a remote service on `create`, or where the flush itself cannot commit as a single unit, as with
+a sequence of independent remote requests. Connectors in that position apply mutations eagerly and document that a
+failing transaction does not roll back.
 
 > [!IMPORTANT]
 > Under the buffer-and-flush pattern, backend constraint checks (uniqueness, referential integrity) only fire at flush
@@ -195,8 +206,9 @@ Backend connectors should:
 
 1. Request the strongest isolation level the backend supports, up to snapshot isolation
 2. Use the backend's native transaction primitive when available; otherwise emulate atomicity via the buffer-and-flush
-   pattern
-3. Document the actual isolation level provided and any read-visibility restrictions imposed by the chosen strategy
+	 pattern where feasible
+3. Document the actual isolation level provided, whether a failing transaction rolls back, and any read-visibility
+	 restrictions imposed by the chosen strategy
 
 ## References
 

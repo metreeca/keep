@@ -27,11 +27,10 @@ const closedEntry = `${base}products/AF001`;
 /**
  * Store lifecycle conformance tests for {@link Store.close}.
  *
- * `close` is optional: a store with no resources to release MAY implement it as a resolved no-op and stay usable
- * afterwards. Connectors that do not close for real MUST opt out of this sub-suite by excluding `"ManageClose"` in
- * their test setup — so this suite asserts the strong contract, that a real close releases the store and any further
- * operation throws. Each test opens its own dedicated store via `open` and tears that down, leaving the shared store
- * untouched, so this sub-suite carries no registration-order constraint.
+ * Asserts the strong contract: closing is idempotent, and a closed store rejects any further operation. A store with
+ * no resources to release MAY implement `close` as a resolved no-op and stay usable afterwards; connectors doing so
+ * opt out of this sub-suite by ignoring `"ManageClose"`. Each test closes a dedicated store minted through `open`,
+ * leaving the shared store untouched.
  */
 export function testManageClose(factory: TestFactory<Store>): void {
 
@@ -55,7 +54,7 @@ export function testManageClose(factory: TestFactory<Store>): void {
 		}));
 
 		([
-			["lookup", (s: Store) => s.lookup({ entry: closedEntry, shape: Product, model: { id: {} } })],
+			["detail", (s: Store) => s.lookup({ entry: closedEntry, shape: Product, model: { id: {} } })],
 			["delete", (s: Store) => s.delete({ entry: closedEntry, shape: Product })],
 			["execute", (s: Store) => s.execute(async () => undefined)],
 			["observe", (s: Store) => s.observe(() => {})]

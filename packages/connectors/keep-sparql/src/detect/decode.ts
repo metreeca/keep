@@ -17,10 +17,8 @@
 /**
  * Detect-pass result decoder.
  *
- * Settles each queued {@link Detect} against the existence query's solution tuples: the entries
- * that came back are the candidates that are the subject of at least one stored triple. The subject
- * token is recovered from the shared {@link Scope} threaded from the driver, so it matches the
- * encoder's projection, and every request's deferred resolves to whether its entry is present.
+ * Settles each queued {@link Detect} against the existence query's solution tuples: an entry is present if the
+ * query returned it. The subject variable is recovered through the {@link Scope} shared with the encoder.
  *
  * @module
  */
@@ -31,10 +29,7 @@ import type { Tuple, Variable } from "@metreeca/wire-sparql";
 
 
 /**
- * Resolves a batch of detect requests against the existence query's present entries.
- *
- * Recovers the entries bound to the subject variable, folds them into a membership set, and settles
- * each request's deferred to whether its `entry` is present.
+ * Resolves each detect request to whether the existence query returned its `entry`.
  *
  * @param scope The shared variable scope, also threaded into the encoder
  * @param batch The queued detect requests to settle, each carrying the `request` whose `entry` is tested

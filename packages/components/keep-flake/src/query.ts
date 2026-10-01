@@ -15,7 +15,7 @@
  */
 
 /**
- * Query-mode walk for {@link createFlake}.
+ * Query-mode walk for the public `createQueryFlake` factory.
  *
  * Two passes decode a collection {@link Query} into the flake. A query's keys (operator-prefixed
  * `>price`, projection `alias=expr`, piped expressions) each encode a full path and transform pipe
@@ -25,8 +25,8 @@
  *     each carrying its path, pipe, and value;
  *  2. **build** regroups the stream into the tree: entries at the current depth fill the bearing
  *     {@link Flake}'s constraint, projection, and {@link Flake.transforms | transforms} slots; deeper
- *     entries group by their next path segment and recurse through {@link Branch} steps, a union-typed
- *     property fanning one branch per variant declaring the segment.
+ *     entries group by their next path segment and recurse through {@link Branch} steps, one per segment
+ *     even where several variants of a union-typed property declare it.
  *
  * Both passes are pure functional walks: every grouping is a `filter` / `flatMap` /
  * `Object.fromEntries` composition, with no mutable accumulator.
@@ -38,23 +38,28 @@ import { getShapeProperties } from "@metreeca/blue/resource";
 import { getShapeBranches, type UnionShape } from "@metreeca/blue/union";
 import { type Range, type Shape } from "@metreeca/blue/value";
 import { type Identifier, isIdentifier, isObject } from "@metreeca/core";
-import { immutable } from "@metreeca/core/structures";
+import { immutable } from "@metreeca/core/values";
 import {
 	decodeProbe,
+	isQuery,
 	isSelector,
+	isSlot,
 	isUnion,
 	type Probe,
+	type Query,
+	type Slot,
 	type Transform
 } from "@metreeca/qest/model";
 import {
+	getDrain,
 	getEntries,
-	getMouldEntries,
 	getPropertyRange,
+	getQueryEntries,
 	getRootRange,
 	getTransformRange,
 	mergeEntries
 } from "./index.core.js";
-import { type Branch, type Entries, type Flake, type Mould, type Transforms } from "./index.js";
+import { type Branch, type Drain, type Entries, type Flake, type Transforms } from "./index.js";
 
 
 /**
@@ -103,24 +108,29 @@ type Entry = Probe & {
 /**
  * Builds the query-mode {@link Flake} from a collection's member shape and a {@link Query}.
  *
- * Internal entry point: public callers go through the dispatcher in {@link createFlake}, which routes
- * the `(Shape, Query)` call shape here.
+ * Internal entry point: public callers go through the `createQueryFlake` factory of the package index, which
+ * resolves the lazy member shape and delegates here.
  *
  * @param shape The member shape: the value shape of the collection's elements
- * @param query The user query: the node retrieving the collection, its
- *              {@link @metreeca/qest/model!Criteria | criteria} merged in alongside its retrieval keys
+ * @param query The query retrieving the collection, its {@link @metreeca/qest/model!Criteria | criteria} merged
+ * in alongside its retrieval keys
  *
  * @returns The immutable {@link Flake} rooted at `shape`, carrying the whole query on its
  * {@link Flake.drain | drain} and with constraints, transforms, and projection marks populated as the
  * query directs
  */
-export function createQueryFlake(shape: Shape, query: Mould): Flake {
+export function createQueryFlake(shape: Shape, query: Query<Slot>): Flake {
+
+	const range = getRootRange(shape);
+
+	// the root range describes one member, while the root drain is the query over the collection of them, so it
+	// is settled against the collection's cardinality
 
 	return immutable({
 
-		drain: { mould: query },
+		drain: getDrain({ ...range, minCount: 0, maxCount: undefined }, query),
 
-		...queryNodeOf(getRootRange(shape), [], queryEntriesOf(shape, query))
+		...queryNodeOf(range, [], queryEntriesOf(shape, query))
 
 	});
 
@@ -136,7 +146,7 @@ export function createQueryFlake(shape: Shape, query: Mould): Flake {
  * {@link queryObjectEntriesOf}; the per-item element and the criteria narrowing the collection are no longer
  * told apart by position.
  */
-function queryEntriesOf(shape: Shape, query: Mould): readonly Entry[] {
+function queryEntriesOf(shape: Shape, query: Query<Slot>): readonly Entry[] {
 
 	return isObject(query) ? queryObjectEntriesOf(shape, query) : [];
 
@@ -201,13 +211,12 @@ function isVariantKey(key: string): boolean {
 const VariantKeys = /^(0|[1-9]\d*)$/;
 
 /**
- * Decodes a placeholder key into a {@link Probe}.
+ * Decodes a query key into a {@link Probe}.
  *
  * A bare identifier path (`name`, `vendor.name`) is a self-projecting path descent whose leaf identifier
- * names the target: qest's {@link @metreeca/qest/model!decodeProbe | decodeProbe} rejects it since the
- * binding shorthand was removed (an explicit `alias=expression` is now required at the qest boundary), so
- * Keep reproduces the descent locally. Binding (`alias=expr`) and operator (`>price`) keys, which carry no
- * bare-identifier path, still route through `decodeProbe`.
+ * names the target. qest's {@link @metreeca/qest/model!decodeProbe | decodeProbe} accepts only explicit
+ * `alias=expression` bindings, so the descent is decoded locally. Binding (`alias=expr`) and operator
+ * (`>price`) keys route through `decodeProbe`.
  */
 function queryProbeOf(key: string): Probe {
 
@@ -257,12 +266,12 @@ function queryNodeOf(range: Range, path: readonly Identifier[], entries: readonl
 	const base = queryLocusOf(range, path, [], [], local);
 
 	// a binding's nested template folds into the terminal's properties, symmetric with model mode (a
-	// projection binding's projected sub-structure is thus reachable through `entries`, not only
-	// `projection[1]`); the terminal keeps its projection alias
+	// projection binding's projected sub-structure is thus reachable through `entries`, not only through
+	// its drain); the terminal keeps its projection alias
 
 	const queried = descends ? queryDescentOf(range, path, deeper) : undefined;
 	const folded = descends && base.drain?.alias !== undefined
-		? queryFoldOf(base.range, path, base.drain.mould)
+		? queryFoldOf(base.range, path, base.drain.query)
 		: undefined;
 
 	const record = queried === undefined ? undefined
@@ -274,27 +283,24 @@ function queryNodeOf(range: Range, path: readonly Identifier[], entries: readonl
 }
 
 /**
- * Folds a projection binding's nested {@link Mould} into the terminal node's {@link Entries}.
+ * Folds a projection binding's nested `Query<Slot>` into the terminal node's {@link Entries}.
  *
  * A binding whose expression crosses a union-typed step (§5.8.1) is union-typed, so it carries the keyed
- * {@link @metreeca/qest/model!Union | union} form (§5.6) even though the walk has fanned each variant to its
+ * {@link @metreeca/qest/model!Union | union} form (§5.5) even though the walk has fanned each variant to its
  * own single reference/resource variant. Decompose it against that narrowed `range`: fold every keyed alternative
  * on its own and merge, so the alternative matching this variant surfaces its branches while the others, naming
- * no property of this target, drop out (§5.4). A multi-variant `range` (a binding whose final step is itself
+ * no property of this target, drop out (§5.5). A multi-variant `range` (a binding whose final step is itself
  * union-typed) and every non-union model pass straight through to {@link getEntries}, which pairs a keyed
  * union model only with a multi-variant range.
  */
-function queryFoldOf(range: Range, path: readonly Identifier[], model: Mould): undefined | Entries {
+function queryFoldOf(range: Range, path: readonly Identifier[], model: Query<Slot>): undefined | Entries {
 
-	return getShapeBranches(range.shape).length > 1 || !isUnion(model)
+	return getShapeBranches(range.shape).length > 1 || !isQuery(model, isUnion)
 		? getEntries(range, path, model)
-		: mergeEntries(getMouldEntries(model).flatMap(([, alternative]) => {
-
-			const entries = getEntries(range, path, alternative);
-
-			return entries === undefined ? [] : [entries];
-
-		}));
+		: mergeEntries(getQueryEntries(model)
+			.map(([, alternative]) => getEntries(range, path, alternative))
+			.filter(entries => entries !== undefined)
+		);
 
 }
 
@@ -315,7 +321,7 @@ function queryLocusOf(
 	const identity = entries.filter(e => e.pipe.length === 0);
 	const piped = entries.filter(e => e.pipe.length > 0);
 
-	// `range` is this locus's own range — the node range, or a stage range already stepped by its transform;
+	// `range` is this locus's own range: the node range, or a stage range already stepped by its transform;
 	// nested stages step one transform further from it
 
 	return {
@@ -323,7 +329,7 @@ function queryLocusOf(
 		pipe,
 		range,
 		...queryConstraintsOf(identity),
-		...queryProjectionOf(identity),
+		...queryProjectionOf(range, identity),
 		transforms: queryTransformsOf(range, path, recorded, piped)
 	};
 
@@ -332,33 +338,48 @@ function queryLocusOf(
 /**
  * Collects the operator-constraint slots from a locus's entries.
  *
- * Each entry whose `target` names an {@link Operators | operator} contributes that slot and its value.
+ * Each entry whose `target` names an {@link Operators | operator} contributes that slot and its value, with
+ * `"asc"`/`"desc"` sort orders normalised to their numeric `1`/`-1` form.
  */
 function queryConstraintsOf(entries: readonly Entry[]): Partial<Flake> {
 	return Object.fromEntries(
 		entries.flatMap(e => {
 			const slot = Operators[e.target];
-			return slot === undefined ? [] : [[slot, e.value] as const];
+			return slot === undefined ? [] : [[slot, slot === "order" ? orderOf(e.value) : e.value] as const];
 		})
 	);
+}
+
+/**
+ * Normalises a sort order to its numeric form, mapping the `"asc"`/`"desc"` shorthands to `1`/`-1`.
+ */
+function orderOf(value: unknown): unknown {
+	return value === "asc" ? 1 : value === "desc" ? -1 : value;
 }
 
 /**
  * Extracts the projection from a locus's entries.
  *
  * The first entry whose `target` is an alias rather than an {@link Operators | operator} binds that
- * alias to its requested {@link Mould}; yields the empty object when none is present.
+ * alias to its requested `Query<Slot>`; returns the empty object when none is present.
  */
-function queryProjectionOf(entries: readonly Entry[]): {
-	drain?: { readonly alias: Identifier; readonly mould: Mould }
-} {
+function queryProjectionOf(range: Range, entries: readonly Entry[]): { drain?: Drain } {
 
 	const bound = entries.find(e => Operators[e.target] === undefined);
 
-	// ;(cast) a binding entry's value is the requested projected fragment: Mould is the documented
-	// binding-value shape at the Keep boundary.
+	if ( bound === undefined ) {
 
-	return bound === undefined ? {} : { drain: { alias: bound.target, mould: bound.value as Mould } };
+		return {};
+
+	} else if ( isQuery(bound.value, isSlot) ) {
+
+		return { drain: getDrain(range, bound.value, bound.target) };
+
+	} else {
+
+		throw new RangeError(`malformed binding value <${JSON.stringify(bound.value)}>`);
+
+	}
 
 }
 
@@ -413,7 +434,7 @@ function peelPipe(head: Transform, entries: readonly Entry[]): readonly Entry[] 
  *
  * Groups entries by their next path segment and recurses through {@link queryBranchOf}, one branch per
  * declared segment, dropping segments no variant declares. A segment declared across several variants of a
- * union range (a path crossing the union under a shared predicate, §5.8.1) is one binding, one cell (§5.6),
+ * union range (a path crossing the union under a shared predicate, §5.8.1) is one binding, one cell (§5.2),
  * so it yields a single branch whose range is the disjunction its child step resolves, never a branch per
  * variant.
  */
@@ -421,10 +442,10 @@ function queryDescentOf(range: Range, path: readonly Identifier[], entries: read
 
 	return Object.fromEntries(
 		queryUniq(entries.map(e => e.path[path.length]))
-			.flatMap(head => {
+			.flatMap<[Identifier, Branch]>(head => {
 				const kept = entries.filter(e => e.path[path.length] === head);
 				const branch = queryBranchOf(range, path, head, kept);
-				return branch === undefined ? [] : [[head, [branch]] as const];
+				return branch === undefined ? [] : [[head, branch]];
 			})
 	);
 

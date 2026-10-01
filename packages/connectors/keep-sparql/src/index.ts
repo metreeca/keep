@@ -17,23 +17,14 @@
 /**
  * SPARQL 1.1 repository connector.
  *
- * Composes a pluggable {@link Repository} into a fully-featured {@link Store} via
- * {@link createSPARQLStore}, translating Store-level read and write operations into SPARQL queries and updates.
- * Application developers select a ready-made connector (Oxigraph, HTTP, …) or implement {@link Repository}
- * directly to support a new SPARQL backend.
- *
- * The SPARQL layer shared by every connector is defined in `@metreeca/wire-sparql`:
- * {@link @metreeca/wire-sparql!SPARQL | SPARQL} text and {@link @metreeca/wire-sparql!Tuple | Tuple} solution rows.
- * The RDF data model those rows carry is defined in `@metreeca/trio`: {@link @metreeca/trio!Triple | Triple}
- * statements and {@link @metreeca/trio!Term | Term} values ({@link @metreeca/trio!Named | Named},
- * {@link @metreeca/trio!Blank | Blank}, {@link @metreeca/trio!Tagged | Tagged}, {@link @metreeca/trio!Typed | Typed}),
- * together with the {@link @metreeca/trio!named | named}/{@link @metreeca/trio!tagged |
- * tagged}/{@link @metreeca/trio!typed | typed} constructors used to mint
- * {@link @metreeca/trio!Term | Term} values from backend results.
+ * Turns any SPARQL 1.1 {@link Repository} into a fully featured {@link Store}, so shape-driven retrieval and
+ * persistence run against a graph backend without hand-written queries. A ready-made connector from the
+ * {@link https://github.com/metreeca/wire @metreeca/wire} collection (Oxigraph, generic HTTP endpoints, RDF4J, …)
+ * covers the common backends; a new backend is supported by implementing {@link Repository} directly.
  *
  * **Wiring a Connector**
  *
- * Pick a ready-made connector and feed it to {@link createSPARQLStore} to obtain a store:
+ * A ready-made connector is passed to {@link createSPARQLStore} to obtain a store:
  *
  * ```typescript
  * import { createSPARQLStore } from "@metreeca/keep-sparql";
@@ -42,19 +33,21 @@
  * const store = createSPARQLStore(createOxiRepository());
  *
  * await store.create({
- *     entry: "http://example.com/products/1",
- *     shape: ProductShape,
+ *     entry: "http://example.com/products/",
+ *     shape: CatalogueShape,
+ *     model: { products: {} },
  *     state: { name: "Widget", price: 9.99 }
  * });
  * ```
  *
  * **Implementing a Connector**
  *
- * To support a new SPARQL backend, implement a {@link @metreeca/wire-sparql!Repository | Repository} and use
- * {@link @metreeca/trio!named | named}, {@link @metreeca/trio!tagged | tagged}, and
- * {@link @metreeca/trio!typed | typed} to lift backend node values into the shared
- * {@link @metreeca/trio!Term | Term} representation. The reference implementation in
- * `@metreeca/wire-sparql-oxigraph` exemplifies the pattern:
+ * A new SPARQL backend is supported by implementing a {@link @metreeca/wire-sparql!Repository | Repository}. The
+ * repository exchanges {@link @metreeca/wire-sparql!SPARQL | SPARQL} text and
+ * {@link @metreeca/wire-sparql!Tuple | Tuple} solution rows, whose values are `@metreeca/trio`
+ * {@link @metreeca/trio!Term | Term} values. Backend node values are lifted into terms with the
+ * {@link @metreeca/trio!named | named}, {@link @metreeca/trio!tagged | tagged} and {@link @metreeca/trio!typed | typed}
+ * constructors. The reference implementation in `@metreeca/wire-sparql-oxigraph` follows this pattern:
  *
  * ```typescript
  * import { named, tagged, type Term, typed } from "@metreeca/trio";
@@ -91,8 +84,8 @@ import {
 	type Repository,
 	type RepositoryClient
 } from "@metreeca/wire-sparql";
+import { detail } from "./detail/index.js";
 import { detect } from "./detect/index.js";
-import { lookup } from "./lookup/index.js";
 import { modify } from "./modify/index.js";
 import { select } from "./select/index.js";
 
@@ -105,24 +98,19 @@ const logger = log(import.meta.url);
 /**
  * Creates a SPARQL store backed by a {@link Repository}.
  *
- * Each StoreClient call (standalone or inside {@link Store.execute execute}) is dispatched through a fresh
- * {@link Repository} scope obtained from {@link Repository.execute repository.execute}, so concurrent calls share no
- * transaction. Inside {@link Store.execute execute}, the user task receives a StoreClient wired to the scoped
- * Repository; mutations are batched and flushed to the repository as a single update when the task completes, then
- * committed by the repository transaction. Queries within the task do not observe the task's own pending mutations
- * (no read-your-own-writes); split dependent reads across separate `execute` calls.
+ * Every data call runs in its own {@link Repository.execute | repository transaction}, so concurrent calls share no
+ * transaction state. Inside {@link Store.execute | execute}, the task receives a {@link StoreClient} bound to a single
+ * repository transaction: its mutations are buffered and flushed to the repository as one update when the task
+ * completes, then committed with the transaction. Queries within the task do not observe the task's own pending
+ * mutations, so a read depending on a write must run in a separate `execute` call.
  *
  * > [!IMPORTANT]
- * > **Transaction Isolation** — Determined by the supplied {@link Repository}.
+ * > **Transaction Isolation** — Determined by the supplied {@link Repository}: native transactions keep the reads of
+ * > an `execute` task consistent, while its mutations are always buffered and applied as a single update on commit.
  *
  * > [!IMPORTANT]
  * > **Mutation Events** — Limited to mutations issued through this store; mutations from other clients on the
  * > underlying repository are not observed.
- *
- * > [!IMPORTANT]
- * > Updates issued within `execute` are always buffered and flushed as a single update on commit, regardless of
- * > native transaction support. Native transactions remain relevant nonetheless, isolating the task's reads
- * > for consistency.
  *
  * @param repository - The repository for SPARQL query, update, and transaction execution
  *
@@ -135,7 +123,7 @@ export function createSPARQLStore(repository: Repository): Store {
 	);
 
 
-	return createManagingStore(store(buffering), {
+	return createManagingStore({
 
 		execute: task => buffering.execute(async repository => task(store(repository))),
 		close: () => buffering.close()
@@ -148,7 +136,7 @@ export function createSPARQLStore(repository: Repository): Store {
 		return createValidatingStore(createBatchingStore({
 
 			detect: (batch) => detect(batch, client),
-			lookup: (batch, broker) => lookup(batch, client, broker),
+			detail: (batch, broker) => detail(batch, client, broker),
 			select: (batch, broker) => select(batch, client, broker),
 			modify: (batch) => modify(batch, client)
 

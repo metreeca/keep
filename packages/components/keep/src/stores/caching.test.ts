@@ -14,10 +14,13 @@
  * limitations under the License.
  */
 
-import type { ResourceShape } from "@metreeca/blue/resource";
+import { reference } from "@metreeca/blue/reference";
+import { multiple, required, resource, type ResourceShape } from "@metreeca/blue/resource";
+import { string } from "@metreeca/blue/string";
+import type { Match } from "@metreeca/blue/value";
 import type { Lazy } from "@metreeca/core";
-import type { Reference } from "@metreeca/qest/state";
 import type { Template } from "@metreeca/qest/model";
+import type { Reference } from "@metreeca/qest/state";
 import { describe, expect, it, vi } from "vitest";
 import type { Store, StoreClient, StoreObserver } from "../index.js";
 import { createCachingStore } from "./caching.js";
@@ -29,6 +32,15 @@ describe("createCachingStore", () => {
 	// valid but empty ResourceShape is sufficient — no cast required
 
 	const shape: Lazy<ResourceShape> = () => ({ kind: "resource", classes: [], parents: [], members: {} });
+
+	// a creation is anchored to a collecting resource, so it takes a shape holding a collection
+
+	const Item = resource({ name: required(string()) });
+	const Catalogue = resource({ items: multiple(reference(Item)) });
+
+	function creation(entry: string) {
+		return { entry, shape: Catalogue, model: { items: {} }, state: { name: "x" } };
+	}
 
 
 	// time constants used by the TTL eviction suite — siblings expressed in terms of TTL
@@ -89,52 +101,53 @@ describe("createCachingStore", () => {
 
 			calls,
 
-			lookup(specs) {
+			lookup(request) {
 				calls.push("lookup");
-				return overrides.lookup?.(specs) ?? Promise.resolve(undefined);
+				// a found resource, cacheable unlike absence; ;(cast) test mock: the payload shape is irrelevant here
+				return overrides.lookup?.(request) ?? Promise.resolve({} as Match<typeof request.shape, typeof request.model>);
 			},
 
-			create(specs) {
+			create(request) {
 				calls.push("create");
-				const result = overrides.create?.(specs) ?? Promise.resolve(specs.entry);
+				const result = overrides.create?.(request) ?? Promise.resolve(request.entry);
 				return result.then(value => {
-					if ( value !== undefined ) { signal(specs.entry, true); }
+					if ( value !== undefined ) { signal(request.entry, true); }
 					return value;
 				});
 			},
 
-			update(specs) {
+			update(request) {
 				calls.push("update");
-				const result = overrides.update?.(specs) ?? Promise.resolve(specs.entry);
+				const result = overrides.update?.(request) ?? Promise.resolve(request.entry);
 				return result.then(value => {
-					if ( value !== undefined ) { signal(specs.entry, true); }
+					if ( value !== undefined ) { signal(request.entry, true); }
 					return value;
 				});
 			},
 
-			delete(specs) {
+			delete(request) {
 				calls.push("delete");
-				const result = overrides.delete?.(specs) ?? Promise.resolve(specs.entry);
+				const result = overrides.delete?.(request) ?? Promise.resolve(request.entry);
 				return result.then(value => {
-					if ( value !== undefined ) { signal(specs.entry, false); }
+					if ( value !== undefined ) { signal(request.entry, false); }
 					return value;
 				});
 			},
 
-			insert(specs) {
+			insert(request) {
 				calls.push("insert");
-				const result = overrides.insert?.(specs) ?? Promise.resolve(specs.entry);
+				const result = overrides.insert?.(request) ?? Promise.resolve(request.entry);
 				return result.then(value => {
-					if ( value !== undefined ) { signal(specs.entry, true); }
+					if ( value !== undefined ) { signal(request.entry, true); }
 					return value;
 				});
 			},
 
-			remove(specs) {
+			remove(request) {
 				calls.push("remove");
-				const result = overrides.remove?.(specs) ?? Promise.resolve(specs.entry);
+				const result = overrides.remove?.(request) ?? Promise.resolve(request.entry);
 				return result.then(value => {
-					if ( value !== undefined ) { signal(specs.entry, false); }
+					if ( value !== undefined ) { signal(request.entry, false); }
 					return value;
 				});
 			},
@@ -254,21 +267,6 @@ describe("createCachingStore", () => {
 
 		});
 
-		it("should not collide an absent field with one asked for", async () => {
-
-			// `canonical` substitutes a sentinel for undefined to avoid `JSON.stringify(undefined) === undefined`
-			// — a model eliding a field must canonicalise to a different key from one asking for it
-
-			const mock = MockStore();
-			const store = createCachingStore(mock);
-
-			await store.lookup({ entry: "/x", shape, model: { tag: undefined } });
-			await store.lookup({ entry: "/x", shape, model: { tag: {} } });
-
-			expect(mock.calls).toEqual(["lookup", "lookup"]);
-
-		});
-
 		it("should share in-flight promise for concurrent equivalent retrieves", async () => {
 
 			const delegate = defer();
@@ -314,6 +312,53 @@ describe("createCachingStore", () => {
 
 		});
 
+		it("should not cache absent resources", async () => {
+
+			const mock = MockStore({ lookup: () => Promise.resolve(undefined) });
+			const store = createCachingStore(mock);
+
+			await expect(store.lookup({ entry: "/x", shape, model: {} })).resolves.toBeUndefined();
+			await expect(store.lookup({ entry: "/x", shape, model: {} })).resolves.toBeUndefined();
+
+			expect(mock.calls).toEqual(["lookup", "lookup"]);
+
+		});
+
+		it("should not evict a newer in-flight entry when a replaced entry resolves as absent", async () => {
+
+			const first = defer();
+			const second = defer();
+
+			const responses: Array<Promise<undefined>> = [first.promise, second.promise];
+			let callCount = 0;
+
+			const mock = MockStore({
+				lookup: () => {
+					callCount++;
+					return responses.shift() ?? Promise.resolve(undefined);
+				}
+			});
+
+			const store = createCachingStore(mock);
+
+			const p1 = store.lookup({ entry: "/x", shape, model: {} });
+
+			await store.create(creation("/x")); // invalidates /x
+
+			const p2 = store.lookup({ entry: "/x", shape, model: {} }); // stores second.promise at /x
+
+			first.resolve(undefined);
+			await p1;
+
+			const p3 = store.lookup({ entry: "/x", shape, model: {} }); // must share second.promise
+
+			second.resolve(undefined);
+			await Promise.all([p2, p3]);
+
+			expect(callCount).toBe(2);
+
+		});
+
 		it("should not evict a newer in-flight entry when a replaced entry rejects", async () => {
 
 			// Regression: the rejection catch handler must not drop a cache record that was
@@ -340,7 +385,7 @@ describe("createCachingStore", () => {
 			const p1 = store.lookup({ entry: "/x", shape, model: {} });
 			p1.catch(() => { /* suppress unhandled rejection */ });
 
-			await store.create({ entry: "/x", shape, state: {} }); // invalidates /x
+			await store.create(creation("/x")); // invalidates /x
 
 			const p2 = store.lookup({ entry: "/x", shape, model: {} }); // stores second.promise at /x
 
@@ -465,10 +510,10 @@ describe("createCachingStore", () => {
 	});
 
 
-	describe("query option keying", () => {
+	describe("retrieval scope keying", () => {
 
-		// opts.plain and opts.depth only accept or reject a model — they never alter a successful payload — so they
-		// are excluded from the cache key; retrievals differing only in these opts collapse to the same cache entry
+		// the scope plain and depth only accept or reject a model (they never alter a successful payload), so they
+		// are excluded from the cache key; retrievals differing only in these members collapse to the same cache entry
 
 		const excluded: ReadonlyArray<readonly [string, { readonly plain?: boolean; readonly depth?: number }, {
 			readonly plain?: boolean;
@@ -496,11 +541,7 @@ describe("createCachingStore", () => {
 	describe("delegate passthrough", () => {
 
 		const passthrough: ReadonlyArray<readonly [string, Partial<Store>, (store: StoreClient) => Promise<unknown>, unknown]> = [
-			["create", { create: () => Promise.resolve(undefined) }, store => store.create({
-				entry: "/x",
-				shape,
-				state: {}
-			}), undefined],
+			["create", { create: () => Promise.resolve(undefined) }, store => store.create(creation("/x")), undefined],
 			["update", { update: () => Promise.resolve(undefined) }, store => store.update({
 				entry: "/x",
 				shape,
@@ -615,7 +656,7 @@ describe("createCachingStore", () => {
 
 			await store.lookup({ entry: "/x", shape, model: {} });
 
-			await store.execute(inner => inner.create({ entry: "/x", shape, state: {} }));
+			await store.execute(inner => inner.create(creation("/x")));
 
 			mock.calls.length = 0;
 			await store.lookup({ entry: "/x", shape, model: {} });
@@ -676,7 +717,7 @@ describe("createCachingStore", () => {
 	describe("invalidation", () => {
 
 		const mutators: ReadonlyArray<readonly [string, (store: StoreClient) => Promise<unknown>]> = [
-			["create", store => store.create({ entry: "/products/1", shape, state: {} })],
+			["create", store => store.create(creation("/products/1"))],
 			["update", store => store.update({ entry: "/products/1", shape, state: {} })],
 			["delete", store => store.delete({ entry: "/products/1", shape })],
 			["insert", store => store.insert({ entry: "/products/1", shape, state: {} })],
@@ -709,7 +750,7 @@ describe("createCachingStore", () => {
 
 			matchSpy.mockClear();
 
-			await store.create({ entry: "/products/2", shape, state: {} });
+			await store.create(creation("/products/2"));
 
 			expect(matchSpy).toHaveBeenCalledWith("/products/2", "/products/1");
 
@@ -775,9 +816,9 @@ describe("createCachingStore", () => {
 		it("should not cache results retrieved while a write is in flight", async () => {
 
 			// Regression: a read concurrent with an in-flight write must not install its result
-			// into the cache. Without this, a lookup that resolves before the write commits
+			// into the cache. Without this, a lookup call that resolves before the write commits
 			// would cache the pre-commit value, leaving a stale entry visible to other readers
-			// in the window between the lookup resolving and the reactive observer firing.
+			// in the window between the call resolving and the reactive observer firing.
 
 			const update = defer<Reference>();
 			const mock = MockStore({ update: () => update.promise });
@@ -786,12 +827,12 @@ describe("createCachingStore", () => {
 			// start the write — pre-commit invalidate runs; underlying update is pending
 			const updatePromise = store.update({ entry: "/x", shape, state: {} });
 
-			// concurrent lookup resolves while the write is still in flight
+			// concurrent lookup call resolves while the write is still in flight
 			await store.lookup({ entry: "/x", shape, model: {} });
 
 			mock.calls.length = 0;
 
-			// the in-flight lookup must not have cached its result — a second lookup must
+			// the in-flight lookup call must not have cached its result — a second call must
 			// still hit the delegate; if the cache held the stale value this would be a hit
 			await store.lookup({ entry: "/x", shape, model: {} });
 
@@ -822,7 +863,7 @@ describe("createCachingStore", () => {
 
 			mock.calls.length = 0;
 
-			// a follow-up lookup must still miss — neither concurrent reader cached
+			// a follow-up lookup call must still miss — neither concurrent reader cached
 			await store.lookup({ entry: "/x", shape, model: {} });
 
 			expect(mock.calls).toEqual(["lookup"]);
@@ -883,7 +924,7 @@ describe("createCachingStore", () => {
 
 			mock.calls.length = 0;
 
-			await store.create({ entry: "/products/1", shape, state: {} });
+			await store.create(creation("/products/1"));
 
 			await store.lookup({ entry: "/products/1", shape, model: {} }); // should miss
 			await store.lookup({ entry: "/products/2", shape, model: {} }); // should hit

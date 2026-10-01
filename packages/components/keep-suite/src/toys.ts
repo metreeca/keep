@@ -17,9 +17,9 @@
 /**
  * Toy catalogue sample dataset.
  *
- * Provides shape definitions and test data for validating store implementations against the resource shapes
- * defined in this module. The dataset balances size with feature coverage, exercising cardinality variants, data types,
- * structural patterns and query operations.
+ * Provides the resource shapes and sample data that the conformance suite runs store implementations against. The
+ * dataset balances size with feature coverage, exercising cardinality variants, data types, structural patterns and
+ * query operations.
  *
  * The dataset contains **62 products**, **11 categories** and **5 vendors**, plus a small **media**
  * pool (image and video resources) wired to one product's `media` gallery.
@@ -52,7 +52,7 @@ import { union } from "@metreeca/blue/union";
 import type { Lazy } from "@metreeca/core";
 import { createNamespace } from "@metreeca/core/resource";
 
-export { collections, identify, clone } from "./toys.core.js";
+export { catalogues, collections, identify, clone } from "./toys.core.js";
 
 
 /**
@@ -111,6 +111,8 @@ export const toys = createNamespace(`${base}toys#`, [
 	"score",
 	"certified",
 	"audited",
+	"origin",
+	"tagline",
 
 	// PostalAddress
 
@@ -188,7 +190,8 @@ export const languages = [
 /**
  * Shared localised labelling for all resources.
  *
- * Provides multilingual `label` and `comment` properties constrained to {@link languages}.
+ * Provides multilingual `label` and `comment` properties constrained to {@link languages}, with `label` also
+ * admitting the language-neutral `und` tag.
  */
 export function Entity() {
 	return resource({
@@ -200,11 +203,11 @@ export function Entity() {
 
 		label: required(dictionary({
 
-				uniqueLang: true,
-				languageIn: ["und", ...languages],
+			uniqueLang: true,
+			languageIn: ["und", ...languages],
 
-				minLength: 1,
-				maxLength: 80
+			minLength: 1,
+			maxLength: 80
 
 		}), {
 
@@ -214,11 +217,11 @@ export function Entity() {
 
 		comment: optional(dictionary({
 
-				uniqueLang: true,
-				languageIn: languages,
+			uniqueLang: true,
+			languageIn: languages,
 
-				minLength: 10,
-				maxLength: 500
+			minLength: 10,
+			maxLength: 500
 
 		}), {
 
@@ -230,14 +233,12 @@ export function Entity() {
 }
 
 /**
- * Virtual collection exposing members of a given entity type.
+ * Collection holding the resources of a given entity type as its members.
  *
  * @param member - The resource shape factory for collection members
  */
 export function Catalogue<M extends Lazy<ResourceShape>>(member: M) {
-	return resource(Resource,{
-
-		virtual: true,
+	return resource(Resource, {
 
 		class: toys.Collection
 
@@ -254,12 +255,11 @@ export function Catalogue<M extends Lazy<ResourceShape>>(member: M) {
 /**
  * Collection endpoint for all {@link Resource} instances.
  *
- * Members anchor on the supertype class {@link Resource}, so the collection spans every
- * `Resource` subtype ({@link Category}, {@link Vendor}, {@link Product}) — exercising
- * subtype matching through the denormalised class lineage.
+ * Members anchor on the supertype class {@link Resource}, so the collection spans every `Resource` subtype
+ * ({@link Category}, {@link Vendor}, {@link Product}, {@link Image}, {@link Video}) and exercises subtype matching.
  */
 export function Resources() {
-	return resource(Catalogue(Resource),{
+	return resource(Catalogue(Resource), {
 
 		class: toys.Collection
 
@@ -276,7 +276,7 @@ export function Resources() {
  * Provides identity, type classification, and audit timestamps.
  */
 export function Resource() {
-	return resource(Entity,{
+	return resource(Entity, {
 
 		class: toys.Resource
 
@@ -298,7 +298,7 @@ export function Resource() {
  * Collection endpoint for {@link Category} resources.
  */
 export function Categories() {
-	return resource(Catalogue(Category),{
+	return resource(Catalogue(Category), {
 
 		class: toys.Collection
 
@@ -312,11 +312,12 @@ export function Categories() {
 /**
  * Hierarchical product classification with localised labels.
  *
- * Self-referential `broader` enables transitive hierarchy traversal with a `narrower` reverse link.
- * `narrower` foreign reference provides the inverse view without write access.
+ * The `broader` link to the parent category also writes the inverse `narrower` link, which the foreign `narrower`
+ * property exposes as a read-only view. The `upper` link writes no inverse, and the foreign `lower` property reads it
+ * in the reverse direction.
  */
 export function Category() {
-	return resource(Resource,{
+	return resource(Resource, {
 
 		class: toys.Category,
 
@@ -353,7 +354,7 @@ export function Category() {
  * Collection endpoint for {@link Vendor} resources.
  */
 export function Vendors() {
-	return resource(Catalogue(Vendor),{
+	return resource(Catalogue(Vendor), {
 
 		class: toys.Collection
 
@@ -367,10 +368,11 @@ export function Vendors() {
 /**
  * Product suppliers with contact information and certification records.
  *
- * `products` foreign reference provides read-only access to the vendor's product catalogue.
+ * The foreign `products` property provides read-only access to the products referencing the vendor, and its
+ * captive flag cascade-deletes them with the vendor.
  */
 export function Vendor() {
-	return resource(Resource,{
+	return resource(Resource, {
 
 		class: toys.Vendor,
 
@@ -398,6 +400,8 @@ export function Vendor() {
 		score: optional(Score),
 		certified: optional(Certified),
 		audited: optional(union(boolean, date)),
+		origin: optional(Origin),
+		tagline: optional(Tagline),
 
 		address: optional(Address),
 		contacts: multiple(Contacts),
@@ -411,7 +415,7 @@ export function Vendor() {
  * Rating union for `Vendor.score`: a bounded decimal rating or a letter-grade string.
  *
  * The decimal and string variants are storage-class disjoint, so a stored value singles out its branch by
- * datatype alone (§5.4).
+ * datatype alone (§3.3).
  */
 export function Score() {
 	return union(
@@ -424,9 +428,9 @@ export function Score() {
  * Certification union for `Vendor.certified`: a boolean flag, a bounded decimal rating, a letter-grade string,
  * or a gYear.
  *
- * Spans the full §5.7.5 processing-type ladder (`xsd:boolean` < numeric < `xsd:string` < temporal); the grade
- * pattern keeps the string variant lexically disjoint from the gYear variant, so every value singles out
- * exactly one branch (§5.4).
+ * Spans the `xsd:boolean`, `numeric` and `xsd:string` tiers of the §5.7.5 sort order: a gYear is not a processing
+ * type, so it ranks as an opaque `xsd:string` (§3). The grade pattern keeps the string variant lexically disjoint
+ * from the gYear variant, so every value singles out exactly one branch (§3.3).
  */
 export function Certified() {
 	return union(
@@ -438,11 +442,43 @@ export function Certified() {
 }
 
 /**
+ * Provenance union for `Vendor.origin`: a localised region name or a geolocated {@link Place}.
+ *
+ * The text variant is told apart from the node variant by wire form, a dictionary matching it and no other variant
+ * (§3.1). Folding leaves a string and a node branch, so the property stays union-typed for retrieval (§5.5): a template
+ * reaches the region name through an atomic alternative as its coalesced label, and only a projection binding reaches it
+ * structurally, through a locale alternative. The text variant admits `und` entries, for region names with no
+ * determinate language.
+ */
+export function Origin() {
+	return union(
+		dictionary({ uniqueLang: true, languageIn: ["und", ...languages] }),
+		Place
+	);
+}
+
+/**
+ * Tagline union for `Vendor.tagline`: a plain string or a localised text.
+ *
+ * A two-natured property, after the §4.3 modelling of content with or without a localised form: a vendor carries a
+ * single untranslated slogan or a set of translations. The string and text variants are told apart by wire form, a plain
+ * string matching the string variant and a dictionary the text variant (§3.1), and fold into one string branch on
+ * retrieval (§3.2). The text variant admits `und` entries of its own, which stay text: an undetermined slogan is never
+ * read back as a plain string.
+ */
+export function Tagline() {
+	return union(
+		string({ minLength: 1, maxLength: 100 }),
+		dictionary({ uniqueLang: true, languageIn: ["und", ...languages], minLength: 1, maxLength: 100 })
+	);
+}
+
+/**
  * Location union for `Vendor.address`: a plain string, a structured {@link PostalAddress}, or a geolocated
  * {@link Place}.
  *
  * The literal variant is storage-class disjoint from the two node variants, which are in turn structurally
- * disjoint from each other, so a stored value singles out its branch by datatype or structure (§5.4).
+ * disjoint from each other, so a stored value singles out its branch by datatype or structure (§3.3).
  */
 export function Address() {
 	return union(
@@ -459,7 +495,7 @@ export function Address() {
  * structurally disjoint from its sibling {@link Place} variant.
  */
 export function PostalAddress() {
-	return resource(Entity,{
+	return resource(Entity, {
 
 		class: toys.PostalAddress
 
@@ -483,17 +519,22 @@ export function PostalAddress() {
 /**
  * Geolocated place for vendor locations, after the schema.org `Place` modelling.
  *
- * Embedded resource used as a union variant for `Vendor.address` and `Vendor.contacts`,
+ * Embedded resource used as a union variant for `Vendor.address`, `Vendor.contacts` and `Vendor.origin`,
  * structurally disjoint from its sibling {@link PostalAddress} variant.
  */
 export function Place() {
-	return resource(Entity,{
+	return resource(Entity, {
 
 		class: toys.Place
 
 	}, {
 
-		label: required(dictionary({ uniqueLang: true, languageIn: ["und", ...languages], minLength: 1, maxLength: 80 })),
+		label: required(dictionary({
+			uniqueLang: true,
+			languageIn: ["und", ...languages],
+			minLength: 1,
+			maxLength: 80
+		})),
 
 		latitude: required(decimal({ minInclusive: -90, maxInclusive: 90 })),
 		longitude: required(decimal({ minInclusive: -180, maxInclusive: 180 })),
@@ -508,7 +549,7 @@ export function Place() {
  * geolocated {@link Place}.
  *
  * The email and phone variants share the string storage class but carry disjoint patterns; the two node
- * variants are structurally disjoint, so each value singles out exactly one branch (§5.4).
+ * variants are structurally disjoint, so each value singles out exactly one branch (§3.3).
  */
 export function Contacts() {
 	return union(
@@ -526,7 +567,7 @@ export function Contacts() {
  * Collection endpoint for {@link Product} resources.
  */
 export function Products() {
-	return resource(Catalogue(Product),{
+	return resource(Catalogue(Product), {
 
 		class: toys.Collection
 
@@ -543,7 +584,7 @@ export function Products() {
  * Includes structured `reviews`, a required {@link Vendor} reference, and repeatable {@link Category} classifications.
  */
 export function Product() {
-	return resource(Resource,{
+	return resource(Resource, {
 
 		class: toys.Product,
 
@@ -583,7 +624,7 @@ export function Product() {
  * Media union for `Product.media`: a captive {@link Image} or {@link Video} reference.
  *
  * Both variants share the reference storage class but carry disjoint IRI patterns, so a stored reference
- * singles out its branch by target-identifier pattern (§5.4). The declaring {@link Product} `media` property
+ * singles out its branch by target-identifier pattern (§3.3). The declaring {@link Product} `media` property
  * marks them captive, so they are cascade-deleted with the owning product.
  */
 export function Media() {
@@ -602,7 +643,7 @@ export function Media() {
  * shared `subject` predicate.
  */
 export function Image() {
-	return resource(Resource,{
+	return resource(Resource, {
 
 		class: toys.Image,
 
@@ -610,7 +651,12 @@ export function Image() {
 
 	}, {
 
-		label: required(dictionary({ uniqueLang: true, languageIn: ["und", ...languages], minLength: 1, maxLength: 80 })),
+		label: required(dictionary({
+			uniqueLang: true,
+			languageIn: ["und", ...languages],
+			minLength: 1,
+			maxLength: 80
+		})),
 
 		url: required(url),
 		width: required(integer),
@@ -635,7 +681,7 @@ export function Image() {
  * shared `subject` predicate.
  */
 export function Video() {
-	return resource(Resource,{
+	return resource(Resource, {
 
 		class: toys.Video,
 
@@ -643,7 +689,12 @@ export function Video() {
 
 	}, {
 
-		label: required(dictionary({ uniqueLang: true, languageIn: ["und", ...languages], minLength: 1, maxLength: 80 })),
+		label: required(dictionary({
+			uniqueLang: true,
+			languageIn: ["und", ...languages],
+			minLength: 1,
+			maxLength: 80
+		})),
 
 		url: required(url),
 		duration: required(duration),
@@ -663,7 +714,7 @@ export function Video() {
  * Embedded resource within {@link Product} capturing author, rating, and localised review text.
  */
 export function Review() {
-	return resource(Entity,{
+	return resource(Entity, {
 
 		class: toys.Review
 

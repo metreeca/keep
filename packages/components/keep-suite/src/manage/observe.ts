@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import type { Instance } from "@metreeca/blue/value";
+import type { State } from "@metreeca/blue/value";
 import type { Store, StoreClient, StoreObserver } from "@metreeca/keep";
 import type { Reference } from "@metreeca/qest/state";
 import { describe, expect, it } from "vitest";
 import { collect, type TestFactory } from "../index.core.js";
-import { collections, testProduct } from "../toys.core.js";
+import { collections, created, testProduct } from "../toys.core.js";
 import { base, Product } from "../toys.js";
 
 
@@ -43,7 +43,7 @@ export function testManageObserve(factory: TestFactory<Store>): void {
 
 			it.each([
 				["create of a new resource", "OBS-001", true,
-					(s: StoreClient, p: ReturnType<typeof testProduct>) => s.create({
+					(s: StoreClient, p: ReturnType<typeof testProduct>) => created(s, {
 						entry: p.id,
 						shape: Product,
 						state: p
@@ -70,21 +70,21 @@ export function testManageObserve(factory: TestFactory<Store>): void {
 
 			it.each([
 				["update", true,
-					(s: StoreClient, e: Instance<typeof Product>) => s.update({
+					(s: StoreClient, e: State<typeof Product>) => s.update({
 						entry: e.id,
 						shape: Product,
 						state: { ...e, price: 55.55 }
 					})],
 				["insert", true,
-					(s: StoreClient, e: Instance<typeof Product>) => s.insert({
+					(s: StoreClient, e: State<typeof Product>) => s.insert({
 						entry: e.id,
 						shape: Product,
 						state: { ...e, price: 66.66 }
 					})],
 				["delete", false,
-					(s: StoreClient, e: Instance<typeof Product>) => s.delete({ entry: e.id, shape: Product })],
+					(s: StoreClient, e: State<typeof Product>) => s.delete({ entry: e.id, shape: Product })],
 				["remove", false,
-					(s: StoreClient, e: Instance<typeof Product>) => s.remove({ entry: e.id, shape: Product })]
+					(s: StoreClient, e: State<typeof Product>) => s.remove({ entry: e.id, shape: Product })]
 			] as const)("should notify on %s of an existing resource", (_op, flag, mutate) => factory(async ({
 				store,
 				generate
@@ -108,7 +108,7 @@ export function testManageObserve(factory: TestFactory<Store>): void {
 
 				const { changes } = collect(store);
 
-				await store.create({ entry: existing.id, shape: Product, state: existing });
+				await created(store, { entry: existing.id, shape: Product, state: existing });
 
 				expect(changes).toHaveLength(0);
 
@@ -169,7 +169,7 @@ export function testManageObserve(factory: TestFactory<Store>): void {
 
 				const { changes } = collect(store, `${base}vendors/`);
 
-				await store.create({
+				await created(store, {
 					entry: `${base}products/OBS-NONDESC-001`,
 					shape: Product,
 					state: testProduct("OBS-NONDESC-001", "Non-Descendant Product", { price: 5.00 })
@@ -183,7 +183,7 @@ export function testManageObserve(factory: TestFactory<Store>): void {
 
 				const { changes } = collect(store, `${base}products/`);
 
-				await store.create({
+				await created(store, {
 					entry: `${base}products/OBS-002`,
 					shape: Product,
 					state: testProduct("OBS-002", "Descendant Product", { price: 15.00, stock: 3 })
@@ -202,7 +202,7 @@ export function testManageObserve(factory: TestFactory<Store>): void {
 				const { changes: changes1 } = collect(store);
 				const { changes: changes2 } = collect(store);
 
-				await store.create({
+				await created(store, {
 					entry: `${base}products/OBS-MULTI-001`,
 					shape: Product,
 					state: testProduct("OBS-MULTI-001", "Multi-Observer Product")
@@ -222,7 +222,7 @@ export function testManageObserve(factory: TestFactory<Store>): void {
 
 				unsub1();
 
-				await store.create({
+				await created(store, {
 					entry: `${base}products/OBS-UNSUB-001`,
 					shape: Product,
 					state: testProduct("OBS-UNSUB-001", "Selective Unsub Product")
@@ -288,7 +288,7 @@ export function testManageObserve(factory: TestFactory<Store>): void {
 
 				unsub1();
 
-				await store.create({
+				await created(store, {
 					entry: `${base}products/OBS-REG-001`,
 					shape: Product,
 					state: testProduct("OBS-REG-001", "Detached A", { price: 1.00 })
@@ -313,7 +313,7 @@ export function testManageObserve(factory: TestFactory<Store>): void {
 
 				const { changes } = collect(store, []);
 
-				await store.create({
+				await created(store, {
 					entry: `${base}products/OBS-REG-002`,
 					shape: Product,
 					state: testProduct("OBS-REG-002", "Empty Filter", { price: 2.00 })
@@ -333,7 +333,7 @@ export function testManageObserve(factory: TestFactory<Store>): void {
 
 				unsubscribe();
 
-				await store.create({
+				await created(store, {
 					entry: `${base}products/OBS-003`,
 					shape: Product,
 					state: testProduct("OBS-003", "Silent Product", { price: 25.00, stock: 7 })

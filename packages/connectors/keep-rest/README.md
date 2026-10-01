@@ -5,13 +5,13 @@
 REST/JSON proxy connector for the [@metreeca/keep](https://github.com/metreeca/keep) model-driven linked data storage
 framework.
 
-Forwards every store operation to a remote REST endpoint over HTTP, exposing the same `Store` surface as every other
-connector: each call is round-tripped to the remote service rather than applied to a local backing store. Inputs are
-shape-validated before the request, and retrieval responses are re-validated against the projected shape, since the
-remote endpoint is treated as untrusted by default.
+Gives an application access to a remote REST service through the same
+[`Store`](https://metreeca.github.io/keep/modules/_metreeca_keep.html) API as every other connector: each data operation
+is round-tripped to the service rather than applied to a local backing store. Inputs are shape-validated before the
+request is sent. Retrieval responses are validated as well, since the remote service is treated as untrusted by default.
 
 > [!IMPORTANT]
-> **Transaction Isolation** — None. REST has no native transaction support; operations apply eagerly with no
+> **Transaction Isolation** — None. REST has no native transaction support: operations apply eagerly with no
 > cross-call isolation, and an `execute` task that throws after partial server-side mutations does not roll them back.
 
 > [!IMPORTANT]
@@ -33,7 +33,7 @@ npm install @metreeca/keep-rest
 
 ## Wiring a Store
 
-Call `createRESTStore` to obtain a `Store` that proxies a remote REST service over the global `fetch`:
+Call `createRESTStore` to obtain a `Store` proxying a remote REST service over the global `fetch`:
 
 ```typescript
 import { createRESTStore } from "@metreeca/keep-rest";
@@ -44,15 +44,15 @@ const product = await store.lookup({
 	entry: "http://example.com/products/1",
 	shape: ProductShape,
 	model: {
-		name: "",
-		price: 0
+		name: {},
+		price: {}
 	}
 });
 ```
 
-Pass a custom `fetch`-compatible transport as the first argument to route requests through a configured client; pass
-`{ trusted: true }` to skip re-validation of retrieval responses when the remote endpoint is trusted to deliver
-shape-conforming data.
+Pass a `fetch`-compatible transport as the `fetch` option to route requests through a configured client, for instance
+one adding authentication headers. Pass `trusted: true` to skip validation of retrieval responses, but only when the
+remote service is trusted to deliver shape-conforming data.
 
 # Support
 

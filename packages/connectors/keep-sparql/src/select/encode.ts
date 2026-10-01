@@ -17,23 +17,22 @@
 /**
  * Select-pass query encoder.
  *
- * Folds every queued {@link Select} into one batched SPARQL SELECT, contributing each request as a
- * UNION branch off a shared outer query. Per-request variable allocation flows through the supplied
- * {@link Scope}, so the {@link decode | decoder} recovers the same solution slots when settling each
- * request against the returned round's tuples.
+ * Folds every queued {@link Select} into one SPARQL `select` query, contributing each request as an arm. A single
+ * request runs as its bare arm, while several are joined by a `union` under an outer query keeping each request's
+ * rows contiguous. Variables are allocated through the {@link Scope} shared with the decoder, so both sides agree on
+ * every column.
  *
- * Each request's arm evaluates as a fixed pipeline of stages (structural match, text coalescing, scalar
- * transforms, scalar filters, grouping, projection, aggregate filtering, ordering, and slicing); the
- * helpers below follow that order, each grouping its single-use sub-helpers as nested functions. See the
- * `select/index.md` cheat-sheet for the query-plan structure the stages mirror.
+ * Each arm is built from the request's {@link Flake | query plan}, covering only the nodes the query reads: the
+ * projection head, the graph patterns, the row filters, the group filters, the ordering and the window. The
+ * contract shared with the decoder is stated in `select/index.md`.
  *
  * @module
  */
 
 import { getShapeClass, type Property } from "@metreeca/blue/resource";
-import { getShapeBranches } from "@metreeca/blue/union";
-import { eager } from "@metreeca/blue/value";
-import { isNumber, isObject, map } from "@metreeca/core";
+import { getBoundBranch, getShapeBranches } from "@metreeca/blue/union";
+import { sh, type Shape } from "@metreeca/blue/value";
+import { error, isNumber, isString, opt } from "@metreeca/core";
 import { xsd } from "@metreeca/core/datatype";
 import type { Tag } from "@metreeca/core/language";
 import type { Scope } from "@metreeca/core/scope";
@@ -46,23 +45,18 @@ import {
 	getFlakeOrdering,
 	getFlakeProjections,
 	getFlakeTransforms,
-	getFlakeVariant,
 	hasDictionaryOptions,
 	hasNullOptions,
-	isAggregateFlake,
 	isComputedFlake,
 	isConstrainedFlake,
-	isDrainedFlake,
 	isGroupingFlake,
-	isPropertyBranch,
-	isRequiredFlake,
-	isScalarFlake
+	isRequiredFlake
 } from "@metreeca/keep-flake";
 import type { Deferred, Select } from "@metreeca/keep/batching";
+import { getOrderDirection, isAggregate } from "@metreeca/qest/model";
 import type { Literal } from "@metreeca/qest/state";
-import { getOrderDirection, isAggregate, isProjection } from "@metreeca/qest/model";
 import { named, type Named, rdf, type Term } from "@metreeca/trio";
-import { type SPARQL, type Variable } from "@metreeca/wire-sparql";
+import type { SPARQL, Variable } from "@metreeca/wire-sparql";
 import {
 	all as wildcard,
 	and,
@@ -86,12 +80,14 @@ import {
 	iif,
 	isBound,
 	isIn,
+	isLiteral,
 	isNumeric,
 	lang,
 	lcase,
 	limit,
 	lt,
 	lte,
+	ne,
 	nexists,
 	nil,
 	not,
@@ -110,19 +106,29 @@ import {
 	variable,
 	where
 } from "@metreeca/wire-sparql/builder";
-import { boundToTerm, expression, link, membership, optionsToTerms } from "../_/_encode.js";
-import { crossing, isXComputed, isXScalar, references } from "../_/_flake.js";
-import { isProjected } from "../_/_model.js";
-import { getUnionPlaceholders } from "../_/_union.js";
+import { expression, link, membership, optionsToTerms, textual, valueToTerm } from "../index.core.js";
 
 
 /**
- * Folds every queued select request into one batched SPARQL SELECT.
+ * The stored edge a node is reached through: the subject holding the property, the property itself, and the
+ * variable the edge binds its stored object to, the node value itself unless the node folds the stored text.
+ */
+type Edge = {
+
+	readonly owner: Variable | Named;
+	readonly property: Property;
+	readonly object: Variable;
+
+};
+
+
+/**
+ * Encodes one batched `select` query covering every request.
  *
  * @param scope The variable scope shared with the decoder, allocating per-request solution slots
  * @param batch The queued select requests to encode, each paired with its {@link Flake | query plan} and deferred
  *
- * @returns The batched SELECT query covering every request in `batch`
+ * @returns The batched `select` query covering every request in `batch`
  */
 export function encode(
 	scope: Scope<Variable>,
@@ -131,505 +137,398 @@ export function encode(
 
 	const guard = scope.resolve(batch);
 
-	if ( batch.length > 1 ) {
+	// a single request runs as it is; several are wrapped in an outer query reordering their rows, the
+	// request stamp first so each request's already-sliced window stays contiguous
 
-		return select(wildcard(),
-			where(collections()),
-			reorder()
-		);
-
-	} else {
-
-		return collections();
-
-	}
+	return batch.length > 1
+		? select(wildcard(),
+			where(union(batch.map(arm))),
+			orderBy(asc(variable(guard)), batch.map(({ flake }) => ordering(flake)))
+		)
+		: union(batch.map(arm));
 
 
-	function root(flake: Flake): Variable {
-		return scope.resolve(flake);
-	}
+	/**
+	 * One request's arm: the member edge, the patterns the query reads, and the clauses projecting,
+	 * filtering, grouping, ordering and slicing the members.
+	 */
+	function arm({ request: { entry, field, locale }, flake }: Deferred<Select> & {
+		readonly flake: Flake
+	}, index: number): SPARQL {
 
+		const root = scope.resolve(flake);
+		const edge: Edge = { owner: named(entry), property: field, object: root };
 
-	function collections(): SPARQL {
-		return union(batch.map(({ request, flake }, index) => arm(request, flake, index)));
-	}
+		const read = reader(flake);
 
-	function reorder(): SPARQL {
+		const cells = flake.drain?.form === "projection" ? getFlakeProjections(flake) : [flake];
+		const keys = grouping(flake);
+		const reduced = reductions(flake);
 
-		return orderBy(asc(variable(guard)), batch.map(({ flake }) =>
-			sorting(flake)
-		));
+		const stamp = as(number(index), variable(guard));
 
-	}
+		// a query whose projection aggregates is one grouped select; one reduced per item alone (§5.8.2.1)
+		// groups by the member in a subselect, which the arm then projects as distinct rows (§5.2)
 
+		const grouped = reduced.length > 0;
+		const itemised = grouped && !isGroupingFlake(flake);
 
-	function columns(cell: Flake): readonly SPARQL[] {
-		const variants = getShapeBranches(cell.range.shape);
-
-		return variants.length > 1 // !!! why?
-			? variants.map(variant => variable(scope.resolve(cell, variant)))
-			: [variable(scope.resolve(cell))];
-	}
-
-	function aggregateColumns(flake: Flake, anchor: Variable, reference: boolean): readonly SPARQL[] {
-
-		// `min`/`max`/`sum`/`avg` over a reference short-circuit to an unbound column (Appendix A.4.1),
-		// `count` still reduces; an aggregate's scalar wrappers (`round:avg:price`) compose inline and project
-		// as their own columns, since a select alias cannot reference a sibling column
-
-		const own = getFlakeTransforms(flake).flatMap(stage =>
-			stage === undefined || !isComputedFlake(stage) ? []
-				: isAggregateFlake(stage) ? column(stage)
-					: aggregateColumns(stage, anchor, reference)
-		);
-
-		const nested = getFlakeEntries(flake).flatMap(branch => {
-			return isPropertyBranch(branch) ? aggregateColumns(branch, scope.resolve(branch), references(branch))
-				: branch.entry.kind === "id" || branch.entry.kind === "type" ? aggregateColumns(branch, anchor, true)
-					: [];
-		});
-
-		return [...own, ...nested];
-
-
-		function column(flake: Flake): readonly SPARQL[] {
-			return !reference || flake.pipe[0] === "count" ? projected(flake) : [];
-		}
-
-		function derived(flake: Flake): readonly SPARQL[] {
-			return getFlakeTransforms(flake).flatMap(flake => isScalarFlake(flake) ? projected(flake) : []);
-		}
-
-		function projected(flake: Flake): readonly SPARQL[] {
-			return [as(expression(anchor, flake.pipe), variable(scope.resolve(flake))), ...derived(flake)];
-		}
-
-	}
-
-
-	function arm(request: Select, flake: Flake, index: number): SPARQL {
-
-		const item = request.query;
-		const { locale } = request;
-
-		const projections = getFlakeProjections(flake);
-		const projection = isProjected(item);
-
-		const scalars = projection
-			? getFlakeGrouping(flake).map(key => variable(scope.resolve(key)))
-			: columns(flake);
-
-		const aggregates = aggregateColumns(flake, root(flake), false); // !!! reference flag
-		const grouped = aggregates.length > 0;
-
-		const block = as(number(index), variable(guard));
-
-		return select(
-			grouped ? [block, ...scalars, ...aggregates]
-				: projection ? distinct(block, ...(projections.flatMap(columns)))
-					: distinct(block, ...scalars),
+		const rows = select(
+			grouped
+				? [stamp, ...keys.flatMap(columns), ...reduced.map(([stage, origin]) =>
+					as(expression(origin, stage.pipe), variable(scope.resolve(stage)))
+				)]
+				: distinct(stamp, ...cells.flatMap(columns)),
 			where(
-				anchor(request, flake, item),
-				localised(flake, root(flake)),
-				computed(flake, root(flake)),
-				filters(flake, root(flake)),
-				matchAllComputed(flake)
+				link([edge.owner, edge.property, edge.object]),
+				patterns(flake, root),
+				shards(flake, edge),
+				admitted(),
+				filters(flake, root)
 			),
-			grouped ? groupBy(scalars) : nil(),
-			grouped ? having(filtering(flake, root(flake))) : nil(),
-			orderBy(sorting(flake)),
-			slicing(flake)
+			grouped ? groupBy(keys.flatMap(columns)) : nil(),
+			grouped ? having(reduced.flatMap(([stage, origin]) => [
+				...conditions(stage, expression(origin, stage.pipe)),
+				...opt(stage.all, options => [conjunction(expression(origin, stage.pipe), optionsToTerms(options, stage.range))], [])
+			])) : nil(),
+			itemised ? nil() : orderBy(ordering(flake)),
+			itemised ? nil() : slicing(flake)
 		);
 
-
-		function anchor(
-			request: Select,
-			flake: Flake,
-			placeholder: unknown
-		): SPARQL {
-
-			const entry = named(request.entry);
-			const shape = request.shape;
-			const field = request.field;
-			const forward = field.forward;
+		return itemised
+			? select(distinct(variable(guard), ...cells.flatMap(columns)), where(rows), orderBy(ordering(flake)), slicing(flake))
+			: rows;
 
 
-			const variants = getShapeBranches(flake.range.shape);
+		/**
+		 * The filter admitting only members of the variants the query retrieves (§5.5): a member resolving
+		 * through an unrequested variant binds no shard and is not a member of the retrieved collection.
+		 */
+		function admitted(): SPARQL {
 
-			// a single-variant member carries its own class / kind; a union member (multiple variants) has no
-			// item class and is not a localised leaf
+			const drain = flake.drain;
 
-			const clazz = variants.length === 1 ? getShapeClass(variants[0]) : undefined; // !!! variant.length
-
-			const source = variants.length === 1 && variants[0].kind === "dictionary" // !!! variant.length
-				? fragment(coalesceGather(entry, forward, root(flake))) // !!! why here
-				: eager(shape).virtual
-					? clazz !== undefined ? pattern([root(flake), named(rdf.type), named(clazz)]) : nil()
-					: link([entry, field, root(flake)]);
-
-			return fragment(source, element(entry, field, root(flake), flake, placeholder));
+			return drain?.form === "union" && drain.variants.size < getShapeBranches(flake.range.shape).length
+				? filter(or(...[...drain.variants.keys()].map(variant => isBound(variable(scope.resolve(flake, variant))))))
+				: nil();
 
 		}
 
-		function element(
-			parent: Variable | Named,
-			field: Property,
-			anchor: Variable,
-			flake: Flake,
-			placeholder: unknown
-		): SPARQL {
+		/**
+		 * The graph patterns binding everything the query reads under a node whose value `value` holds: the
+		 * scalar transform stages and the branches the query reads, each nested inside its own edge and
+		 * followed by its shards.
+		 */
+		function patterns(node: Flake, value: Variable): SPARQL {
 
-			// `anchor` is already bound by the caller — {@link anchor}'s root membership, or {@link entries}'
-			// edge for a nested branch — so this only descends `anchor`'s children, hanging their patterns off it.
-			// A union restates the edge binding `anchor` inside each arm's `optional` (re-derived from the IR, never
-			// threaded) so `anchor` stays in scope for the gate's filter: bare filter-only optionals leave outer
-			// variables unbound on some backends
+			return fragment(
+				stages(node, value),
+				...getFlakeEntries(node).filter(read).map(branch => step(node, branch, value))
+			);
 
-			const variants = getShapeBranches(flake.range.shape);
 
-			if ( variants.length > 1 && crossing(flake) ) {
+			/**
+			 * The binds of the scalar transform stages hanging off a node, each applying its whole pipe to the
+			 * node value; a reducing stage binds nothing here, being projected and filtered post-aggregation.
+			 */
+			function stages(node: Flake, origin: Variable): SPARQL {
 
-				// a crossing intermediate union (a path step under a shared predicate, never itself surfaced) holds
-				// only branches every variant declares; traverse it like a resource, descending the shared branches
-				// off the anchor, since the shared edge resolves regardless of which variant the member is (§5.8.1)
+				return fragment(...getFlakeTransforms(node).filter(read).map(stage =>
+					isReduction(stage) ? nil() : fragment(
+						bind(expression(origin, stage.pipe), variable(scope.resolve(stage))),
+						stages(stage, origin)
+					)
+				));
 
-				return entries(getFlakeEntries(flake), anchor, undefined);
+			}
 
-			} else if ( variants.length > 1 ) {
+			/**
+			 * The patterns reaching one branch off its owner: a marker binds the owner itself (`id`) or its
+			 * declared class (`type`); a localised property its coalesced label, its owner under a locale
+			 * placeholder, or its raw tagged values under tagged options; a property mixing text with other
+			 * variants its stored values folded (§3.2); any other property its stored edge. The branch's own
+			 * patterns nest inside the edge, optional unless a constraint requires the path to exist.
+			 */
+			function step(parent: Flake, branch: Branch, owner: Variable): SPARQL {
 
-				// a requested variant contributes a gated arm: membership filter, shard bind, subtree. A
-				// non-requested variant carrying a surfacing (constrained/ordered) path still binds it ungated —
-				// the path's existence is the variant shard (state rule), so a value-implying constraint
-				// through a variant selects exactly the resources resolving through it
+				const value = scope.resolve(branch);
+				const entry = branch.entry;
 
-				const requested = getUnionPlaceholders(variants, placeholder);
+				const required = isRequiredFlake(branch) && !hasNullOptions(branch);
 
-				const retrievedVariants = variants.filter(variant => requested.has(variant) || getFlakeVariant(flake, variant).some(isDrainedFlake));
+				if ( entry.kind === "id" ) {
 
-				// re-derive the edge binding `anchor` from the IR — `link(parent, entry, anchor)`, the nested
-				// branch's edge or the root's membership triple — so each arm keeps `anchor` in scope
+					return fragment(bind(variable(owner), variable(value)), patterns(branch, value));
 
-				const source = link([parent, field, anchor]);
+				} else if ( entry.kind === "type" && (branch.any !== undefined || branch.all !== undefined || branch.focus !== undefined) ) {
 
-				const arms = variants.map(variant => {
+					// set matching reads the stored class lineage, so a supertype option spans its subtypes (§5.7.3)
 
-					const branches = getFlakeVariant(flake, variant);
+					return reached(pattern([owner, named(rdf.type), value]));
 
-					return requested.has(variant) || branches.some(isDrainedFlake)
-						? optional(
-							source,
-							membership(anchor, variant),
-							bind(variable(anchor), variable(scope.resolve(flake, variant))),
-							entries(branches, anchor, getShapeClass(variant))
-						)
-						: branches.some(branch => grouped ? isXComputed(branch) : isXScalar(branch))
-							? entries(branches, anchor, getShapeClass(variant))
-							: nil();
+				} else if ( entry.kind === "type" ) {
 
-				});
+					// any other read yields the one class the owner's shape declares, never the lineage
 
-				// retrieve only the requested variants (§5.4): when a proper subset is requested, a member
-				// resolving through an unrequested variant binds no requested shard, so it is excluded by
-				// requiring at least one to be bound — the encoder never returns a member the query did not ask for
+					const classes = getShapeBranches(parent.range.shape).flatMap(variant =>
+						opt(getShapeClass(variant), clazz => [reference(clazz)], [])
+					);
 
-				const gate = retrievedVariants.length > 0 && retrievedVariants.length < variants.length
-					? filter(retrievedVariants
-						.map(variant => isBound(variable(scope.resolve(flake, variant))))
-						.reduce((left, right) => or(left, right)))
-					: nil();
+					return fragment(
+						optional(pattern([owner, named(rdf.type), value]), filter(isIn(variable(value), classes))),
+						patterns(branch, value)
+					);
 
-				return fragment(...arms, gate);
+				} else if ( isLocalised(branch) && branch.drain?.form === "locale" ) {
 
-			} else if ( variants[0].kind === "resource" || variants[0].kind === "reference" ) {
+					return fragment(bind(variable(owner), variable(value)), patterns(branch, value));
 
-				return entries(getFlakeEntries(flake), anchor, getShapeClass(variants[0]));
+				} else if ( isLocalised(branch) && !hasDictionaryOptions(branch) ) {
 
-			} else {
+					const edge: Edge = { owner, property: entry, object: scope.resolve() };
 
-				return nil();
+					return reached(coalesced(edge, variable(value)), edge);
+
+				} else if ( isMixed(branch) ) {
+
+					const edge: Edge = { owner, property: entry, object: scope.resolve() };
+
+					return reached(folded(edge, variable(value)), edge);
+
+				} else {
+
+					const edge: Edge = { owner, property: entry, object: value };
+
+					return reached(link([owner, entry, value]), edge);
+
+				}
+
+
+				function reached(reach: SPARQL | readonly SPARQL[], edge?: Edge): SPARQL {
+					return fragment(
+						required ? fragment(reach, patterns(branch, value)) : optional(reach, patterns(branch, value)),
+						edge === undefined ? nil() : shards(branch, edge)
+					);
+				}
 
 			}
 
 		}
 
-		function entries(
-			branches: readonly Branch[],
-			anchor: Variable,
-			clazz: string | undefined
-		): SPARQL {
+		/**
+		 * The shards of a cell retrieved as a union (§5.5): one optional arm per requested variant, restating
+		 * the edge on its stored object so the arm binds within its own group, gated by the variant's
+		 * {@link membership} and binding the variant column. A localised variant binds its coalesced label
+		 * (§6.2) or, under a locale placeholder, the owning resource the decoder expands. The arms stand beside
+		 * the edge rather than inside it, so a folded or coalesced edge admitting no value under the request
+		 * priority leaves the variant columns to bind on their own.
+		 */
+		function shards(node: Flake, edge: Edge): SPARQL {
 
-			return fragment(...branches.map(branch => {
+			const { owner, property, object } = edge;
+			const drain = node.drain;
 
-				if ( isPropertyBranch(branch) && eager(branch.entry.range.shape).kind === "dictionary" ) {
+			return drain?.form !== "union" || isComputedFlake(node) ? nil() : fragment(...[...drain.variants].map(([variant, placeholder]) => {
 
-					// a structurally-addressed localised property binds its raw edge here (tagged-literal match,
-					// §5.7.3); a coalesced one is bound by the coalesce pass instead (§6.2)
+				const column = variable(scope.resolve(node, variant));
 
-					return hasDictionaryOptions(branch)
-						? fragment(
-							optional(link([anchor, branch.entry, scope.resolve(branch)])),
-							matchAllStored(branch, anchor)
-						)
-						: nil();
-
-				} else if ( isPropertyBranch(branch) && (grouped ? isXComputed(branch) : isXScalar(branch)) ) {
-
-					const target = scope.resolve(branch);
-
-					// bind this branch's edge (anchoring `target`), then descend `target`'s children through
-					// `element` hung off it. The nested placeholder rides `drain.mould` — the template entry's
-					// fragment or the projection binding's model — driving a union's variant descent (§5.4)
-
-					const placeholder = branch.drain?.mould;
-					const descent = fragment(
-						link([anchor, branch.entry, target]),
-						element(anchor, branch.entry, target, branch, placeholder)
-					);
-
-					// a path a value-implying constraint expects to exist is required (a missing value drops the
-					// resource, not surfaces it unbound); a plain retrieval path — or one whose set constraint
-					// admits a `null` option (matching absence) — stays optional
-
-					const required = isRequiredFlake(branch) && !hasNullOptions(branch);
-
-					return fragment(
-						required ? descent : optional(descent),
-						matchAllStored(branch, anchor)
-					);
-
-				} else if ( branch.entry.kind === "id" ) {
-
-					// a projected `id` binds to the anchor, so an expression / grouping key / cell ending in `id`
-					// reads the resource reference; a `!id` constraint conjoins per-option equalities on the anchor
-
-					return fragment(
-						branch.drain?.alias !== undefined ? bind(variable(anchor), variable(scope.resolve(branch))) : nil(),
-						matchAllStored(branch, anchor)
-					);
-
-				} else if ( branch.entry.kind === "type" && branch.drain?.alias !== undefined && clazz !== undefined ) {
-
-					// a projected `type` resolves to the shape's own class, never the store (the store holds the
-					// whole class lineage)
-
-					return fragment(
-						bind(reference(clazz), variable(scope.resolve(branch))),
-						matchAllStored(branch, anchor)
-					);
-
-				} else if ( branch.entry.kind === "type" && isConstrainedFlake(branch) ) {
-
-					// a `?type` constraint matches the stored `rdf:type` triples (denormalised over the class
-					// lineage, so a supertype filter spans its subtypes); a `!type` conjoins them via matchAllStored
-
-					return fragment(
-						optional(pattern([anchor, named(rdf.type), scope.resolve(branch)])),
-						matchAllStored(branch, anchor)
-					);
-
-				} else {
-
-					return nil();
-
-				}
+				return variant.kind === "dictionary"
+					? placeholder.form === "locale"
+						? optional(link([owner, property, object]), filter(and(isLiteral(variable(object)), ne(lang(variable(object)), string("")))), bind(anchor(owner), column))
+						: optional(coalesced(edge, column))
+					: optional(link([owner, property, object]), membership(object, variant), bind(variable(object), column));
 
 			}));
 
 		}
 
+		/**
+		 * The patterns binding a localised property's coalesced label to `target` (§6.2, Appendix A.5): the
+		 * first tag of the request's language priority the property carries wins, and the values under it
+		 * come back as plain strings, so every construct downstream reads an ordinary `xsd:string`. Only
+		 * language-tagged values are text: a plain string a sibling string variant stores never passes.
+		 */
+		function coalesced(edge: Edge, target: SPARQL): readonly SPARQL[] {
 
-		function localised(node: Flake, anchor: Variable): SPARQL {
+			const { owner, property, object } = edge;
 
-			return fragment(...getFlakeEntries(node)
-				.map(branch => localiser(branch, anchor)));
+			const raw = variable(object);
+
+			return [
+				link([owner, property, object]),
+				filter(and(ne(lang(raw), string("")), eq(lang(raw), winner(edge)))),
+				bind(str(raw), target)
+			];
+
+		}
+
+		/**
+		 * The patterns binding a property mixing text with other variants to `target` folded (§3.2): a tagged
+		 * value passes under the winning tag of the request's language priority alone, as a plain string; any
+		 * other stored value, a plain string or a node among them, passes as it is.
+		 */
+		function folded(edge: Edge, target: SPARQL): readonly SPARQL[] {
+
+			const { owner, property, object } = edge;
+
+			const raw = variable(object);
+			const tag = coalesce(lang(raw), string("")); // a node carries no tag
+
+			return [
+				link([owner, property, object]),
+				filter(or(eq(tag, string("")), eq(tag, winner(edge)))),
+				bind(iif(eq(tag, string("")), raw, str(raw)), target)
+			];
+
+		}
+
+		/**
+		 * The tag the request's language priority settles a property's text on: the first priority tag the
+		 * owner carries a value under, or none.
+		 */
+		function winner({ owner, property }: Edge): SPARQL {
+
+			const tags = locale.length > 0 ? locale : ["und"];
+			const probe = scope.resolve();
+
+			return tags.reduceRight<SPARQL>((rest, tag) => iif(present(tag), string(tag), rest), string(""));
+
+
+			function present(tag: Tag): SPARQL {
+				return exists(link([owner, property, probe]), filter(eq(lang(variable(probe)), string(tag))));
+			}
+
+		}
+
+		/**
+		 * The row filters under a node: its own constraints on `value`, then those of the scalar stages and
+		 * branches the query reads; a reducing stage filters groups instead, through {@link conditions}.
+		 */
+		function filters(node: Flake, value: Variable): readonly SPARQL[] {
+
+			return [
+
+				...conditions(node, variable(value)).map(filter),
+				...conjunctions(node),
+
+				...getFlakeTransforms(node).filter(read).flatMap(stage =>
+					isReduction(stage) ? [] : filters(stage, scope.resolve(stage))
+				),
+
+				...getFlakeEntries(node).filter(read).flatMap(branch =>
+					filters(branch, scope.resolve(branch))
+				)
+
+			];
+
 
 			/**
-			 * The coalesce binding of one branch under `anchor`: a `dictionary` branch coalesces (or, structurally,
-			 * binds the owning reference for broker delegation); a resource/reference recurses; a union descends each
-			 * variant, so a localised property nested in a variant is reached too.
+			 * The `!` filters of a node (§5.7.3): every option must be carried by some value the node's
+			 * expression resolves to, each probed by an `exists` re-walking the node's path from the member
+			 * with fresh variables, so a multi-valued path is tested across its whole value set; a `null`
+			 * option requires the path to resolve to nothing.
 			 */
-			function localiser(branch: Branch, anchor: Variable): SPARQL {
+			function conjunctions(node: Flake): readonly SPARQL[] {
 
-				if ( !isPropertyBranch(branch) || !(grouped ? isXComputed(branch) : isXScalar(branch)) ) { return nil(); }
+				return opt(node.all, options => {
 
-				const range = eager(branch.entry.range.shape);
+					const { anchor, path } = node.path.reduce<{
+						at: Flake;
+						anchor: Variable;
+						path: readonly SPARQL[]
+					}>(({ at, anchor, path }, name) => {
 
-				// a structural localised property (a tag-range map) is expanded by the broker in the decoder, so the
-				// cell carries the owning reference (the anchor): bind it, no edge, so the tags never fan the row. A
-				// tagged-option constraint binds its raw edge in `entries`; anything else coalesces
+						const branch = (at.entries ?? {})[name];
+						const target = scope.resolve();
 
-				return range.kind === "dictionary"
-					? isObject(branch.drain?.mould) ? bind(variable(anchor), variable(scope.resolve(branch)))
-						: hasDictionaryOptions(branch) ? nil()
-							: coalesced(anchor, branch)
-					: range.kind === "resource" || range.kind === "reference"
-						? localised(branch, scope.resolve(branch))
-						: range.kind === "union"
-							// the union's branches are folded (§5.8.1): a crossing property shared across variants is
-							// one branch, walked once off the union node, never once per declaring variant
-							? fragment(...getFlakeEntries(branch)
-								.map(nested => localiser(nested, scope.resolve(branch))))
-							: nil();
+						return branch.entry.kind === "id" ? { at: branch, anchor, path }
+							: branch.entry.kind === "type" ? {
+									at: branch,
+									anchor: target,
+									path: [...path, pattern([anchor, named(rdf.type), target])]
+								}
+								: { at: branch, anchor: target, path: [...path, link([anchor, branch.entry, target])] };
 
+					}, { at: flake, anchor: root, path: [] });
 
-				/**
-				 * The coalesce binding of one localised branch (Appendix A.5): {@link coalesceGather} wrapped in the
-				 * enclosing `optional`.
-				 */
-				function coalesced(anchor: Variable, branch: Branch): SPARQL {
+					const value = expression(anchor, node.pipe);
 
-					const gather = isPropertyBranch(branch)
-						? coalesceGather(anchor, branch.entry.forward, scope.resolve(branch))
-						: [];
+					return optionsToTerms(options, node.range).map(option => option === null ? filter(nexists(path))
+						: path.length === 0 ? filter(any(value, [option]))
+							: filter(exists(path, filter(any(value, [option]))))
+					);
 
-					return gather.length > 0 ? optional(...gather) : nil();
-
-				}
+				}, []);
 
 			}
-
-		}
-
-		function coalesceGather(
-			subject: Variable | Named,
-			forward: string | undefined, // !!! review
-			target: Variable
-		): readonly SPARQL[] {
-
-			if ( forward === undefined ) {
-
-				return [];
-
-			} else {
-
-				const tags = locale.length > 0 ? locale : ["und"];
-				const gathered = scope.resolve();
-				const probe = scope.resolve();
-
-				const fold = (value: SPARQL): SPARQL => iif(eq(lang(value), string("")), string("und"), lang(value));
-				const present = (tag: Tag): SPARQL =>
-					exists(pattern([subject, named(forward), probe]), filter(eq(fold(variable(probe)), string(tag))));
-				const winner = tags.reduceRight<SPARQL>((rest, tag) => iif(present(tag), string(tag), rest), string(""));
-
-				// bind the coalesced value(s) as a plain xsd:string (§6): dropping the language tag makes the value
-				// itself, an aggregate, or a comparison over the coalesced path reduce ordinary strings
-
-				return [
-					pattern([subject, named(forward), gathered]),
-					filter(eq(fold(variable(gathered)), winner)),
-					bind(str(variable(gathered)), variable(target))
-				];
-			}
-		}
-
-
-		function computed(flake: Flake, anchor: Variable): SPARQL {
-			return fragment(
-				...getFlakeTransforms(flake).map(transform =>
-					transform === undefined || !isComputedFlake(transform) ? nil() // !!! undefined?
-						: isAggregateFlake(transform)
-							? grouped ? nil() : computed(transform, scope.resolve(transform))
-							: fragment(
-								bind(expression(anchor, [transform.pipe[0]]), variable(scope.resolve(transform))),
-								computed(transform, scope.resolve(transform))
-							)
-				),
-				...getFlakeEntries(flake).filter(isPropertyBranch).map(property => // !!! id/type?
-					computed(property, scope.resolve(property))
-				)
-			);
-		}
-
-		function filters(flake: Flake, anchor: Variable): SPARQL {
-
-			const value = isComputedFlake(flake) ? variable(scope.resolve(flake)) : variable(anchor);
-
-			// a single-variant string target (plain string, or a lexically-ordered / opaque temporal) compares
-			// lexically via `str(...)` (correct for ISO temporal formats); a single boolean by its 0/1 rank
-			// (backends do not order xsd:boolean); any other single type, and every multi-variant union, by the
-			// bound's typed term, so a union bound resolves in its own variant and excludes the rest by type
-			// mismatch (§5.7.1)
-
-			const variants = getShapeBranches(flake.range.shape);
-			const single = variants.length === 1 ? variants[0] : undefined; // !!! why?
-
-			function compare(relate: (x: SPARQL, y: SPARQL) => SPARQL, limit: Literal): SPARQL { // !!! vs having?
-
-				return single?.kind === "boolean" ? filter(relate(iif(value, number(1), number(0)), limit ? number(1) : number(0)))
-					: single?.kind === "string" || single?.kind === "dictionary" ? filter(relate(str(value), string(String(limit))))
-						: filter(relate(value, term(boundToTerm(limit, flake.range))));
-
-			}
-
-			return fragment(
-				flake.lt !== undefined ? compare(lt, flake.lt) : nil(),
-				flake.gt !== undefined ? compare(gt, flake.gt) : nil(),
-				flake.lte !== undefined ? compare(lte, flake.lte) : nil(),
-				flake.gte !== undefined ? compare(gte, flake.gte) : nil(),
-				flake.like !== undefined ? filter(like(value, flake.like)) : nil(),
-				flake.any !== undefined ? filter(any(value, optionsToTerms(flake.any, flake.range))) : nil(),
-
-				// stored `!` → `matchAllStored`, scalar-computed `!` → `matchAllComputed`; an aggregate `!` filters its
-				// single bound value inline here when ungrouped (grouped aggregates move to HAVING via `filtering`)
-				flake.all !== undefined && isComputedFlake(flake) && flake.pipe.some(isAggregate)
-					? filter(all(value, optionsToTerms(flake.all, flake.range)))
-					: nil(),
-
-				// under grouping an aggregate stage's constraint restricts groups post-aggregation (HAVING, emitted
-				// separately by havings), never rows, so skip it here to keep it out of the WHERE
-
-				getFlakeTransforms(flake).map(transform =>
-					grouped && isAggregateFlake(transform) ? nil() : filters(transform, anchor)
-				),
-
-				getFlakeEntries(flake).map(property => filters(
-					property,
-					property.entry.kind === "id" ? anchor : scope.resolve(property)
-				))
-			);
 
 		}
 
 	}
 
 
-	function filtering(flake: Flake, anchor: Variable): readonly SPARQL[] {
+	/**
+	 * The projected columns of a cell: one per requested variant for a cell retrieved as a union (§5.5), so
+	 * the decoder reads the variant off the column that bound; otherwise the cell's single value column. A
+	 * transform stage computes a literal and always projects one column.
+	 */
+	function columns(cell: Flake): readonly SPARQL[] {
 
-		return [
+		const drain = cell.drain;
 
-			...getFlakeTransforms(flake).flatMap(transform =>
-				isAggregateFlake(transform)
-					? postAggregate(transform)
-					: filtering(transform, anchor)
-			),
+		return drain?.form === "union" && !isComputedFlake(cell)
+			? [...drain.variants.keys()].map(variant => variable(scope.resolve(cell, variant)))
+			: [variable(scope.resolve(cell))];
 
-			...getFlakeEntries(flake).flatMap(property =>
-				property.entry.kind === "id" || property.entry.kind === "type"
-					? filtering(property, anchor)
-					: filtering(property, scope.resolve(property))
-			)
+	}
 
+	/**
+	 * The cells a reducing query groups by (§5.8.2.1): the non-aggregate bindings where the projection itself
+	 * aggregates; else the member, with the bindings and the non-aggregate sort and focus keys the arm orders
+	 * the items by, so a selection aggregate reduces per item.
+	 */
+	function grouping(flake: Flake): readonly Flake[] {
+
+		const keyed = [
+			...(flake.drain?.form === "projection" ? getFlakeProjections(flake) : []),
+			...getFlakeFocusing(flake).filter(node => !isReduction(node)),
+			...getFlakeOrdering(flake).filter(node => !isReduction(node))
 		];
 
-		// an aggregate and every scalar transform wrapping it are post-aggregation, so their constraints move
-		// to HAVING; each wrapper carries the full pipe, so `constraints` renders e.g. `round(avg(…))` whole
+		return isGroupingFlake(flake) ? getFlakeGrouping(flake)
+			: [flake, ...keyed.filter((node, index) => node !== flake && keyed.indexOf(node) === index)];
 
-		function postAggregate(flake: Flake): readonly SPARQL[] {
+	}
 
-			const range = flake.range;
-			const value = expression(anchor, flake.pipe);
+	/**
+	 * The reducing stages a query reads, each paired with the value its pipe reduces; `min`/`max`/`sum`/`avg`
+	 * over references are left out, their cells unbound (Appendix A.4.1), while `count` still reduces.
+	 */
+	function reductions(flake: Flake): readonly (readonly [Flake, Variable])[] {
+
+		const read = reader(flake);
+
+		return reduced(flake, scope.resolve(flake));
+
+
+		function reduced(node: Flake, origin: Variable): readonly (readonly [Flake, Variable])[] {
 
 			return [
 
-				flake.lt !== undefined ? lt(value, term(boundToTerm(flake.lt, range))) : nil(),
-				flake.gt !== undefined ? gt(value, term(boundToTerm(flake.gt, range))) : nil(),
-				flake.lte !== undefined ? lte(value, term(boundToTerm(flake.lte, range))) : nil(),
-				flake.gte !== undefined ? gte(value, term(boundToTerm(flake.gte, range))) : nil(),
-				flake.like !== undefined ? like(value, flake.like) : nil(),
-				flake.any !== undefined ? any(value, optionsToTerms(flake.any, range)) : nil(),
-				flake.all !== undefined ? all(value, optionsToTerms(flake.all, range)) : nil(),
+				...getFlakeTransforms(node).filter(read).flatMap(stage => {
 
-				...getFlakeTransforms(flake).flatMap(postAggregate)
+					const reduction: readonly [Flake, Variable] = [stage, origin];
+
+					return [
+						...(isReduction(stage) && (stage.pipe.find(isAggregate) === "count" || !isReferential(node)) ? [reduction] : []),
+						...reduced(stage, origin)
+					];
+
+				}),
+
+				...getFlakeEntries(node).filter(read).flatMap(branch =>
+					reduced(branch, scope.resolve(branch))
+				)
 
 			];
 
@@ -637,34 +536,25 @@ export function encode(
 
 	}
 
-	function sorting(flake: Flake): SPARQL {
+	/**
+	 * The ordering of one request's rows (§5.7.4, §5.7.5): the focus boosts first, then the sort keys by
+	 * precedence, each ranked by processing-type tier before its value, then the grouping keys or the member
+	 * itself, so paging stays stable.
+	 */
+	function ordering(flake: Flake): SPARQL {
+
+		const tiebreak = reductions(flake).length > 0
+			? grouping(flake).flatMap(columns)
+			: [variable(scope.resolve(flake))];
 
 		return fragment(
-			getFlakeFocusing(flake).map(flake => {
-
-				const value = variable(scope.resolve(flake));
-
-				return asc(iif(
-					any(value, optionsToTerms(flake.focus, flake.range)), number(0), number(1)
-				));
-
-			}),
-
-			getFlakeOrdering(flake).flatMap(flake => {
-
-				const value = variable(scope.resolve(flake));
-
-				// a tier prefix orders each type-band before comparing within it; for a single-variant cell the
-				// datatype is homogeneous, so the tier collapses to a constant and the sort reduces to `sortable`
-				return [tier(value), sortable(value)].map(
-					getOrderDirection(flake.order) < 0 ? desc : asc
-				);
-
-			}),
-
-			(isGroupingFlake(flake) ? getFlakeGrouping(flake) : [flake]).map(flake => // tiebreak
-				asc(variable(scope.resolve(flake)))
-			)
+			getFlakeFocusing(flake).map(node =>
+				asc(iif(any(variable(scope.resolve(node)), optionsToTerms(node.focus, node.range)), number(0), number(1)))
+			),
+			getFlakeOrdering(flake).flatMap(node => [tier(variable(scope.resolve(node))), sortable(variable(scope.resolve(node)))].map(
+				getOrderDirection(node.order) < 0 ? desc : asc
+			)),
+			tiebreak.map(asc)
 		);
 
 
@@ -699,108 +589,152 @@ export function encode(
 		);
 	}
 
+}
 
-	function like(value: SPARQL, keywords: string): SPARQL {
-		return and(...String(keywords)
-			.toLowerCase()
-			.split(/\s+/)
-			.filter(token => token.length > 0)
-			.map(token => contains(lcase(value), string(token)))
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * The test telling the nodes a query reads: those it constrains, orders or focuses, and, under a projection,
+ * those it projects, or some stage or branch beneath them. The entries of a plain template name the content
+ * the detail pass re-fetches for each member and are not read here.
+ */
+function reader(flake: Flake): (node: Flake) => boolean {
+
+	return flake.drain?.form === "projection" ? isRead : isConstrainedFlake;
+
+
+	function isRead(node: Flake): boolean {
+		return node.drain?.alias !== undefined
+			|| isConstrainedFlake(node)
+			|| getFlakeTransforms(node).some(isRead)
+			|| getFlakeEntries(node).some(isRead);
+	}
+
+}
+
+/**
+ * Checks whether a transform stage reduces a group: it applies an aggregate, or wraps one in scalar
+ * transforms, so its value exists only after grouping.
+ */
+function isReduction(stage: Flake): boolean {
+	return stage.pipe.some(isAggregate);
+}
+
+/**
+ * Checks whether a branch resolves to localised text alone.
+ */
+function isLocalised(branch: Branch): boolean {
+	return getShapeBranches(branch.range.shape).every(variant => variant.kind === "dictionary");
+}
+
+/**
+ * Checks whether a branch resolves to localised text among other variants, as a path crossing a union whose
+ * variants declare the same property as text and as a plain value does (§5.8.1).
+ */
+function isMixed(branch: Branch): boolean {
+
+	const variants = getShapeBranches(branch.range.shape);
+
+	return variants.some(variant => variant.kind === "dictionary") && !variants.every(variant => variant.kind === "dictionary");
+
+}
+
+/**
+ * Checks whether a node resolves to references alone: a marker (an IRI-typed string) or a reference or
+ * resource property, outside the domain of every aggregate but `count` (§5.8.2.1).
+ */
+function isReferential(node: Flake): boolean {
+	return getShapeBranches(node.range.shape).every(variant =>
+		variant.kind === "reference" || variant.kind === "resource" || (variant.kind === "string" && variant.datatype === sh.IRI)
+	);
+}
+
+
+/**
+ * Renders the subject an edge hangs off: a variable or the IRI of the request entry.
+ */
+function anchor(owner: Variable | Named): SPARQL {
+	return isString(owner) ? variable(owner) : term(owner);
+}
+
+
+/**
+ * The conditions a node's comparison, text-search and `?` constraints state over `value`, each resolving
+ * the operand against the node's range (§5.7).
+ */
+function conditions(node: Flake, value: SPARQL): readonly SPARQL[] {
+
+	return [
+		...opt(node.lt, bound => [comparison(lt, bound)], []),
+		...opt(node.gt, bound => [comparison(gt, bound)], []),
+		...opt(node.lte, bound => [comparison(lte, bound)], []),
+		...opt(node.gte, bound => [comparison(gte, bound)], []),
+		...opt(node.like, keywords => [like(value, keywords)], []),
+		...opt(node.any, options => [any(value, optionsToTerms(options, node.range))], [])
+	];
+
+
+	/**
+	 * A comparison in the variant the bound singles out (§5.7.1), the other variants failing the guard
+	 * (Appendix A.4.5): a boolean compares by its false < true rank; a string-kind variant, a coalesced
+	 * localised label included, lexically, which also orders the ISO temporal forms a backend leaves opaque;
+	 * any other by the bound's typed term, which a mismatched type never satisfies.
+	 */
+	function comparison(relate: (x: SPARQL, y: SPARQL) => SPARQL, bound: Literal): SPARQL {
+
+		const variant: Shape = getBoundBranch(bound, getShapeBranches(node.range.shape))
+			?? error(new RangeError(`unresolved range variant for value <${String(bound)}>`));
+
+		return variant.kind === "boolean"
+			? and(isLiteral(value), eq(datatype(value), reference(xsd.boolean)), relate(iif(value, number(1), number(0)), bound ? number(1) : number(0)))
+			: (variant.kind === "string" && variant.datatype !== sh.IRI) || variant.kind === "dictionary"
+				? and(textual(value), relate(str(value), string(String(bound))))
+				: relate(value, term(valueToTerm(bound, variant)));
+
+	}
+
+}
+
+
+function like(value: SPARQL, keywords: string): SPARQL {
+	return and(...keywords
+		.toLowerCase()
+		.split(/\s+/)
+		.filter(token => token.length > 0)
+		.map(token => contains(lcase(value), string(token)))
+	);
+}
+
+function any(value: SPARQL, options: readonly (null | Term)[]): SPARQL {
+	if ( options.length === 0 ) { return boolean(true); } else { // an empty option set is elided (§5)
+
+		const positive = options.filter(option => option !== null);
+		const negative = options.some(option => option === null);
+
+		const present = positive.length === 1
+			? eq(value, term(positive[0]))
+			: isIn(value, positive.map(term));
+
+		return coalesce(
+			negative ? or(not(isBound(value)), present) : present,
+			boolean(false) // a type mismatch is a non-match, not an error
 		);
-	}
-
-	function any(value: SPARQL, options: readonly (null | Term)[]): SPARQL {
-		if ( options.length === 0 ) { return boolean(true); } else { // an empty option set is elided (§5)
-
-			const positive = options.filter(option => option !== null);
-			const negative = options.some(option => option === null);
-
-			const present = positive.length === 1
-				? eq(value, term(positive[0]))
-				: isIn(value, positive.map(term));
-
-			return coalesce(
-				negative ? or(not(isBound(value)), present) : present,
-				boolean(false) // guard against type mismatches
-			);
-
-		}
-	}
-
-	function all(value: SPARQL, options: readonly (null | Term)[]): SPARQL {
-		if ( options.length === 0 ) { return boolean(true); } else { // an empty option set is elided (§5)
-
-			const positive = options.filter(option => option !== null);
-			const negative = options.some(option => option === null);
-
-			return and(
-				negative ? not(isBound(value)) : nil(),
-				...positive.map(option => any(value, [option]))
-			);
-
-		}
-	}
-
-
-	function matchAllStored(branch: Branch, anchor: Variable): SPARQL {
-		if ( branch.all === undefined ) { return nil(); } else {
-
-			const options = optionsToTerms(branch.all, branch.range);
-
-			if ( branch.entry.kind === "id" ) { // `id` is the anchor itself, single-valued
-
-				return filter(all(variable(anchor), options));
-
-			} else if ( branch.entry.kind === "type" ) {
-
-				return map(scope.resolve(), value =>
-					matchAll(variable(value), pattern([anchor, named(rdf.type), value]), options)
-				);
-
-			} else if ( isPropertyBranch(branch) ) {
-
-				return map(scope.resolve(), value =>
-					matchAll(variable(value), link([anchor, branch.entry, value]), options)
-				);
-
-			} else {
-
-				return nil();
-
-			}
-		}
-	}
-
-	function matchAllComputed(flake: Flake): SPARQL {
-
-		return walk(flake, root(flake), nil());
-
-		function walk(flake: Flake, anchor: Variable, path: SPARQL): SPARQL {
-			return fragment(
-				...getFlakeEntries(flake).map(property => descend(property, anchor, path)),
-				...getFlakeTransforms(flake).map(transform => matchStage(transform, anchor, path))
-			);
-		}
-
-		function descend(branch: Branch, anchor: Variable, path: SPARQL): SPARQL {
-			return isPropertyBranch(branch)
-				? map(scope.resolve(), target => walk(branch, target, fragment(path, link([anchor, branch.entry, target]))))
-				: walk(branch, anchor, path);
-		}
-
-		function matchStage(stage: Flake, anchor: Variable, path: SPARQL): SPARQL {
-			return stage.all !== undefined && !stage.pipe.some(isAggregate)
-				? matchAll(expression(anchor, stage.pipe), path, optionsToTerms(stage.all, stage.range))
-				: nil();
-		}
 
 	}
+}
 
-	function matchAll(value: SPARQL, patterns: SPARQL, options: readonly (null | Term)[]): SPARQL {
-		return fragment(...options.map(option => option === null
-			? filter(nexists(patterns))
-			: filter(exists(patterns, filter(any(value, [option]))))
-		));
+/**
+ * The `!` condition over a single reduced value (§5.7.3): every option must equal it, so only a singleton
+ * set is satisfiable; a `null` option requires it unbound.
+ */
+function conjunction(value: SPARQL, options: readonly (null | Term)[]): SPARQL {
+	if ( options.length === 0 ) { return boolean(true); } else { // an empty option set is elided (§5)
+
+		return and(
+			options.some(option => option === null) ? not(isBound(value)) : nil(),
+			...options.flatMap(option => option === null ? [] : [any(value, [option])])
+		);
+
 	}
-
 }

@@ -16,30 +16,42 @@
 
 import { validate } from "@metreeca/blue";
 import { getShapeId, type ResourceShape } from "@metreeca/blue/resource";
-import { eager, type Instance } from "@metreeca/blue/value";
-import { error, isString, type Lazy, map } from "@metreeca/core";
-import { immutable } from "@metreeca/core/structures";
+import { eager, type State } from "@metreeca/blue/value";
+import { error, isString, type Lazy, map, type Optional } from "@metreeca/core";
+import { getIRIParent } from "@metreeca/core/resource";
 import { TraceError } from "@metreeca/core/trace";
+import { immutable } from "@metreeca/core/values";
+import type { StoreClient } from "@metreeca/keep";
 import { isReference, type Reference, type Resource } from "@metreeca/qest/state";
-import { base, Category, Image, Product, toys, Vendor, Video } from "./toys.js";
+import {
+	base,
+	Categories,
+	Category,
+	Image,
+	Product,
+	Products,
+	Resources,
+	toys,
+	Vendor,
+	Vendors,
+	Video
+} from "./toys.js";
 import json from "./toys.json" with { type: "json" };
 
 
 /**
- * Resource collections from the toys sample dataset, validated with `value` scope.
+ * Resource collections from the toys sample dataset, validated against their shapes.
  *
- * Each getter resolves lazily on first access, so importing this object runs no validation at module load — eager
- * evaluation would re-enter `toys.ts` before its `toys` namespace constant is initialised, since the shape factories
- * read `toys.<class>` at materialisation time. The validated set is built once on first access and shared across
- * every getter.
+ * Collections are validated lazily on first access and shared afterwards, so importing the dataset costs nothing until
+ * a collection is read. Validation runs at depth `0`, so references to other resources are held as bare identifiers.
  */
 export const collections: {
 
-	readonly categories: readonly Instance<typeof Category>[];
-	readonly vendors: readonly Instance<typeof Vendor>[];
-	readonly products: readonly Instance<typeof Product>[];
-	readonly images: readonly Instance<typeof Image>[];
-	readonly videos: readonly Instance<typeof Video>[];
+	readonly categories: readonly State<typeof Category>[];
+	readonly vendors: readonly State<typeof Vendor>[];
+	readonly products: readonly State<typeof Product>[];
+	readonly images: readonly State<typeof Image>[];
+	readonly videos: readonly State<typeof Video>[];
 
 } = (() => {
 
@@ -68,11 +80,85 @@ export const collections: {
 		});
 	}
 
-	function verify<T extends Lazy<ResourceShape>>(resources: readonly unknown[], shape: T): readonly Instance<T>[] {
+	function verify<T extends Lazy<ResourceShape>>(resources: readonly unknown[], shape: T): readonly State<T>[] {
 		return resources.map(resource => validate(resource, { shape, depth: 0 })({
-			value: v => v as Instance<T>,
+			// ;(cast) blue types the validated value by its own Instance, which the local mirror matches at every
+			// concrete shape but which the compiler cannot relate to it over a generic one
+
+			value: v => v as unknown as State<T>,
 			trace: t => error(new TraceError("failed validation", t ?? []))
 		}));
+	}
+
+})();
+
+
+/**
+ * Catalogue resources holding the sample collections as members.
+ *
+ * Each catalogue lists every resource of its type by identifier, and the resources catalogue every resource of any
+ * type, so that a store seeded with the sample dataset and these catalogues answers a catalogue retrieval through
+ * stored membership. Resolved lazily on first access, as {@link collections} are.
+ */
+export const catalogues: {
+
+	readonly resources: State<typeof Resources>;
+	readonly categories: State<typeof Categories>;
+	readonly vendors: State<typeof Vendors>;
+	readonly products: State<typeof Products>;
+
+} = (() => {
+
+	let cache: undefined | typeof catalogues;
+
+	return immutable({
+
+		get resources() { return load().resources; },
+		get categories() { return load().categories; },
+		get vendors() { return load().vendors; },
+		get products() { return load().products; }
+
+	});
+
+
+	function load() {
+		return cache ??= immutable({
+
+			resources: catalogue(Resources, `${base}resources/`, "Resources", [
+				...collections.categories,
+				...collections.vendors,
+				...collections.products,
+				...collections.images,
+				...collections.videos
+			]),
+
+			categories: catalogue(Categories, `${base}categories/`, "Categories", collections.categories),
+			vendors: catalogue(Vendors, `${base}vendors/`, "Vendors", collections.vendors),
+			products: catalogue(Products, `${base}products/`, "Products", collections.products)
+
+		});
+	}
+
+	function catalogue<S extends Lazy<ResourceShape>>(
+		shape: S,
+		id: Reference,
+		label: string,
+		members: ReadonlyArray<{ readonly id: Reference }>
+	): State<S> {
+		return validate({
+
+			id,
+			type: toys.Collection,
+			label: { en: label },
+			created: "2026-01-01T00:00:00.000Z",
+
+			members: members.map(member => member.id)
+
+		}, { shape, depth: 0 })({
+			// ;(cast) as for the sample collections: blue types the validated value by its own inference
+			value: v => v as unknown as State<S>,
+			trace: t => error(new TraceError("failed validation", t ?? []))
+		});
 	}
 
 })();
@@ -83,15 +169,15 @@ export const collections: {
 /**
  * Reads the identifier of `entry` from the entry named by `shape`'s `kind: "id"` property.
  *
- * Lets the triple encoders derive a resource's identifier from its shape instead of receiving it threaded through as a
- * separate argument.
+ * Lets connector test helpers derive a resource's identifier from its shape instead of receiving it as a separate
+ * argument.
  *
  * @param entry - The resource state to read the identifier from
  * @param shape - The resource shape whose `kind: "id"` property names the identifier entry
  *
  * @returns The absolute IRI identifier carried by `entry`
  *
- * @throws Error When `shape` declares no id entry, or `entry` carries no identifier under that entry
+ * @throws {@link !Error Error} When `shape` declares no id entry, or `entry` carries no identifier under that entry
  */
 export function identify(entry: Resource, shape: Lazy<ResourceShape>): Reference;
 
@@ -106,7 +192,7 @@ export function identify(entry: Resource, shape: Lazy<ResourceShape>): Reference
  *
  * @returns The result of applying `mapper` to the identifier carried by `entry`
  *
- * @throws Error When `shape` declares no id entry, or `entry` carries no identifier under that entry
+ * @throws {@link !Error Error} When `shape` declares no id entry, or `entry` carries no identifier under that entry
  */
 export function identify<V>(entry: Resource, shape: Lazy<ResourceShape>, mapper: (id: Reference) => V): V;
 
@@ -140,14 +226,12 @@ export function identify<V>(entry: Resource, shape: Lazy<ResourceShape>, mapper?
 /**
  * Mints a fresh, isolated clone of a sample resource.
  *
- * Derives the resource identity from `shape`: the `kind: "id"` property names the identifier entry and the trailing
- * `{code}` slot of the id {@link ResourceShape.pattern | pattern} names the code entry. The code is regenerated by
- * replacing each character with a random counterpart of the same class (digit, upper-case or lower-case letter), the
- * identifier's trailing segment is swapped to match, the audit timestamps are reset, and the result is validated
- * against `shape`.
+ * Lets conformance tests mint isolated fixtures whose identifiers are unlikely to collide with the sample dataset or
+ * with other generated fixtures sharing the same store.
  *
- * Lets conformance tests mint isolated fixtures whose identifiers collide neither with the sample dataset nor with
- * other generated fixtures sharing the same store.
+ * Derives the resource identity from `shape`: the `kind: "id"` property names the identifier entry and the trailing
+ * `{code}` slot of the id {@link ResourceShape.pattern | pattern} names the code entry. The clone carries a random code
+ * of the same character classes as the original, a matching identifier, and reset audit timestamps.
  *
  * @typeParam R - The resource type of the sample, carried through to the clone
  *
@@ -156,8 +240,9 @@ export function identify<V>(entry: Resource, shape: Lazy<ResourceShape>, mapper?
  *
  * @returns The validated clone, carrying a freshly generated code, a matching identifier, and reset audit timestamps
  *
- * @throws Error When `shape` declares no id entry or id pattern, the id pattern has no trailing slot, or `sample` is
- *     missing its identifier or code value
+ * @throws {@link !Error Error} When `shape` declares no id entry or id pattern, the id pattern has no trailing slot,
+ * or `sample` is missing its identifier or code value
+ * @throws {@link @metreeca/core/trace!TraceError | TraceError} When the clone fails validation against `shape`
  */
 export function clone<R extends Resource>(sample: R, shape: Lazy<ResourceShape>): R {
 
@@ -229,20 +314,24 @@ export function clone<R extends Resource>(sample: R, shape: Lazy<ResourceShape>)
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /**
- * Builds a validated synthetic {@link Product} state with sensible defaults.
+ * Builds a synthetic {@link Product} state with sensible defaults.
  *
- * Mutation and lifecycle sub-suites use this to mint isolated products whose identifiers cannot collide with the
+ * Mutation and lifecycle sub-suites rely on it to mint isolated products whose identifiers cannot collide with the
  * sample dataset. The `sku` seeds the `id` and `documents`; all other slots carry fixed defaults unless overridden.
  *
+ * The state is not validated, so overrides are trusted to keep it valid against {@link Product}.
+ *
  * @param sku - The product SKU, also used to derive `id` and `documents`
- * @param name - The english product name, used for `label` and `name`
+ * @param name - The English product name, used for `label` and `name`
  * @param overrides - Optional property overrides merged into the resource
+ *
+ * @returns The product state
  */
 export function testProduct(
 	sku: string,
 	name: string,
-	overrides?: Partial<Instance<typeof Product>>
-): Instance<typeof Product> {
+	overrides?: Partial<State<typeof Product>>
+): State<typeof Product> {
 	return {
 
 		id: `${base}products/${sku}`,
@@ -266,4 +355,65 @@ export function testProduct(
 		...overrides
 
 	};
+}
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * Widens a state to what the store admits at runtime.
+ *
+ * The typed draft a write takes leaves out the absence forms (`undefined`, `[]`, `{}`, `{ und: [] }`) a test states to
+ * assert their removal, and the malformed states a test expects rejected; both are handed to the store as they stand.
+ *
+ * @param state - The state a test states
+ *
+ * @returns The same state, admitted by every write
+ */
+export function loose(state: Resource): never {
+	return state as never; // ;(cast) the suite exercises the runtime contract beyond what the draft type admits
+}
+
+/**
+ * Resolves the catalogue collecting the resources a toy shape describes.
+ *
+ * @param shape - The shape of the collected resources
+ *
+ * @returns The catalogue holding every resource of `shape` under its `members` property
+ *
+ * @throws {@link !Error Error} When no catalogue collects the resources of `shape`
+ */
+export function catalogueOf(shape: Lazy<ResourceShape>): Lazy<ResourceShape> {
+	return shape === Product ? Products
+		: shape === Vendor ? Vendors
+			: shape === Category ? Categories
+				: error(new Error(`no catalogue collects shape <${getShapeId(shape)}>`));
+}
+
+/**
+ * Creates a resource through the catalogue collecting it.
+ *
+ * Anchors the creation to the parent of `entry`, as the store contract requires of a creation, stating `entry` as the
+ * identifier of the new resource unless the state names one itself, so that a test keeps naming the resource it
+ * creates and asserting on it.
+ *
+ * @param store - The store to create the resource in
+ * @param request - The identifier of the new resource, the shape describing it and its initial state
+ *
+ * @returns The promise the store's creation resolves to
+ */
+export function created(store: StoreClient, { entry, shape, state }: {
+
+	readonly entry: Reference;
+	readonly shape: Lazy<ResourceShape>;
+	readonly state: Resource;
+
+}): Promise<Optional<Reference>> {
+	return store.create({
+		entry: getIRIParent(entry) ?? error(new Error(`unexpected root entry <${entry}>`)),
+		shape: catalogueOf(shape),
+		model: { members: {} } as never, // ;(cast) the catalogue is resolved at runtime, so its slice can't be held to
+										 // it
+		state: loose({ id: entry, ...state })
+	});
 }

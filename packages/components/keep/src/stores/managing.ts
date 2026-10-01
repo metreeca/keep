@@ -17,8 +17,8 @@
 /**
  * Managing store wrapper.
  *
- * Manages mutation events, transactional execution, and lifecycle for a plain {@link StoreClient},
- * exposing it as a full {@link Store}.
+ * Turns a plain {@link StoreClient} into a full {@link Store}, supplying mutation events, transactional execution and
+ * lifecycle management that a connector does not provide natively.
  *
  * @module
  */
@@ -27,7 +27,7 @@ import type { Optional } from "@metreeca/core";
 import { some } from "@metreeca/core/arrays";
 import type { Awaitable } from "@metreeca/core/async";
 import { isNestedIRI } from "@metreeca/core/resource";
-import { immutable } from "@metreeca/core/structures";
+import { immutable } from "@metreeca/core/values";
 
 import type { Reference } from "@metreeca/qest/state";
 
@@ -35,67 +35,70 @@ import type { Store, StoreClient, StoreObserver } from "../index.js";
 
 
 /**
- * Manages mutation events, transactional execution, and lifecycle for a bare {@link StoreClient},
+ * Manages mutation events, transactional execution, and lifecycle for a connector's {@link StoreClient},
  * exposing it as a full {@link Store}.
  *
- * This lets a connector implement only the {@link StoreClient} data surface and obtain
- * mutation events, transactional execution, and lifecycle for free: supply nothing and the wrapper provides working
- * defaults, or hand it backend primitives through `management` to back any of `execute`, `observe`, or `close`.
+ * A connector can implement only the {@link StoreClient} data surface and still offer the full {@link Store}
+ * contract. The connector supplies its transaction primitive through `management.execute`, which hands the
+ * connector's {@link StoreClient} to every data call. The option is required, since only the connector knows what
+ * atomicity its backend can provide. Backend primitives supplied through `management` may also back `observe` or
+ * `close`, and the wrapper fills in whatever is missing.
  *
- * Each standalone mutation call and each {@link Store.execute execute} call accumulates its own
- * batch of mutation signals and delivers a single filtered event to each matching registered
- * {@link StoreObserver observer} when the call resolves; if it rejects, pending signals are discarded
- * and no observers are notified. Both synchronous throws and asynchronous rejections from observers
- * are caught and silently ignored so that one faulty observer cannot break delivery to others.
+ * Each standalone mutation call and each {@link Store.execute execute} call delivers a single filtered event to each
+ * matching {@link StoreObserver observer} once the call resolves. If the call rejects, its pending events are
+ * discarded and no observer is notified. Synchronous throws and asynchronous rejections from observers are caught and
+ * silently ignored, so one faulty observer cannot break delivery to others.
  *
- * Any of the {@link Store} management methods may be supplied through `management` to delegate to an inner
- * implementation; the wrapper fills in whatever is missing.
- *
- * All errors — `RangeError`, {@link @metreeca/core!TraceError | TraceError},
- * {@link @metreeca/http!Problem | Problem} —
- * propagate as promise rejections per the unified {@link Store} error channel.
+ * All errors, including {@link !RangeError RangeError}, {@link @metreeca/core!TraceError | TraceError} and
+ * {@link @metreeca/http!Problem | Problem}, propagate as promise rejections, in line with the unified {@link Store}
+ * error channel.
  *
  * > [!IMPORTANT]
- * > **Transaction Isolation** — `None` by default: the built-in `execute` is a deferred identity that applies each
- * > call directly, with no write buffering and no rollback. When an `execute` opt is supplied through `management`,
- * > the level is determined by that wrapper (typically a backend transaction primitive).
+ * > **Transaction Isolation** — Determined by the supplied `execute` option, typically through a backend
+ * > transaction primitive: the wrapper adds neither isolation nor atomicity of its own.
  *
  * > [!IMPORTANT]
  * > **Mutation Events** — emits in-process observer events: each standalone mutation and each
  * > {@link Store.execute execute} call delivers a single filtered batch to matching {@link StoreObserver observer}s
- * > on resolve, and none on rejection. Cross-client signals reach local observers only when a backend-bridging
- * > `observe` opt is supplied through `management`.
+ * > on resolve, and none on rejection. Mutations made by other clients reach local observers only if a
+ * > backend-bridging `observe` option is supplied through `management`.
  *
- * @param store - Inner StoreClient to delegate data calls to
- * @param management - Subset of {@link Store} management methods to delegate to; the wrapper fills in whatever is
- *     missing
- * @param management.execute - Wraps every standalone StoreClient call and the body of {@link Store.execute execute},
- *     typically a backend transaction primitive (for example, `graph.execute` for a SPARQL connector) responsible for
- *     atomic commit and rollback. The wrapper StoreClient passed to the user task does NOT re-enter the opt; it relies
- *     on the outer wrap so cross-call isolation works as expected. The task receives a per-call `scope` StoreClient,
- *     and every delegated call within the wrap routes through `scope` (mirroring the {@link Store.execute} contract),
- *     letting the wrapper install per-call state such as a freshly-bound graph buffer without leaking it across
- *     concurrent invocations. Defaults to a deferred identity (`task => Promise.resolve().then(() => task(store))`);
- *     user-supplied wrappers MUST pass a per-call `scope` StoreClient to `task` and MUST convert synchronous throws
- *     from `task` into promise rejections to preserve the unified Store error channel; the `lookup` path delegates
- *     directly to the wrapper and provides no additional guard
- * @param management.observe - Registers each observer with the delegate as well as locally, combining the two
- *     unsubscribe handles so a single detach call releases both; this is how storage-level events (mutations from
- *     other clients sharing the backend) reach the wrapper's local observers. The resource filter always arrives as
- *     an array of references, or as `undefined` where the registration is unfiltered, so a bare reference or a
- *     single-pass iterable handed to {@link Store.observe observe} never has to be handled again downstream.
+ * @param management - {@link Store} management methods backed by the connector: `execute` is required, and the
+ *     wrapper fills in whatever else is missing
+ * @param management.execute - Transaction wrapper applied to every standalone StoreClient call and to the body of
+ *     each {@link Store.execute execute} call, typically a backend transaction primitive (for example,
+ *     `graph.execute` for a SPARQL connector) responsible for atomic commit and rollback. A backend with no
+ *     transaction primitive supplies a wrapper applying the task directly to its StoreClient, and declares on its
+ *     factory that a failing task neither rolls back nor isolates its mutations. The option MUST call each task it
+ *     receives with a `scope` StoreClient dedicated to that call, so per-call state, such as a freshly bound graph
+ *     buffer, never leaks across concurrent invocations; every data call within the transaction is routed through
+ *     `scope`. Calls made by a user task inside {@link Store.execute execute} do not open further transactions: they
+ *     share the outer one. The option MUST convert synchronous throws from the task into promise rejections, to
+ *     preserve the unified Store error channel: lookups are routed through it with no additional guard
+ * @param management.observe - Backend registration for storage-level events, such as mutations made by other clients
+ *     sharing the backend. Each observer is registered both with this option and locally, and a single detach call
+ *     releases both registrations. The resource filter always arrives as an array of references, or as `undefined`
+ *     for an unfiltered registration, so the option never has to handle bare references or single-pass iterables.
  *     Absent by default
- * @param management.close - Exposed verbatim on the returned store. Defaults to a resolved no-op
+ * @param management.close - Exposed as is on the returned store. Defaults to a resolved no-op
  *
- * @returns An immutable {@link Store} composing `store` with the supplied `management` opts
+ * @returns An immutable {@link Store} serving data calls through the supplied `management` opts
  */
-export function createManagingStore(store: StoreClient, {
+export function createManagingStore({
 
 	observe,
-	execute = <V>(task: (store: StoreClient) => Awaitable<V>) => Promise.resolve().then(() => task(store)),
+	execute,
+
 	close = () => Promise.resolve()
 
-}: Partial<Store> = {}): Store {
+}: {
+
+	readonly observe?: Store["observe"]
+	readonly execute: Store["execute"]
+
+	readonly close?: Store["close"]
+
+}): Store {
 
 	const observers = new Map<symbol, {
 
@@ -106,14 +109,14 @@ export function createManagingStore(store: StoreClient, {
 
 	return immutable({
 
-		lookup: (specs, opts) => execute(store => store.lookup(specs, opts)),
+		lookup: (request, opts) => execute(store => store.lookup(request, opts)),
 
-		create: specs => notify(({ mutated }) => execute(store => store.create(specs).then(mutated))),
-		update: specs => notify(({ mutated }) => execute(store => store.update(specs).then(mutated))),
-		delete: specs => notify(({ deleted }) => execute(store => store.delete(specs).then(deleted))),
+		create: request => notify(({ mutated }) => execute(store => store.create(request).then(mutated))),
+		update: request => notify(({ mutated }) => execute(store => store.update(request).then(mutated))),
+		delete: request => notify(({ deleted }) => execute(store => store.delete(request).then(deleted))),
 
-		insert: (specs, opts) => notify(({ mutated }) => execute(store => store.insert(specs, opts).then(mutated))),
-		remove: specs => notify(({ deleted }) => execute(store => store.remove(specs).then(deleted))),
+		insert: request => notify(({ mutated }) => execute(store => store.insert(request).then(mutated))),
+		remove: request => notify(({ deleted }) => execute(store => store.remove(request).then(deleted))),
 
 
 		observe(observer, resources) {
@@ -146,14 +149,14 @@ export function createManagingStore(store: StoreClient, {
 
 			return notify(({ mutated, deleted }) => execute(store => task(immutable({
 
-				lookup: (specs, opts) => store.lookup(specs, opts),
+				lookup: (request, opts) => store.lookup(request, opts),
 
-				create: specs => store.create(specs).then(mutated),
-				update: specs => store.update(specs).then(mutated),
-				delete: specs => store.delete(specs).then(deleted),
+				create: request => store.create(request).then(mutated),
+				update: request => store.update(request).then(mutated),
+				delete: request => store.delete(request).then(deleted),
 
-				insert: (specs, opts) => store.insert(specs, opts).then(mutated),
-				remove: specs => store.remove(specs).then(deleted)
+				insert: request => store.insert(request).then(mutated),
+				remove: request => store.remove(request).then(deleted)
 
 			}))));
 
@@ -196,7 +199,7 @@ export function createManagingStore(store: StoreClient, {
 				mutations.forEach((exists, id) => {
 
 					// `resources` is `undefined` for an unfiltered registration (fires for every mutation)
-					// and an array — possibly empty — for a filtered one
+					// and an array (possibly empty) for a filtered one
 
 					if ( resources === undefined || resources.some(r => isNestedIRI(r, id)) ) { event[id] = exists; }
 
