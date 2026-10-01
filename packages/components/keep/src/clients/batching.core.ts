@@ -14,14 +14,24 @@
  * limitations under the License.
  */
 
-import type { Identifier, Lazy } from "@metreeca/core";
 import type { ResourceShape } from "@metreeca/blue/resource";
-import type { Delivery } from "@metreeca/blue/value";
+import { eager, type Match } from "@metreeca/blue/value";
+import { error, type Identifier, isNumber, isString, type Lazy } from "@metreeca/core";
+import { resolve } from "@metreeca/core/resource";
 import { immutable } from "@metreeca/core/values";
-import type { Reference } from "@metreeca/qest/state";
-import type { Template } from "@metreeca/qest/model";
-import type { Items, Mould } from "../_inference.js";
-import type { Broker, Deferred, Detect, Handler, Lookup, Modify, Request, Select } from "./batching.js";
+import type { Query, Slot, Template } from "@metreeca/qest/model";
+import type { Reference, Resource, Value } from "@metreeca/qest/state";
+import type { Broker, Deferred, Detect, Handler, Detail, Modify, Request, Select } from "./batching.js";
+
+
+/**
+ * The form a value read off a state has to take to stand as a path segment: non-empty, with no delimiter or
+ * whitespace.
+ */
+const SegmentFormat = /^[^\s/?#]+$/;
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /**
  * Creates a batching request {@link Broker}.
@@ -36,7 +46,7 @@ import type { Broker, Deferred, Detect, Handler, Lookup, Modify, Request, Select
  * originating error, so callers see a deterministic failure rather than a hang.
  *
  * @param handlers The batch handlers, one per request type. Each settles every {@link Deferred} in
- *     its batch and may issue nested {@link Broker.lookup} / {@link Broker.select} calls while
+ *     its batch and may issue nested {@link Broker.detail} / {@link Broker.select} calls while
  *     processing; its returned promise must settle only after every owned request, including
  *     transitively nested ones, has settled.
  *
@@ -47,7 +57,7 @@ import type { Broker, Deferred, Detect, Handler, Lookup, Modify, Request, Select
 export function createBroker(handlers: {
 
 	detect: Handler<Detect>
-	lookup: Handler<Lookup>
+	detail: Handler<Detail>
 	select: Handler<Select>
 	modify: Handler<Modify>
 
@@ -57,7 +67,7 @@ export function createBroker(handlers: {
 
 		readonly items: Deferred<Request>[];
 
-		readonly drain: () => Promise<void>;
+		readonly round: () => { readonly done: Promise<void>, readonly settle: () => void };
 		readonly purge: (error: unknown) => void;
 
 	}> = Object.fromEntries(Object.entries(handlers).map(([key, handler]) => {
@@ -68,12 +78,23 @@ export function createBroker(handlers: {
 
 			items,
 
-			drain: async () => {
-				if ( items.length > 0 ) {
-					const batch = items.slice();
-					await handler(batch as never, broker); // ;(cast) erased to the handler's union parameter
-					items.splice(0, batch.length);
-				}
+			// snapshots the queued requests and hands them to the handler, keeping them queued until the round
+			// is settled by the drain loop, which removes exactly the snapshot in the same step it re-checks the
+			// queues: a queue emptied any earlier would let a submission landing in between kick a second drain
+			// over the same snapshot, whose own removal would then drop whatever was queued behind it
+
+			round: () => {
+
+				const batch = items.slice();
+
+				return { // ;(cast) erased to the handler's union parameter
+
+					done: batch.length > 0 ? handler(batch as never, broker) : Promise.resolve(),
+
+					settle: () => { items.splice(0, batch.length); }
+
+				};
+
 			},
 
 			purge: error => {
@@ -95,14 +116,14 @@ export function createBroker(handlers: {
 			);
 		},
 
-		lookup<S extends Lazy<ResourceShape>, T extends Template>(request: Lookup<T, S>) { // ;(cast) the handler resolves Instance<T> at runtime
-			return new Promise<Delivery<S, T>>((resolve, reject) =>
-				queues.lookup.items.push({ request, resolve, reject } as Deferred<Lookup>)
+		detail<S extends Lazy<ResourceShape>, T extends Template>(request: Detail<T, S>) { // ;(cast) the handler resolves Match<S, T> at runtime
+			return new Promise<Match<S, T>>((resolve, reject) =>
+				queues.detail.items.push({ request, resolve, reject } as Deferred<Detail>)
 			);
 		},
 
-		select<T extends Mould>(request: Select<T>) { // ;(cast) the handler resolves Items<T> at runtime
-			return new Promise<Items<T>>((resolve, reject) =>
+		select<T extends Query<Slot>>(request: Select<T>) { // ;(cast) the erased queue holds the union; this entry is a Select
+			return new Promise<readonly Value[]>((resolve, reject) =>
 				queues.select.items.push({ request, resolve, reject } as Deferred<Select>)
 			);
 		},
@@ -123,11 +144,11 @@ export function createBroker(handlers: {
 			return process(() => broker.detect(request));
 		},
 
-		lookup<S extends Lazy<ResourceShape>, T extends Template>(request: Lookup<T, S>) {
-			return process(() => broker.lookup(request));
+		detail<S extends Lazy<ResourceShape>, T extends Template>(request: Detail<T, S>) {
+			return process(() => broker.detail(request));
 		},
 
-		select<T extends Mould>(request: Select<T>) {
+		select<T extends Query<Slot>>(request: Select<T>) {
 			return process(() => broker.select(request));
 		},
 
@@ -138,29 +159,33 @@ export function createBroker(handlers: {
 	});
 
 
-	// Kicks a drain only when every queue is idle: a running drain keeps its snapshot queued, so
-	// "all empty" means "no drain in flight". The kick is a microtask, so a synchronous burst of
-	// submissions coalesces into one drain. The check runs before `submit` enqueues, or it would
-	// always see the request it just pushed.
+	// Kicks a drain only when every queue is idle: a running drain keeps its snapshots queued until the
+	// step that re-checks the queues, so "all empty" means "no drain in flight". The kick is a microtask,
+	// so a synchronous burst of submissions coalesces into one drain. The check runs before `submit`
+	// enqueues, or it would always see the request it just pushed.
 
 	function process<T>(submit: () => T): T {
-
-		// a running drain keeps its snapshot in the queues until the round ends, so any non-empty
-		// queue means a drain is already in flight; all-empty is the only "no drain running" state
 
 		if ( Object.values(queues).every(queue => queue.items.length === 0) ) {
 
 			Promise.resolve().then(async () => {
 
 				// Drain in rounds until every queue is quiescent, all four handlers concurrently per
-				// round. A handler keeps its snapshot in the queue across the `await` (so the idle-check
-				// still sees work and won't kick a second drain) and removes exactly it on success;
-				// anything pushed mid-round is served next round. A throw leaves the snapshot queued to purge.
+				// round. Every snapshot stays queued across the `await` and is removed in the same
+				// synchronous step as the next idle check, so no submission can ever find the queues empty
+				// while the loop is alive; anything pushed mid-round is served next round. A throw leaves
+				// the snapshots queued to purge.
 
 				try {
 
 					while ( Object.values(queues).some(queue => queue.items.length > 0) ) {
-						await Promise.all(Object.values(queues).map(queue => queue.drain()));
+
+						const rounds = Object.values(queues).map(queue => queue.round());
+
+						await Promise.all(rounds.map(round => round.done));
+
+						rounds.forEach(round => round.settle());
+
 					}
 
 				} catch ( error ) {
@@ -177,6 +202,49 @@ export function createBroker(handlers: {
 		}
 
 		return submit();
+	}
+
+}
+
+/**
+ * Mints the identifier of a resource created under a collection.
+ *
+ * Yields an identifier nested under `entry` that matches the identifier {@link ResourceShape.pattern | pattern}
+ * the shape declares, where it does: each `{name}` slot of the pattern is read off the like-named member of `state`
+ * where the state carries one, and filled with an opaque segment otherwise, as is a trailing `/*` slot; a
+ * root-relative pattern is resolved against `entry`. A shape declaring no pattern yields an opaque segment under
+ * `entry`.
+ *
+ * @param entry The absolute identifier of the resource collecting the new one
+ * @param shape The shape describing the new resource, possibly deferred to break definition cycles
+ * @param state The initial state of the new resource
+ *
+ * @returns The absolute identifier of the new resource
+ *
+ * @throws {@link !RangeError RangeError} If a member a slot is read off is not a single non-empty path segment
+ */
+export function mint(entry: Reference, shape: Lazy<ResourceShape>, state: Resource): Reference {
+
+	const { pattern } = eager(shape);
+
+	return pattern === undefined
+		? resolve(entry.endsWith("/") ? entry : `${entry}/`, crypto.randomUUID())
+		: resolve(entry, pattern.replace(/\{(\w*)}|(?<=\/)\*$/g, (_, name?: string) =>
+			name === undefined ? crypto.randomUUID() : segment(name)
+		));
+
+
+	/**
+	 * Reads a pattern slot off the like-named member of the state, or fills it with an opaque segment.
+	 */
+	function segment(name: string): string {
+
+		const value = state[name];
+
+		return value === undefined ? crypto.randomUUID()
+			: (isString(value) || isNumber(value)) && SegmentFormat.test(String(value)) ? String(value)
+				: error(new RangeError(`illegal identifier segment <${String(value)}> for slot <${name}>`));
+
 	}
 
 }

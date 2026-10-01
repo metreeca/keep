@@ -27,46 +27,41 @@
  * `projection.ts` (catalogue-scoped); cross-cutting selection on projection sub-collections is
  * tracked as a follow-up gap.
  *
- * Catalogue-scoped selection is covered by `selection.ts`; this suite focuses on the case
- * where the multi-valued slot lives on the resource itself.
+ * Filtering, ordering, slicing and projection of catalogue members are covered in depth by the criteria, projection,
+ * expression and localised suites; this suite covers the collection contract as a whole (empty and missing
+ * collections) and multi-valued slots retrieved alongside the other members of a resource.
  *
- * @module retrieve/query
+ * @module retrieve/collection
  */
 
-import { dictionary } from "@metreeca/blue/dictionary";
-import { reference } from "@metreeca/blue/reference";
-import { id, multiple, required, resource } from "@metreeca/blue/resource";
-import { string, url } from "@metreeca/blue/string";
-import { union } from "@metreeca/blue/union";
 import { isObject } from "@metreeca/core";
 import { beforeAll, describe, expect, it } from "vitest";
-import { model } from "../_model.js";
 import { lookup, type TestFactory } from "../index.core.js";
 import { collections } from "../toys.core.js";
-import { Category, Contacts, Image, Media, Product, Products, Vendor, Video } from "../toys.js";
+import { Product, Products, Vendor } from "../toys.js";
 import { catalogue, collection, members } from "./index.js";
 
 
 const { products, vendors } = collections;
 
 
-export function testRetrieveQuery(factory: TestFactory): void {
+export function testRetrieveCollection(factory: TestFactory): void {
 
 	const Catalogue = "https://data.example.net/products/";
 
-	describe("lookup query", () => {
+	describe("collection", () => {
 
 		beforeAll(factory(async ({ populate }) => { await populate(); }).hook);
 
 
-		describe("locale — §5.3", () => {
+		describe("locale — §5.4", () => {
 
 			// Localised properties are inherently multi-valued (qest §10) and carry no inline
 			// `Criteria` — `Locale` reaches `Placeholders` as its own arm, never a `Query` element. Filtering or
 			// ordering by a localised value attaches at the enclosing collection's `Criteria` through an
 			// `Expression`, with the target language supplied out-of-band, never inline on the slot.
 
-			it("should lookup every requested tag without selection", factory(async ({ store }) => {
+			it("should detail every requested tag without selection", factory(async ({ store }) => {
 
 				const target = lookup(products, p => isObject(p.keywords));
 
@@ -75,14 +70,14 @@ export function testRetrieveQuery(factory: TestFactory): void {
 				const result = await store.lookup({
 					entry: target.id,
 					shape: Product,
-					model: model(resource({ keywords: multiple(dictionary({ languageIn: ["en"] })) }))
+					model: { keywords: { en: {} } }
 				});
 
 				expect(result?.keywords).toBeDefined();
 
 			}));
 
-			it("should lookup only tags matching the requested range", factory(async ({ store }) => {
+			it("should detail only tags matching the requested range", factory(async ({ store }) => {
 
 				const target = lookup(products, p => Object.keys(p.keywords ?? {}).length > 1);
 
@@ -91,7 +86,7 @@ export function testRetrieveQuery(factory: TestFactory): void {
 				const result = await store.lookup({
 					entry: target.id,
 					shape: Product,
-					model: model(resource({ keywords: multiple(dictionary({ languageIn: ["en"] })) }))
+					model: { keywords: { en: {} } }
 				});
 
 				expect(Object.keys(result?.keywords ?? {})).toEqual(["en"]);
@@ -101,13 +96,13 @@ export function testRetrieveQuery(factory: TestFactory): void {
 		});
 
 
-		describe("[placeholder] (scalar collection) — §5.5", () => {
+		describe("placeholder (scalar collection) — §5.6", () => {
 
 			// Bare `[Placeholder]` with no Criteria attached. Criteria on scalar primitives is
 			// expressed through the second tuple slot `[Placeholder, Criteria]`,
 			// here authored through the local `collection(element, selection)` helper.
 
-			it("should lookup every element without selection", factory(async ({ store }) => {
+			it("should detail every element without selection", factory(async ({ store }) => {
 
 				const target = lookup(vendors, v => (v.aliases?.length ?? 0) > 0);
 
@@ -116,7 +111,7 @@ export function testRetrieveQuery(factory: TestFactory): void {
 				const result = await store.lookup({
 					entry: target.id,
 					shape: Vendor,
-					model: model(resource({ aliases: multiple(string()) }))
+					model: { aliases: {} }
 				});
 
 				expect(result?.aliases?.length ?? 0).toBeGreaterThan(0);
@@ -132,7 +127,7 @@ export function testRetrieveQuery(factory: TestFactory): void {
 				const result = await store.lookup({
 					entry: target.id,
 					shape: Vendor,
-					model: { aliases: collection(string(), { ">=length:": 4 }) }
+					model: { aliases: collection({}, { ">=length:": 4 }) }
 				});
 
 				(result?.aliases ?? []).forEach(a => expect(a.length).toBeGreaterThanOrEqual(4));
@@ -148,7 +143,7 @@ export function testRetrieveQuery(factory: TestFactory): void {
 				const result = await store.lookup({
 					entry: target.id,
 					shape: Vendor,
-					model: { aliases: collection(string(), { "^": "asc" }) }
+					model: { aliases: collection({}, { "^": "asc" }) }
 				});
 
 				const aliases = result?.aliases ?? [];
@@ -166,7 +161,7 @@ export function testRetrieveQuery(factory: TestFactory): void {
 				const result = await store.lookup({
 					entry: target.id,
 					shape: Vendor,
-					model: { aliases: collection(string(), { "#": 1 }) }
+					model: { aliases: collection({}, { "#": 1 }) }
 				});
 
 				expect(result?.aliases?.length ?? 0).toBeLessThanOrEqual(1);
@@ -185,7 +180,7 @@ export function testRetrieveQuery(factory: TestFactory): void {
 				const result = await store.lookup({
 					entry: target.id,
 					shape: Vendor,
-					model: { aliases: collection(string(), { "@": 1 }) }
+					model: { aliases: collection({}, { "@": 1 }) }
 				});
 
 				expect(result?.aliases?.length ?? 0).toBe((target.aliases?.length ?? 0)-1);
@@ -195,13 +190,13 @@ export function testRetrieveQuery(factory: TestFactory): void {
 		});
 
 
-		describe("[union, selection?] — §5.5", () => {
+		describe("union with criteria — §5.6", () => {
 
 			// Multi-valued union elements covering primitive and embedded Template branches —
 			// `Vendor.contacts` mixes string variants (email, phone) and a PostalAddress embedded
 			// resource branch. Union shape shared with the template suite via `Contacts`.
 
-			it("should lookup mixed-branch elements without selection", factory(async ({ store }) => {
+			it("should detail mixed-branch elements without selection", factory(async ({ store }) => {
 
 				const target = lookup(vendors, v => (v.contacts?.length ?? 0) > 0);
 
@@ -210,10 +205,80 @@ export function testRetrieveQuery(factory: TestFactory): void {
 				const result = await store.lookup({
 					entry: target.id,
 					shape: Vendor,
-					model: model(resource({ contacts: multiple(Contacts) }))
+					model: {
+						contacts: {
+							"0": {},
+							"1": {},
+							"2": {
+								label: { und: {}, en: {}, de: {}, fr: {}, it: {} },
+								street: {},
+								city: {},
+								zip: {},
+								country: {},
+								comment: { en: {}, de: {}, fr: {}, it: {} }
+							},
+							"3": {
+								label: { und: {}, en: {}, de: {}, fr: {}, it: {} },
+								latitude: {},
+								longitude: {},
+								opened: {},
+								comment: { en: {}, de: {}, fr: {}, it: {} }
+							}
+						}
+					}
 				});
 
 				expect(result?.contacts?.length ?? 0).toBeGreaterThan(0);
+
+			}));
+
+			it("should retrieve only the variants the atomic placeholder stands for", factory(async ({ store }) => {
+
+				// §5.3 / §5.5: the atomic reaches every variant coming back as a value, so over `contacts` it
+				// retrieves the email and phone strings alone; the embedded PostalAddress and Place variants
+				// state no identifier to come back as and are skipped, contributing no element
+
+				const target = lookup(vendors, v =>
+					(v.contacts ?? []).some(c => typeof c === "string") && (v.contacts ?? []).some(c => isObject(c))
+				);
+
+				if ( target === undefined ) { return; }
+
+				const expected = (target.contacts ?? []).filter(c => typeof c === "string").sort();
+
+				const result = await store.lookup({
+					entry: target.id,
+					shape: Vendor,
+					model: { contacts: {} }
+				});
+
+				expect([...(result?.contacts ?? [])].sort()).toEqual(expected);
+
+			}));
+
+			it("should window the retrieved variants alone (§5.5, §5.7.6)", factory(async ({ store }) => {
+
+				// §5.7.6 over §5.5: the window applies to the elements the placeholder retrieves, so a limit
+				// below the string contact count yields that many strings, the skipped embedded elements never
+				// taking a slot of the page
+
+				const target = lookup(vendors, v =>
+					(v.contacts ?? []).filter(c => typeof c === "string").length >= 2 && (v.contacts ?? []).some(c => isObject(c))
+				);
+
+				if ( target === undefined ) { return; }
+
+				const strings = (target.contacts ?? []).filter(c => typeof c === "string");
+				const limit = strings.length-1;
+
+				const result = await store.lookup({
+					entry: target.id,
+					shape: Vendor,
+					model: { contacts: collection({}, { "#": limit }) }
+				});
+
+				expect(result?.contacts).toHaveLength(limit);
+				result?.contacts?.forEach(c => expect(strings).toContain(c));
 
 			}));
 
@@ -226,7 +291,27 @@ export function testRetrieveQuery(factory: TestFactory): void {
 				const result = await store.lookup({
 					entry: target.id,
 					shape: Vendor,
-					model: model(resource({ contacts: multiple(Contacts) }))
+					model: {
+						contacts: {
+							"0": {},
+							"1": {},
+							"2": {
+								label: { und: {}, en: {}, de: {}, fr: {}, it: {} },
+								street: {},
+								city: {},
+								zip: {},
+								country: {},
+								comment: { en: {}, de: {}, fr: {}, it: {} }
+							},
+							"3": {
+								label: { und: {}, en: {}, de: {}, fr: {}, it: {} },
+								latitude: {},
+								longitude: {},
+								opened: {},
+								comment: { en: {}, de: {}, fr: {}, it: {} }
+							}
+						}
+					}
 				});
 
 				const embedded = (result?.contacts ?? []).filter(c => typeof c !== "string");
@@ -262,7 +347,25 @@ export function testRetrieveQuery(factory: TestFactory): void {
 				const result = await store.lookup({
 					entry: target.id,
 					shape: Vendor,
-					model: { contacts: collection(Contacts, { ">latitude": 0 }) }
+					model: { contacts: collection({
+						"0": {},
+						"1": {},
+						"2": {
+							label: { und: {}, en: {}, de: {}, fr: {}, it: {} },
+							street: {},
+							city: {},
+							zip: {},
+							country: {},
+							comment: { en: {}, de: {}, fr: {}, it: {} }
+						},
+						"3": {
+							label: { und: {}, en: {}, de: {}, fr: {}, it: {} },
+							latitude: {},
+							longitude: {},
+							opened: {},
+							comment: { en: {}, de: {}, fr: {}, it: {} }
+						}
+					}, { ">latitude": 0 }) }
 				});
 
 				expect(result?.contacts).toHaveLength(expected.length);
@@ -278,7 +381,25 @@ export function testRetrieveQuery(factory: TestFactory): void {
 				const result = await store.lookup({
 					entry: target.id,
 					shape: Vendor,
-					model: { contacts: collection(Contacts, { "#": 1 }) }
+					model: { contacts: collection({
+						"0": {},
+						"1": {},
+						"2": {
+							label: { und: {}, en: {}, de: {}, fr: {}, it: {} },
+							street: {},
+							city: {},
+							zip: {},
+							country: {},
+							comment: { en: {}, de: {}, fr: {}, it: {} }
+						},
+						"3": {
+							label: { und: {}, en: {}, de: {}, fr: {}, it: {} },
+							latitude: {},
+							longitude: {},
+							opened: {},
+							comment: { en: {}, de: {}, fr: {}, it: {} }
+						}
+					}, { "#": 1 }) }
 				});
 
 				expect(result?.contacts?.length ?? 0).toBeLessThanOrEqual(1);
@@ -301,7 +422,25 @@ export function testRetrieveQuery(factory: TestFactory): void {
 				const result = await store.lookup({
 					entry: target.id,
 					shape: Vendor,
-					model: { contacts: collection(Contacts, { "^street": 1 }) }
+					model: { contacts: collection({
+						"0": {},
+						"1": {},
+						"2": {
+							label: { und: {}, en: {}, de: {}, fr: {}, it: {} },
+							street: {},
+							city: {},
+							zip: {},
+							country: {},
+							comment: { en: {}, de: {}, fr: {}, it: {} }
+						},
+						"3": {
+							label: { und: {}, en: {}, de: {}, fr: {}, it: {} },
+							latitude: {},
+							longitude: {},
+							opened: {},
+							comment: { en: {}, de: {}, fr: {}, it: {} }
+						}
+					}, { "^street": 1 }) }
 				});
 
 				const got = result?.contacts ?? [];
@@ -315,11 +454,11 @@ export function testRetrieveQuery(factory: TestFactory): void {
 		});
 
 
-		describe("[union, selection?] — heterogeneous reference variants (media) — §5.5", () => {
+		describe("union with criteria — heterogeneous reference variants (media) — §5.6", () => {
 
 			// Product.media: multiple(union(reference(Image), reference(Video))) — a captive gallery whose
 			// items are two DIFFERENT resource shapes (Image {width,height} vs Video {duration}). The slot
-			// keys "0"/"1" are opaque (§5.4): each nested Template singles out its branch by structure
+			// keys "0"/"1" are opaque (§5.5): each nested Template singles out its branch by structure
 			// ({width,height} → Image, {duration} → Video), and every item MUST decode under the branch
 			// matching its own variant, not merely the first nested variant.
 
@@ -332,7 +471,35 @@ export function testRetrieveQuery(factory: TestFactory): void {
 				const result = await store.lookup({
 					entry: target.id,
 					shape: Product,
-					model: model(resource({ media: multiple(union(Image, Video)) }))
+					model: {
+						media: {
+							"0": {
+								label: { und: {}, en: {}, de: {}, fr: {}, it: {} },
+								url: {},
+								width: {},
+								height: {},
+								caption: {},
+								subject: {},
+								id: {},
+								type: {},
+								created: {},
+								updated: {},
+								comment: { en: {}, de: {}, fr: {}, it: {} }
+							},
+							"1": {
+								label: { und: {}, en: {}, de: {}, fr: {}, it: {} },
+								url: {},
+								duration: {},
+								caption: { en: {}, de: {}, fr: {}, it: {} },
+								subject: {},
+								id: {},
+								type: {},
+								created: {},
+								updated: {},
+								comment: { en: {}, de: {}, fr: {}, it: {} }
+							}
+						}
+					}
 				});
 
 				const items = result?.media ?? [];
@@ -345,7 +512,7 @@ export function testRetrieveQuery(factory: TestFactory): void {
 
 			it("should retrieve the common reference subset across union branches", factory(async ({ store }) => {
 
-				// A bare reference placeholder over the media union matches every branch by kind (§5.4)
+				// The atomic over the media union matches every reference branch (§5.3, §5.5)
 				// and retrieves each item's shared reference identity — the id common to both the Image
 				// and Video branches — rather than any branch-specific structure.
 
@@ -356,7 +523,7 @@ export function testRetrieveQuery(factory: TestFactory): void {
 				const result = await store.lookup({
 					entry: target.id,
 					shape: Product,
-					model: model(resource({ media: multiple(Media) }))
+					model: { media: { "0": {}, "1": {} } }
 				});
 
 				const expected = [...(target.media ?? [])].sort();
@@ -371,8 +538,8 @@ export function testRetrieveQuery(factory: TestFactory): void {
 
 		describe("contract", () => {
 
-			// qest §5.4, §10.2, §11.3 — vacuous template / locale / union forms must elide as
-			// if the property were omitted from the enclosing template.
+			// an absent collection is omitted from the result rather than surfaced as an empty one,
+			// leaving the rest of the retrieved resource intact.
 
 			it("should preserve focus when a multi-valued slot is empty", factory(async ({ store }) => {
 
@@ -383,11 +550,7 @@ export function testRetrieveQuery(factory: TestFactory): void {
 				const result = await store.lookup({
 					entry: target.id,
 					shape: Vendor,
-					model: model(resource({
-						id: id(),
-						code: required(string()),
-						aliases: multiple(string())
-					}))
+					model: { id: {}, code: {}, aliases: {} }
 				});
 
 				expect(result?.id).toBe(target.id);
@@ -405,20 +568,42 @@ export function testRetrieveQuery(factory: TestFactory): void {
 				const result = await store.lookup({
 					entry: target.id,
 					shape: Product,
-					model: model(resource({
-						sku: required(string()),
-						keywords: multiple(dictionary({ languageIn: ["en"] }))
-					}))
+					model: { sku: {}, keywords: { en: {} } }
 				});
 
 				expect(result?.sku).toBe(target.sku);
 
 			}));
 
+			it("should omit a collection whose criteria match no item", factory(async ({ store }) => {
+
+				const result = await store.lookup({
+					entry: Catalogue,
+					shape: Products,
+					model: catalogue({ id: {} }, { "<price": -1 })
+				});
+
+				expect(result).toBeDefined();
+				expect(result).not.toHaveProperty("members");
+
+			}));
+
+			it("should resolve to undefined for a missing collecting resource", factory(async ({ store }) => {
+
+				const result = await store.lookup({
+					entry: "https://data.example.net/missing/",
+					shape: Products,
+					model: catalogue({ id: {} })
+				});
+
+				expect(result).toBeUndefined();
+
+			}));
+
 		});
 
 
-		describe("[template] (structured collection) — reconstruction §5.5", () => {
+		describe("template (structured collection) — reconstruction §5.6", () => {
 
 			// A collection retrieved with a nested Template element returns structured members, each
 			// reconstructed from its own row-group. When a member carries multi-valued slots, the flat
@@ -431,11 +616,7 @@ export function testRetrieveQuery(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						id: id(),
-						documents: multiple(url()),
-						categories: multiple(reference(Category))
-					}))
+					model: catalogue({ id: {}, documents: {}, categories: {} })
 				})) ?? [];
 
 				// one member per product — not one per (document, category) pair
@@ -460,10 +641,10 @@ export function testRetrieveQuery(factory: TestFactory): void {
 		});
 
 
-		describe("multiple slots on one resource — §5.5", () => {
+		describe("multiple slots on one resource — §5.6", () => {
 
-			// reading several multi-valued slots in a single lookup settles each slot independently: the values
-			// of one slot never leak into another and none is dropped, whether the lookup reaches one slot
+			// reading several multi-valued slots in a single detail call settles each slot independently: the values
+			// of one slot never leak into another and none is dropped, whether the call reaches one slot
 			// (a single-request batch) or many (a multi-request batch)
 
 			it("should reconstruct a single multi-valued slot", factory(async ({ store }) => {
@@ -475,7 +656,7 @@ export function testRetrieveQuery(factory: TestFactory): void {
 				const result = await store.lookup({
 					entry: target.id,
 					shape: Product,
-					model: model(resource({ documents: multiple(url()) }))
+					model: { documents: {} }
 				});
 
 				expect([...(result?.documents ?? [])].sort()).toEqual([...target.documents].sort());
@@ -484,7 +665,7 @@ export function testRetrieveQuery(factory: TestFactory): void {
 
 			it("should apply an independent window to each of two batched slots", factory(async ({ store }) => {
 
-				// two windowed sub-collections in one lookup enqueue two select requests, batched into one
+				// two windowed sub-collections in one detail call enqueue two select requests, batched into one
 				// round and demultiplexed by the guard column: each slot's own offset/limit applies to its
 				// own stream, never bleeding across (counts are order-independent, so no sort key is needed)
 
@@ -496,8 +677,8 @@ export function testRetrieveQuery(factory: TestFactory): void {
 					entry: target.id,
 					shape: Product,
 					model: {
-						documents: collection(url(), { "#": 1 }),
-						categories: collection(reference(Category), { "@": 1 })
+						documents: collection({}, { "#": 1 }),
+						categories: collection({}, { "@": 1 })
 					}
 				});
 
@@ -515,10 +696,7 @@ export function testRetrieveQuery(factory: TestFactory): void {
 				const result = await store.lookup({
 					entry: target.id,
 					shape: Product,
-					model: model(resource({
-						documents: multiple(url()),
-						categories: multiple(reference(Category))
-					}))
+					model: { documents: {}, categories: {} }
 				});
 
 				expect([...(result?.documents ?? [])].sort()).toEqual([...target.documents].sort());

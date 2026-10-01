@@ -20,8 +20,8 @@
  * Provides reusable test suites that backend connector packages run to verify their {@link Store}
  * implementations satisfy the contracts defined by `@metreeca/keep`.
  *
- * {@link testStore} covers resource retrieval, CRUD operations, unconditional insert/remove, transaction execution,
- * change notifications, and lifecycle management.
+ * {@link testStore} covers resource and collection lookup, CRUD operations, unconditional insert/remove,
+ * transaction execution, change notifications, and lifecycle management.
  *
  * Connectors call {@link testStore} with a {@link StoreTestOptions} object that provisions store instances and loads
  * them with the {@link toys | sample dataset}.
@@ -46,8 +46,9 @@
  */
 
 import type { ResourceShape } from "@metreeca/blue/resource";
-import type { Instance } from "@metreeca/blue/value";
+import type { State } from "@metreeca/blue/value";
 import type { Eager, Lazy } from "@metreeca/core";
+import type { DeepPartial } from "@metreeca/core/values";
 import type { Store, StoreClient } from "@metreeca/keep";
 import type { Reference, Resource } from "@metreeca/qest/state";
 import type { Awaitable } from "@vitest/utils";
@@ -61,41 +62,25 @@ import { testPersistDelete } from "./persist/delete.js";
 import { testPersistInsert } from "./persist/insert.js";
 import { testPersistRemove } from "./persist/remove.js";
 import { testPersistUpdate } from "./persist/update.js";
+import { testRetrieveCollection } from "./retrieve/collection.js";
+import { testRetrieveContract } from "./retrieve/contract.js";
+import { testRetrieveCriteria } from "./retrieve/criteria.js";
 import { testRetrieveExpression } from "./retrieve/expression.js";
 import { testRetrieveLocalised } from "./retrieve/localised.js";
 import { testRetrieveProjection } from "./retrieve/projection.js";
-import { testRetrieveQuery } from "./retrieve/query.js";
-import { testRetrieveSelection } from "./retrieve/selection.js";
 import { testRetrieveTemplate } from "./retrieve/template.js";
 
 
 /**
- * A recursively optional view of a resource state.
- *
- * Widens a state type so a probe may fill in only the slots a check is concerned with, at any nesting depth: every
- * property becomes optional and read-only, arrays keep their arity and element structure, and primitives are carried
- * over unchanged. Accepted by {@link StoreTestOptions.includes | includes} and
- * {@link StoreTestOptions.excludes | excludes} to state a targeted subset of facts rather than a whole state.
- *
- * @typeParam T The state type to widen
- */
-export type DeepPartial<T> =
-	T extends undefined | null | boolean | number | string ? T
-		: T extends readonly unknown[] ? { readonly [K in keyof T]: DeepPartial<T[K]> }
-			: T extends object ? { readonly [K in keyof T]?: DeepPartial<T[K]> }
-				: T;
-
-/**
  * Fact probe accepted for a resource shape.
  *
- * A {@link DeepPartial} instance of the shape where the shape is concrete, so a probe spells out only the slots it
- * asserts and each slot is held to its declared type; any resource where the shape is left abstract, as a helper
- * probing a slot by name against whichever shape it is handed can state no more than that.
+ * For a concrete shape, a {@link @metreeca/core/values!DeepPartial | DeepPartial} state: the probe states only the
+ * slots it asserts, each held to its declared type. For an abstract shape, any resource.
  *
  * @typeParam S The resource shape the probe conforms to
  */
 export type Probe<S extends Lazy<ResourceShape>> =
-	ResourceShape extends Eager<S> ? Resource : DeepPartial<Instance<S>> & Resource;
+	ResourceShape extends Eager<S> ? Resource : DeepPartial<State<S>> & Resource;
 
 /**
  * Sub-suite or test selector pattern accepted by {@link StoreTestOptions.target | target} and
@@ -108,9 +93,10 @@ export type Probe<S extends Lazy<ResourceShape>> =
 export type StoreTestPatterns =
 
 	| "Retrieve"
+	| "RetrieveContract"
 	| "RetrieveTemplate"
-	| "RetrieveQuery"
-	| "RetrieveSelection"
+	| "RetrieveCollection"
+	| "RetrieveCriteria"
 	| "RetrieveProjection"
 	| "RetrieveExpression"
 	| "RetrieveLocalised"
@@ -253,7 +239,7 @@ export interface StoreTestOptions<S extends StoreClient = StoreClient> extends S
 	 *
 	 * @returns The inserted copy with a unique `id`
 	 */
-	readonly generate: <S extends Lazy<ResourceShape>>(sample: Instance<S> & Resource, shape: S) => Awaitable<Instance<S>>;
+	readonly generate: <S extends Lazy<ResourceShape>>(sample: State<S> & Resource, shape: S) => Awaitable<State<S>>;
 
 }
 
@@ -263,8 +249,8 @@ export interface StoreTestOptions<S extends StoreClient = StoreClient> extends S
 /**
  * Runs the store conformance suite.
  *
- * Registers sub-suites for resource retrieval, CRUD operations, unconditional insert/remove, change notifications, and
- * lifecycle management. Sub-suites and individual tests can be filtered with
+ * Registers sub-suites for resource and collection lookup, CRUD operations, unconditional insert/remove,
+ * change notifications, and lifecycle management. Sub-suites and individual tests can be filtered with
  * {@link StoreTestOptions.target | target} and {@link StoreTestOptions.ignore | ignore}.
  *
  * @param options - The store provisioning and lifecycle callbacks
@@ -273,9 +259,10 @@ export function testStore(options: StoreTestOptions<Store>): void {
 
 	describe("store conformance", () => test(options, {
 
+		testRetrieveContract,
 		testRetrieveTemplate,
-		testRetrieveQuery,
-		testRetrieveSelection,
+		testRetrieveCollection,
+		testRetrieveCriteria,
 		testRetrieveProjection,
 		testRetrieveExpression,
 		testRetrieveLocalised,

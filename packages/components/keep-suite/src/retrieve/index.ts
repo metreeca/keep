@@ -15,39 +15,22 @@
  */
 
 /**
- * Shared helpers for lookup conformance suites.
+ * Shared helpers for retrieval conformance suites.
  *
  * @module retrieve/index
  */
 
-import { type Shape } from "@metreeca/blue/value";
-import { type Identifier, isLazy, isObject, type Lazy } from "@metreeca/core";
+import { type Identifier, isObject } from "@metreeca/core";
 import type { Criteria } from "@metreeca/qest/model";
 import type { Values } from "@metreeca/qest/state";
-import { model, type Schema } from "../_model.js";
 
 
 /**
  * Builds a `members` model for catalogue-style endpoints.
  *
- * Emits the `members` slot as the node retrieving the collection: the element's retrieval keys with the
- * optional `Criteria` narrowing the collection merged in alongside them (§5.6).
- *
- * @param members - The element shape, modelled via blue {@link model}
- * @param selection - The optional selection applied to the collection
- */
-export function catalogue<S extends Lazy<Shape>>(members: S, selection?: Criteria): {
-
-	readonly members: Schema<S>
-
-};
-
-/**
- * Builds a `members` model from a literal element retrieval template.
- *
- * The element is authored as a literal retrieval template (a placeholder object, for example
- * `{ sku: {}, price: {} }`, or a `Projection` binding map) and carries the optional `Criteria` merged in
- * alongside its own keys.
+ * Emits the `members` slot as the node retrieving the collection: the element retrieval template (a placeholder
+ * object, for example `{ sku: {}, price: {} }`, or a `Projection` binding map) with the optional `Criteria`
+ * narrowing the collection merged in alongside its own keys (§5.6).
  *
  * @param element - The literal element retrieval template
  * @param selection - The optional selection (filtering, ordering, slicing) applied to the collection
@@ -63,41 +46,17 @@ export function catalogue(element: unknown, selection?: Criteria): {
 	readonly members: object
 
 } {
-
-	// !!! transitional shape path: a call site passing a shape element (first overload) has its retrieval template
-	// derived here via blue model(); one passing an already-authored literal template (second overload) rides
-	// straight through unchanged. once every call site authors literal templates, drop the shape overload, this
-	// branch, and the model() call.
-
-	const resolved = isLazy(element, isShape) ? model(element) : element;
-
-	return { members: merge(resolved, selection) };
-
-
-	function isShape(value: unknown): value is Shape {
-		return isObject(value) && "kind" in value;
-	}
-
+	return { members: merge(element, selection) };
 }
 
 
 /**
  * Builds the collection model for a multi-valued property slot.
  *
- * Emits the slot value as the node retrieving the collection: the element's retrieval keys with the optional
- * `Criteria` narrowing it merged in alongside them (§5.6), for properties whose values are retrieved as a set
- * rather than as a single value.
- *
- * @param element - The element shape, modelled via blue {@link model}
- * @param selection - The optional selection (filtering, ordering, slicing) applied to the collection
- */
-export function collection<S extends Lazy<Shape>>(element: S, selection?: Criteria): Schema<S>;
-
-/**
- * Builds the collection model from a literal element retrieval template.
- *
- * The element is authored as a literal retrieval template (the atomic leaf `{}`, or a placeholder object, for
- * example `{ sku: {}, price: {} }`) and carries the optional `Criteria` merged in alongside its own keys.
+ * Emits the slot value as the node retrieving the collection: the element retrieval template (the atomic leaf
+ * `{}`, or a placeholder object, for example `{ sku: {}, price: {} }`) with the optional `Criteria` narrowing it
+ * merged in alongside its own keys (§5.6), for properties whose values are retrieved as a set rather than as a
+ * single value.
  *
  * @param element - The literal element retrieval template
  * @param selection - The optional selection (filtering, ordering, slicing) applied to the collection
@@ -105,22 +64,7 @@ export function collection<S extends Lazy<Shape>>(element: S, selection?: Criter
 export function collection<E>(element: E, selection?: Criteria): E;
 
 export function collection(element: unknown, selection?: Criteria): object {
-
-	// !!! transitional shape path: mirrors catalogue() — a call site passing a shape element (first overload) has its
-	// retrieval template derived here via blue model(); one passing an already-authored literal template (second
-	// overload) rides straight through unchanged. this helper also stands in for the blue multiple(shape, selection)
-	// selection argument, holding every attached-selection site under one symbol; once every call site authors literal
-	// templates, drop the shape overload, this branch, and the model() call.
-
-	const resolved = isLazy(element, isShape) ? model(element) : element;
-
-	return merge(resolved, selection);
-
-
-	function isShape(value: unknown): value is Shape {
-		return isObject(value) && "kind" in value;
-	}
-
+	return merge(element, selection);
 }
 
 
@@ -136,7 +80,7 @@ function merge(element: unknown, selection: undefined | Criteria): object {
 
 
 /**
- * Extracts the `members` array from a catalogue-lookup result.
+ * Extracts the `members` array from a catalogue lookup result.
  */
 export function members<R extends { readonly members?: unknown }>(result: R | undefined): R["members"] {
 
@@ -146,21 +90,21 @@ export function members<R extends { readonly members?: unknown }>(result: R | un
 
 
 /**
- * Extracts the projected rows from a catalogue-lookup result.
+ * Extracts the projected rows from a catalogue collection retrieved through a projection.
  *
  * A projection's cells are named by its binding keys, which state an expression rather than a member, so the shape
- * settles neither their names nor their types and {@link members} resolves them to what the shape describes instead.
- * Rows are therefore read as the cell-keyed records they are, each cell carrying a state value.
+ * settles neither their names nor their types. Rows are therefore read as the cell-keyed records they are, each cell
+ * carrying a state value.
  *
- * @param result The catalogue-lookup result to read
+ * @param result The catalogue collection to read, as returned by {@link members}
  *
  * @returns The projected rows, each keyed by the binding names the projection stated
  */
-export function rows(result: undefined | { readonly members?: unknown }): readonly Row[] {
+export function rows(result: undefined | readonly unknown[]): readonly Row[] {
 
 	// ;(cast) a projection's rows are settled by its binding keys, which the shape-driven delivery does not resolve
 
-	return (result?.members ?? []) as readonly Row[];
+	return (result ?? []) as readonly Row[];
 
 }
 

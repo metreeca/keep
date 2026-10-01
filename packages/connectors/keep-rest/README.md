@@ -44,8 +44,8 @@ const product = await store.lookup({
 	entry: "http://example.com/products/1",
 	shape: ProductShape,
 	model: {
-		name: "",
-		price: 0
+		name: {},
+		price: {}
 	}
 });
 ```

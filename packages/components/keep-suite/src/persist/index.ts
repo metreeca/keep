@@ -15,17 +15,42 @@
  */
 
 import type { ResourceShape } from "@metreeca/blue/resource";
-import type { Instance } from "@metreeca/blue/value";
-import type { Lazy } from "@metreeca/core";
+import type { State } from "@metreeca/blue/value";
+import type { Lazy, Optional } from "@metreeca/core";
 import { TraceError } from "@metreeca/core/trace";
+import type { StoreClient } from "@metreeca/keep";
 import type { Reference, Resource } from "@metreeca/qest/state";
 import { describe, expect, it } from "vitest";
 import { lookup, type TestFactory, type TestTools } from "../index.core.js";
-import { collections, testProduct } from "../toys.core.js";
-import { Category, Product, toys, Vendor } from "../toys.js";
+import { collections, created, loose, testProduct } from "../toys.core.js";
+import { Category, Product, toys, Vendor, Vendors } from "../toys.js";
 
 
 const { categories, vendors, products } = collections;
+
+
+/**
+ * Writes a state through the operation under test.
+ *
+ * Routes a creation through the catalogue collecting the resource, as the store contract anchors it, and an update
+ * or insertion to the resource itself, so that a test parameterised over the three writes states one request.
+ *
+ * @param store - The store to write to
+ * @param op - The write operation under test
+ * @param request - The identifier of the resource, the shape describing it and the state to write
+ *
+ * @returns The promise the write resolves to
+ */
+function write(store: StoreClient, op: "create" | "update" | "insert", { entry, shape, state }: {
+
+	readonly entry: Reference;
+	readonly shape: Lazy<ResourceShape>;
+	readonly state: Resource;
+
+}): Promise<Optional<Reference>> {
+	return op === "create" ? created(store, { entry, shape, state })
+		: store[op]({ entry, shape, state: loose(state) });
+}
 
 
 /**
@@ -77,7 +102,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 						{ price: 19.99, stock: 10 }
 					);
 
-					expect(await store[op]({ entry: state.id, shape: Product, state })).toBe(state.id);
+					expect(await write(store, op, { entry: state.id, shape: Product, state })).toBe(state.id);
 
 				}));
 
@@ -89,7 +114,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 
 					const existing = await generate(products[0], Product);
 
-					expect(await store.create({
+					expect(await created(store, {
 						entry: existing.id,
 						shape: Product,
 						state: existing
@@ -110,7 +135,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 						price: 99.99
 					};
 
-					expect(await store[op]({ entry: state.id, shape: Product, state })).toBe(existing.id);
+					expect(await write(store, op, { entry: state.id, shape: Product, state })).toBe(existing.id);
 
 				}));
 
@@ -122,7 +147,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 
 					const state = testProduct("MISSING-001", "Non-Existent Product", { price: 49.99, stock: 0 });
 
-					expect(await store.update({ entry: state.id, shape: Product, state })).toBeUndefined();
+					expect(await store.update({ entry: state.id, shape: Product, state: loose(state) })).toBeUndefined();
 
 				}));
 
@@ -143,7 +168,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 						{ price: 12.99, stock: 3 }
 					);
 
-					await store[op]({ entry: state.id, shape: Product, state });
+					await write(store, op, { entry: state.id, shape: Product, state });
 
 					expect(await includes(existing, Product)).toBeTruthy();
 
@@ -153,23 +178,32 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 
 			it("should reject with RangeError a state id differing from the entry", factory(async ({ store }) => {
 
-				// the entry identifies the target; a state carrying a different id contradicts it
-				// and is rejected rather than silently resolved either way
+				// the entry identifies the target; a state carrying a different id contradicts it and is rejected
+				// rather than silently resolved either way: for a creation, the target is the collection, which the
+				// stated id has to be nested under
 
 				const code = { create: "MISMATCH-001", update: "MISMATCH-002", insert: "MISMATCH-003" }[op];
 				const state = testProduct(code, "Mismatched Id Product");
 
-				await expect(store[op]({
-					entry: "https://data.example.net/products/MISMATCH-OTHER",
-					shape: Product,
-					state
-				})).rejects.toBeInstanceOf(RangeError);
+				await expect(op === "create"
+					? store.create({
+						entry: "https://data.example.net/vendors/",
+						shape: Vendors,
+						model: { members: {} },
+						state: loose(state)
+					})
+					: store[op]({
+						entry: "https://data.example.net/products/MISMATCH-OTHER",
+						shape: Product,
+						state
+					})
+				).rejects.toBeInstanceOf(RangeError);
 
 			}));
 
 			it("should reject with TraceError for an unvalidated state", factory(async ({ store }) => {
 
-				await expect(store[op]({
+				await expect(write(store, op, {
 					entry: "https://data.example.net/products/UNVALIDATED-001", shape: Product, state: {
 						id: "https://data.example.net/products/UNVALIDATED-001",
 						name: { en: "Unvalidated Product" },
@@ -189,7 +223,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 
 					const state = testProduct("NEW-002", "Retrievable Product", { price: 14.99, stock: 20 });
 
-					await store.create({ entry: state.id, shape: Product, state });
+					await created(store, { entry: state.id, shape: Product, state });
 
 					expect(await includes(state, Product)).toBeTruthy();
 
@@ -207,7 +241,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 						]
 					});
 
-					await store.create({ entry: state.id, shape: Product, state });
+					await created(store, { entry: state.id, shape: Product, state });
 
 					expect(await includes(state, Product)).toBeTruthy();
 
@@ -234,7 +268,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 
 					const state = testProduct("INS-002", "Retrievable Inserted Product", { price: 14.99, stock: 20 });
 
-					await store.insert({ entry: state.id, shape: Product, state });
+					await store.insert({ entry: state.id, shape: Product, state: loose(state) });
 
 					expect(await includes(state, Product)).toBeTruthy();
 
@@ -253,7 +287,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 						price: 77.77
 					};
 
-					await store.update({ entry: state.id, shape: Product, state });
+					await store.update({ entry: state.id, shape: Product, state: loose(state) });
 
 					expect(await includes(state, Product)).toBeTruthy();
 
@@ -263,7 +297,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 
 					const existing = await generate(products[0], Product);
 
-					const state: Instance<typeof Product> = {
+					const state: State<typeof Product> = {
 						...existing,
 						name: { en: "Completely Updated Name" },
 						price: 55.55,
@@ -271,7 +305,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 						condition: "refurbished"
 					};
 
-					await store.update({ entry: state.id, shape: Product, state });
+					await store.update({ entry: state.id, shape: Product, state: loose(state) });
 
 					expect(await includes(state, Product)).toBeTruthy();
 
@@ -286,7 +320,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 						vendor: "https://data.example.net/vendors/0002"
 					};
 
-					await store.update({ entry: state.id, shape: Product, state });
+					await store.update({ entry: state.id, shape: Product, state: loose(state) });
 
 					expect(await includes(state, Product)).toBeTruthy();
 
@@ -314,7 +348,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 						price: 77.77
 					};
 
-					await store.insert({ entry: state.id, shape: Product, state });
+					await store.insert({ entry: state.id, shape: Product, state: loose(state) });
 
 					expect(await includes(state, Product)).toBeTruthy();
 					expect(await excludes({ id: existing.id, price: existing.price }, Product)).toBeTruthy();
@@ -329,7 +363,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 
 					const state = testProduct("INS-004", "First Insert", { price: 10.00, stock: 5 });
 
-					await store.insert({ entry: state.id, shape: Product, state });
+					await store.insert({ entry: state.id, shape: Product, state: loose(state) });
 
 					const replaced = {
 						...state,
@@ -367,7 +401,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 
 					const state: Resource = { ...existing, warranty: empty };
 
-					await store[op]({ entry: existing.id, shape: Product, state });
+					await write(store, op, { entry: existing.id, shape: Product, state });
 
 					expect(await includes({ ...existing, warranty: undefined }, Product)).toBeTruthy();
 					expect(await excludes({ id: existing.id, warranty: existing.warranty }, Product)).toBeTruthy();
@@ -386,7 +420,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 
 					// inline literal (not testProduct) so the embedded review can carry an `und` plain-string label
 
-					const state: Instance<typeof Product> = {
+					const state: State<typeof Product> = {
 
 						id: "https://data.example.net/products/NEW-003",
 						type: "https://data.example.net/toys#Product",
@@ -413,7 +447,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 
 					};
 
-					await store.create({ entry: state.id, shape: Product, state });
+					await created(store, { entry: state.id, shape: Product, state });
 
 					expect(await includes(state, Product)).toBeTruthy();
 
@@ -460,7 +494,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 							]
 						};
 
-					await store[op]({ entry: state.id, shape: Product, state });
+					await write(store, op, { entry: state.id, shape: Product, state });
 
 					expect(await includes(state, Product)).toBeTruthy();
 
@@ -489,7 +523,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 
 					const state: Resource = { ...existing, reviews: empty };
 
-					await store[op]({ entry: existing.id, shape: Product, state });
+					await write(store, op, { entry: existing.id, shape: Product, state });
 
 					expect(await includes({ ...existing, reviews: undefined }, Product)).toBeTruthy();
 
@@ -530,7 +564,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 						reviews: [survivor, {}]
 					};
 
-					await store[op]({ entry: existing.id, shape: Product, state });
+					await write(store, op, { entry: existing.id, shape: Product, state });
 
 					expect(await includes({ ...existing, reviews: [survivor] }, Product)).toBeTruthy();
 
@@ -556,7 +590,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 
 					const state: Resource = { ...existing, categories: empty };
 
-					await expect(store[op]({ entry: existing.id, shape: Product, state }))
+					await expect(write(store, op, { entry: existing.id, shape: Product, state }))
 						.rejects.toBeInstanceOf(TraceError);
 
 				})());
@@ -582,7 +616,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 
 					const state: Resource = { ...existing, aliases: ["Dup Alias", "Dup Alias", "Other Alias"] };
 
-					await store[op]({ entry: existing.id, shape: Vendor, state });
+					await write(store, op, { entry: existing.id, shape: Vendor, state });
 
 					expect(await includes({ ...existing, aliases: ["Dup Alias", "Other Alias"] }, Vendor)).toBeTruthy();
 
@@ -613,7 +647,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 						reviews: [oldReviews[0]]
 					};
 
-					await store.update({ entry: state.id, shape: Product, state });
+					await store.update({ entry: state.id, shape: Product, state: loose(state) });
 
 					expect(await includes(state, Product)).toBeTruthy();
 
@@ -639,7 +673,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 
 					const state: Resource = { ...existing, keywords: empty };
 
-					await store.update({ entry: existing.id, shape: Product, state });
+					await store.update({ entry: existing.id, shape: Product, state: loose(state) });
 
 					expect(await includes({ ...existing, keywords: undefined }, Product)).toBeTruthy();
 					expect(await excludes({ id: existing.id, keywords: existing.keywords }, Product)).toBeTruthy();
@@ -666,7 +700,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 						}
 					});
 
-					await store.create({ entry: state.id, shape: Product, state });
+					await created(store, { entry: state.id, shape: Product, state });
 
 					expect(await includes(state, Product)).toBeTruthy();
 
@@ -692,7 +726,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 					} as Resource[string]
 				};
 
-				await expect(store[op]({ entry: sample.id, shape: Product, state }))
+				await expect(write(store, op, { entry: sample.id, shape: Product, state }))
 					.rejects.toBeInstanceOf(TraceError);
 
 			}));
@@ -708,7 +742,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 
 				const state: Resource = { ...sample, description: { en: [] } };
 
-				await expect(store[op]({ entry: sample.id, shape: Product, state }))
+				await expect(write(store, op, { entry: sample.id, shape: Product, state }))
 					.rejects.toBeInstanceOf(TraceError);
 
 			}));
@@ -736,7 +770,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 
 					const state: Resource = { ...existing, description: empty };
 
-					await store[op]({ entry: existing.id, shape: Product, state });
+					await write(store, op, { entry: existing.id, shape: Product, state });
 
 					expect(await includes({ ...existing, description: undefined }, Product)).toBeTruthy();
 					expect(await excludes({
@@ -764,7 +798,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 
 					const state: Resource = { ...existing, keywords: { en: [] } };
 
-					await store[op]({ entry: existing.id, shape: Product, state });
+					await write(store, op, { entry: existing.id, shape: Product, state });
 
 					expect(await includes({ ...existing, keywords: undefined }, Product)).toBeTruthy();
 					expect(await excludes({ id: existing.id, keywords: existing.keywords }, Product)).toBeTruthy();
@@ -1032,7 +1066,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 					value: undefined
 				},
 
-				// literal-variant unions (§5.4): Vendor.score is union(decimal[0..5], grade string) and
+				// literal-variant unions (§3.3): Vendor.score is union(decimal[0..5], grade string) and
 				// Vendor.certified is union(boolean, decimal[0..5], grade string, year). Every variant is a
 				// literal, so the storage branch is fixed purely by the value's domain membership — one row
 				// per branch confirms persistence selects exactly the matching branch.
@@ -1081,7 +1115,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 				},
 
 				// literal-variant switches (insert + update): switching a literal union to a value on a
-				// different branch must retract the old branch's triple and write the new one (§5.4),
+				// different branch must retract the old branch's triple and write the new one (§3.3),
 				// the literal-union analogue of the node-union primitive/embedded switches above
 
 				{
@@ -1135,7 +1169,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 
 							};
 
-							await store.create({ entry: id, shape: Vendor, state });
+							await created(store, { entry: id, shape: Vendor, state });
 
 							const probe = expected === undefined
 								? state
@@ -1157,7 +1191,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 								? { ...existing, name: `Vendor With ${slot} (${op})` }
 								: { ...existing, [slot]: value };
 
-							await store[op]({ entry: existing.id, shape: Vendor, state });
+							await write(store, op, { entry: existing.id, shape: Vendor, state });
 
 							const probe: Resource = value === "preserve"
 								? state
@@ -1176,14 +1210,14 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 
 			it("should reject an unsatisfiable union state value", factory(async ({ store }) => {
 
-				// §5.4: a state value matching no declared variant is unsatisfiable. A score of 9 lies
+				// §3.3: a state value matching no declared variant is unsatisfiable. A score of 9 lies
 				// outside the decimal[0..5] domain and is not a grade string, so it singles out no branch.
 				// Validation rejects ahead of the existence check, so the failure holds across ops.
 				//
 				// An ambiguous state value (matching several variants) is unreachable with the suite's
 				// shapes, whose union variants are deliberately disjoint (disjointness is a modelling
-				// requirement, blue union.md). Ambiguity is a write-side (sh:xone) concern only: on read
-				// a placeholder matching several branches is accepted and retrieves each (sh:or, §5.4).
+				// requirement, blue Unions). Ambiguity is a write-side (sh:xone) concern only: on read
+				// a placeholder matching several branches is accepted and retrieves each (sh:or, §5.5).
 
 				const code = { create: "9920", update: "9921", insert: "9922" }[op];
 				const id = `https://data.example.net/vendors/${code}`;
@@ -1200,7 +1234,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 					created: "2026-01-01T00:00:00.000Z"
 				};
 
-				await expect(store[op]({ entry: id, shape: Vendor, state }))
+				await expect(write(store, op, { entry: id, shape: Vendor, state }))
 					.rejects.toBeInstanceOf(TraceError);
 
 			}));
@@ -1241,7 +1275,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 
 					};
 
-					await store[op]({ entry: state.id, shape: Category, state });
+					await write(store, op, { entry: state.id, shape: Category, state });
 
 					expect(await includes(state, Category)).toBeTruthy();
 
@@ -1268,7 +1302,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 
 					const state = testProduct("NEW-007", "Forward-Reverse Product", { price: 21.99, stock: 7, vendor });
 
-					await store.create({ entry: state.id, shape: Product, state });
+					await created(store, { entry: state.id, shape: Product, state });
 
 					// forward triple <product> toys:vendor <vendor>
 
@@ -1307,7 +1341,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 
 					};
 
-					await store.create({ entry: id, shape: Category, state });
+					await created(store, { entry: id, shape: Category, state });
 
 					// no narrower-derived triple should have been materialised through the foreign slot
 
@@ -1328,7 +1362,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 				const code = { create: "9930", update: "9932", insert: "9933" }[op];
 				const id = `https://data.example.net/categories/${code}`;
 
-				await expect(store[op]({
+				await expect(write(store, op, {
 					entry: id,
 					shape: Category,
 					state: {

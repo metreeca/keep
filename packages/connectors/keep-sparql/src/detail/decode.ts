@@ -15,36 +15,33 @@
  */
 
 import { type Property, type ResourceShape } from "@metreeca/blue/resource";
-import { getShapeBranches, type UnionShape } from "@metreeca/blue/union";
+import { getShapeBranches } from "@metreeca/blue/union";
 import { eager, type Shape } from "@metreeca/blue/value";
-import { type Identifier, isAny, isArray, isObject } from "@metreeca/core";
+import { type Identifier, isArray, isObject } from "@metreeca/core";
 import { unique } from "@metreeca/core/arrays";
-import { matchTag, type Tag } from "@metreeca/core/language";
+import { isTagRange, matchTag, type Tag } from "@metreeca/core/language";
 import type { Scope } from "@metreeca/core/scope";
 import { equals } from "@metreeca/core/values";
 import {
 	type Branch,
 	type Flake,
+	type Drain,
 	getFlakeEntries,
 	getFlakeVariant,
 	isModelBranch,
-	isQueryBranch,
-	type Mould
+	isQueryBranch
 } from "@metreeca/keep-flake";
-import type { Broker, Deferred, Lookup, Response } from "@metreeca/keep/batching";
+import type { Broker, Deferred, Detail, Response } from "@metreeca/keep/batching";
 import type { Dictionary, Reference, Resource, Value, Values } from "@metreeca/qest/state";
-import { isSelector } from "@metreeca/qest/model";
 import type { Term } from "@metreeca/trio";
 import type { Tuple, Variable } from "@metreeca/wire-sparql";
 import { column } from "../_/_decode.js";
-import { isExpanded } from "../_/_model.js";
-import { getUnionPlaceholders } from "../_/_union.js";
 
 
 /**
  * Decodes a SELECT result tuple set into a resource state.
  *
- * Reads back the arms the emitter produced, walking the same {@link Flake | lookup plan} and resolving
+ * Reads back the arms the emitter produced, walking the same {@link Flake | detail plan} and resolving
  * each property from its column in the returned `tuples` through the shared {@link Scope}. Each property
  * is read by the counterpart of the arm that emitted it:
  *
@@ -52,8 +49,7 @@ import { getUnionPlaceholders } from "../_/_union.js";
  *    expanded resource;
  *  - a **localised** property collects every tagged term across its arm's rows into a tag-keyed
  *    dictionary or the shorthand the model requests;
- *  - a **variant** property reads whichever requested variant's column bound ({@link getUnionPlaceholders},
- *    union.md §Model), fixing the variant by the bound column with no term classification: the read-side
+ *  - a **variant** property reads whichever requested variant's column bound (blue Unions §Model), fixing the variant by the bound column with no term classification: the read-side
  *    dual of the emitter's membership gate.
  *
  * Properties with no emitted column resolve inline: set-valued properties forward to the collections
@@ -62,24 +58,24 @@ import { getUnionPlaceholders } from "../_/_union.js";
  * that breaches the shape contract write-time validation upholds.
  *
  * @param scope The variable scope shared with the encoder
- * @param items The batched requests, each paired with its {@link Flake | lookup plan} and deferred
+ * @param items The batched requests, each paired with its {@link Flake | detail plan} and deferred
  * @param broker The cross-pass channel forwarding set-valued slots to the collections pass
  * @param tuples The solution rows returned by the batched SELECT query
  */
 export function decode(
 	scope: Scope<Variable>,
-	items: readonly (Deferred<Lookup> & { readonly flake: Flake })[],
+	items: readonly (Deferred<Detail> & { readonly flake: Flake })[],
 	broker: Broker,
 	tuples: readonly Tuple[]
 ): void {
 
 	// ;(cast) the decoded resource is the instance the request asked for: the walk is driven by the very flake
 	// the model built, so its slots are the model's keys. The static inference no longer says so, reading leaf
-	// types off a notation that no longer carries them (see `@metreeca/keep/_inference`).
+	// types off a notation that no longer carries them (see `@metreeca/blue/value`).
 
 	items.forEach(({ request, flake, resolve, reject }) =>
 		decodeResource(request.entry, flake, request.locale)
-			.then(resource => resolve(resource as Response<Lookup>))
+			.then(resource => resolve(resource as Response<Detail>))
 			.catch(reject)
 	);
 
@@ -107,16 +103,14 @@ export function decode(
 		return Promise.all(branches.map((branch): Slot | Promise<Slot> => {
 
 			// a value set resolving to no content is never surfaced as an empty array or map (§4):
-			// the owning property is omitted from the decoded resource instead, except on a
-			// constrained collection (a query tuple carrying a selection), whose value is the
-			// filtered result set and legitimately empty
+			// the owning property is omitted from the decoded resource instead, constrained
+			// collections included
 
 			return isQueryBranch(branch) ? broker
-					.select({ entry, shape, field: branch.entry, query: branch.drain.mould, locale })
-					// ;(cast) the selected collection is the property's decoded value set, as above
+					.select({ entry, shape, field: branch.entry, query: branch.drain.query, locale })
 					.then((values): Slot => [
 						branch.path[branch.path.length-1],
-						isSelected(branch.drain.mould) || !isEmpty(values) ? values as Values : undefined
+						isEmpty(values) ? undefined : values
 					])
 
 				: isModelBranch(branch) ? Promise
@@ -146,26 +140,26 @@ export function decode(
 
 		const rangeShape = eager(branch.entry.range.shape);
 
-		const model = branch.drain?.mould;
+		const drain = branch.drain;
 
 		if ( rangeShape.kind === "union" ) {
 
-			return decodeUnion(rangeShape, locale, branch, model)[0];
+			return decodeUnion(locale, branch, drain)[0];
 
 		} else if ( rangeShape.kind === "dictionary" ) {
 
 			// localised slots resolve as a single structured `Localised` value, not a collection:
-			// the `Locale` placeholder's tag ranges select the languages and fix the per-tag cardinality
+			// the `Locale` placeholder's tag ranges select the languages, the property the per-tag cardinality
 
 			return decodeDictionary(
-				locale, model,
+				locale, drain,
 				unique(column(scope.resolve(branch), tuples), equals),
 				rangeShape.uniqueLang === true
 			);
 
 		} else {
 
-			return decodeValue(rangeShape, locale, getFlakeEntries(branch), model, unique(column(scope.resolve(branch), tuples), equals))[0];
+			return decodeValue(rangeShape, locale, getFlakeEntries(branch), drain, unique(column(scope.resolve(branch), tuples), equals))[0];
 
 		}
 
@@ -174,17 +168,16 @@ export function decode(
 	/**
 	 * Decodes the localised arm: the language-tagged terms matched against a localised placeholder.
 	 *
-	 * Structural access (a {@link @metreeca/qest/model!Locale | Locale} placeholder) yields the
+	 * Structural access (a {@link @metreeca/qest/model!Locale | Locale} placeholder, §5.4) yields the
 	 * {@link Dictionary} map of the tags matching the requested ranges by RFC 4647 basic filtering (the wildcard `*`
-	 * or an empty map admits every tag), with the per-tag cardinality fixed by the placeholder's value shape. Coalesced
-	 * access (a plain string or singleton-array placeholder) reduces the map to the first locale-priority
-	 * tag present (§6.2), at the matching per-tag cardinality. A typed literal carrying no language tag
-	 * lands under the `und` tag. A result carrying no content resolves to `undefined`, so the owning
+	 * admits every tag). Coalesced access (the atomic `{}`, §5.3) reduces the map to the first locale-priority tag
+	 * present (§6.2). Either way the per-tag cardinality is the one the property declares. A typed literal carrying
+	 * no language tag lands under the `und` tag. A result carrying no content resolves to `undefined`, so the owning
 	 * property is omitted (§4).
 	 */
 	function decodeDictionary(
 		locale: readonly Tag[],
-		placeholder: Mould | undefined,
+		drain: undefined | Drain,
 		terms: readonly Term[],
 		uniqueLang: boolean
 	): string | readonly string[] | Dictionary | undefined {
@@ -198,9 +191,9 @@ export function decode(
 		});
 
 		// §5.4: a tag-range map asks for the property structurally, the atomic leaf `{}` for its coalesced
-		// label; the two are told apart by key presence, `{}` no longer standing for "every tag"
+		// label; the two are told apart by the drain form, `{}` no longer standing for "every tag"
 
-		const ranges = Object.keys(placeholder ?? {}).filter(key => !isSelector(key));
+		const ranges = drain?.form === "locale" ? Object.keys(drain.query).filter(isTagRange) : [];
 
 		if ( ranges.length > 0 ) {
 
@@ -235,27 +228,24 @@ export function decode(
 	/**
 	 * Decodes the variant arms, the read-side dual of the emitter's membership gate: each requested variant
 	 * owns its own arm and object column, so the value's variant is fixed by which column bound, with no
-	 * term classification (union.md §Model). The property is single-valued, so the first requested variant
+	 * term classification (blue Unions §Model). The property is single-valued, so the first requested variant
 	 * whose column is bound stands; same-kind variants decode an identical bare payload. Resolves to no
 	 * value when no variant column bound, omitting the owning property (§4).
 	 */
 	function decodeUnion(
-		shape: UnionShape,
 		locale: readonly Tag[],
 		branch: Branch & { readonly entry: Property },
-		placeholder: unknown
+		drain: undefined | Drain
 	): readonly (Value | Promise<Resource>)[] {
 
-		const variants = getShapeBranches(shape);
+		const requested = drain?.form === "union" ? drain.variants : new Map<Shape, Drain>();
 
-		const requested = getUnionPlaceholders(variants, placeholder);
-
-		const present = variants.find(variant =>
-			variant.kind !== "dictionary" && requested.has(variant) && unique(column(scope.resolve(variant), tuples), equals).length > 0
+		const present = [...requested.keys()].find(variant =>
+			variant.kind !== "dictionary" && unique(column(scope.resolve(branch, variant), tuples), equals).length > 0
 		);
 
 		return present === undefined ? []
-			: decodeValue(present, locale, getFlakeVariant(branch, present), requested.get(present), unique(column(scope.resolve(present), tuples), equals));
+			: decodeValue(present, locale, getFlakeVariant(branch, present), requested.get(present), unique(column(scope.resolve(branch, present), tuples), equals));
 	}
 
 	/**
@@ -267,7 +257,7 @@ export function decode(
 		shape: Shape,
 		locale: readonly Tag[],
 		branches: readonly Branch[],
-		placeholder: unknown,
+		drain: undefined | Drain,
 		terms: readonly Term[]
 	): readonly (Value | Promise<Resource>)[] {
 
@@ -287,7 +277,9 @@ export function decode(
 
 			case "reference":
 
-				return isExpanded(placeholder)
+				// the atomic keeps the bare references
+
+				return drain?.form === "template"
 					? entries().map(entry => decodeVariant(entry, eager(shape.target), locale, branches))
 					: entries();
 
@@ -324,18 +316,6 @@ export function decode(
 		return value === undefined
 			|| isArray(value, [])
 			|| isObject(value, {});
-	}
-
-	/**
-	 * Tests whether a collection query carries at least one constraint: such a slot is a filtered query
-	 * whose result set is returned even when empty, rather than an unconstrained value set subject to
-	 * empty-value omission (§4).
-	 *
-	 * Constraints ride on the node retrieving the collection (§5.6), so the test reads the node's own
-	 * criteria keys where it once read a query tuple's second slot.
-	 */
-	function isSelected(query: Mould): boolean {
-		return Object.keys(query).some(isSelector);
 	}
 
 }

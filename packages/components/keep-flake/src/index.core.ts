@@ -25,12 +25,29 @@
  */
 
 import { getShapeTarget } from "@metreeca/blue/reference";
+import type { Member } from "@metreeca/blue/resource";
 import { getModelBranches, getShapeBranches } from "@metreeca/blue/union";
 import { effective, type Range, type Shape } from "@metreeca/blue/value";
-import { type Identifier, isObject, isString, opt } from "@metreeca/core";
+import { type Identifier, isArray, isObject, isString, type Lazy, opt } from "@metreeca/core";
 import { TraceError } from "@metreeca/core/trace";
-import { encodeProbe, isSelector, type Transform } from "@metreeca/qest/model";
-import type { Branch, Entries, Mould } from "./index.js";
+import {
+	encodeProbe,
+	isAtomic,
+	isBranch,
+	isCell,
+	isLocale,
+	isProjection,
+	isQuery,
+	isSelector,
+	isSlot,
+	isTemplate,
+	type Placeholder,
+	type Query,
+	type Slot,
+	type Transform,
+	type Union
+} from "@metreeca/qest/model";
+import type { Branch, Drain, Entries } from "./index.js";
 
 
 /**
@@ -83,16 +100,201 @@ function getRange(source: Shape | Range, path: readonly Identifier[], pipe: read
 
 
 /**
+ * Pairs each union variant a query retrieves with every alternative reaching it (§5.5).
+ *
+ * A query addresses a union-typed property in one of two forms:
+ *
+ *  - a **keyed** {@link @metreeca/qest/model!Union | union}, whose retrieval keys are all opaque branch keys, states
+ *    one alternative per key;
+ *  - any **other** query is itself the single alternative.
+ *
+ * Each alternative reaches the variants it matches by form (§5.3): an atomic every variant it can stand for, a
+ * template the nested-resource variants its properties are valid on, a locale the localised variant. One alternative
+ * may thus reach several variants, and one variant may be reached by several alternatives.
+ *
+ * Alternatives are returned as their retrieval half: the criteria riding on the query (§5.6) constrain the collection
+ * as a whole and select no variant.
+ *
+ * > [!IMPORTANT]
+ * > Queries are expected to have passed template validation against the property's shape, which rejects an
+ * > alternative matching no variant (§5.3, §5.5); an alternative that still matches none contributes nothing here.
+ *
+ * @param shape The union-typed property's shape, possibly deferred to break definition cycles; its variants are
+ * resolved as {@link @metreeca/blue/union!getShapeBranches | getShapeBranches} enumerates them
+ * @param query The union-typed property's query: a keyed union, or a single alternative
+ *
+ * @returns One `[variant, alternative]` pair per alternative and variant it reaches, in alternative order; empty
+ * when the query reaches no variant
+ */
+export function getUnionBranches(shape: Lazy<Shape>, query: Query<Slot>): readonly (readonly [Shape, Query<Slot>])[] {
+
+	const branches = getShapeBranches(shape);
+
+	return isKeyed(query)
+		? getQueryEntries(query).flatMap(([, alternative]) => pairs(alternative))
+		: pairs(retrieval(query));
+
+
+	function retrieval(query: Query<Slot>): Slot {
+
+		// ;(cast) Object.fromEntries widens the retrieval entries to a string-keyed record; every key of a query
+		// but the criteria is one the slot declares, so the record is the slot the query states
+
+		return Object.fromEntries(getQueryEntries(query)) as Slot;
+
+	}
+
+	function isKeyed(query: Query<Slot>): query is Query<Union<Placeholder>> {
+
+		// the keyed form is decided once for the query as a whole, by its keys alone: branch keys are disjoint
+		// from every other retrieval key space and admit no mixing (§5.5), and the atomic, stating no key at all,
+		// is a single alternative; the branches hold the placeholders a valid query states under them
+
+
+		const keys = Object.keys(query).filter(key => !isSelector(key));
+
+		return keys.length > 0 && keys.every(isBranch);
+
+	}
+
+	function pairs(alternative: Query<Slot>): readonly (readonly [Shape, Query<Slot>])[] {
+		return (getModelBranches(alternative, branches) ?? []).map((variant): readonly [Shape, Query<Slot>] =>
+			[variant, alternative]
+		);
+	}
+
+}
+
+/**
+ * Resolves which union branches a query retrieves, and the alternative retrieving each.
+ *
+ * Reads the query as {@link getUnionBranches} does and folds the alternatives reaching the same variant into
+ * the one request for it, so a variant is retrieved once, to the depth its most demanding alternative asks for: a
+ * structured alternative (a template or a locale) prevails over the atomic, and structured alternatives merge their
+ * keys, recursively where the same key is requested by several; where they state different criteria for the same
+ * nested collection, the later alternative's criterion prevails. The map is the single source of truth shared by an
+ * encoder emitting one arm per retrieved variant and a decoder reading each retrieved variant's column and shaping
+ * it through its alternative.
+ *
+ * @param shape The union-typed property's shape, possibly deferred to break definition cycles; its variants are
+ * resolved as {@link @metreeca/blue/union!getShapeBranches | getShapeBranches} enumerates them
+ * @param query The union-typed property's query: a keyed union, or a single alternative
+ *
+ * @returns Each retrieved variant mapped to its folded alternative, in the order alternatives first reach them;
+ * empty when the query reaches no variant
+ */
+export function getUnionPlaceholders(shape: Lazy<Shape>, query: Query<Slot>): ReadonlyMap<Shape, Query<Slot>> {
+
+	const alternatives = getUnionBranches(shape, query);
+	const reached = [...new Set(alternatives.map(([variant]) => variant))];
+
+	return new Map(reached.map(variant => [variant, alternatives
+		.filter(([target]) => target === variant)
+		.map(([, alternative]) => alternative)
+		.reduce(mergeQueries)
+	]));
+
+}
+
+/**
+ * Folds two requests for the same node into one, retrieving to the depth the more demanding asks for.
+ *
+ * A structured request (a template or a locale) prevails over the atomic, and structured requests merge their keys,
+ * recursively where both request the same key; where they state different criteria for the same nested collection,
+ * `y`'s criterion prevails.
+ *
+ * @param x The earlier request
+ * @param y The later request
+ *
+ * @returns The folded request
+ */
+export function mergeQueries(x: Query<Slot>, y: Query<Slot>): Query<Slot> {
+
+	// ;(cast) folding two queries key by key yields a query: shared keys fold recursively, the others carry over
+
+	return merge(x, y) as Query<Slot>;
+
+
+	function merge(x: unknown, y: unknown): unknown {
+		return isObject(x) && isObject(y)
+			? { ...x, ...Object.fromEntries(Object.entries(y).map(([key, value]) => [key, merge(x[key], value)])) }
+			: y ?? x;
+	}
+
+}
+
+
+/**
+ * Settles the {@link Drain} a query requests against a node's range.
+ *
+ * The form is read off the range and the query's retrieval keys: a multi-variant range reads the query as a
+ * union (§5.5), each variant it reaches carrying its own drain settled against that variant alone; no key is the
+ * atomic (§5.3); a collection takes a projection (§5.2); a localised range takes a locale map (§5.4) and a resource
+ * or reference range a template. The query is validated against the form it takes: Keep validates models at its
+ * boundary, so a query fitting no form the range admits is a contract violation.
+ *
+ * @param range The node's range
+ * @param query The query requested at the node
+ * @param alias The projection alias the query binds to the node, if any
+ *
+ * @returns The drain requested at the node
+ *
+ * @throws RangeError if `query` takes no form `range` admits
+ */
+export function getDrain(range: Range, query: Query<Slot>, alias?: Identifier): Drain {
+
+	const bound = alias === undefined ? {} : { alias };
+	const variants = getShapeBranches(range.shape);
+	const [variant] = variants;
+
+	if ( variants.length > 1 && isQuery(query, isCell) ) {
+
+		// a variant's drain is settled against the node's range restricted to that variant
+
+		const placeholders = [...getUnionPlaceholders(range.shape, query)].map(([variant, placeholder]): readonly [Shape, Drain] =>
+			[variant, getDrain({ ...range, shape: variant }, placeholder)]
+		);
+
+		return { ...bound, form: "union", query, variants: new Map(placeholders) };
+
+	} else if ( isQuery(query, isAtomic) ) {
+
+		return { ...bound, form: "atomic", query };
+
+	} else if ( range.maxCount !== 1 && variant.kind !== "dictionary" && isQuery(query, isProjection) ) {
+
+		return { ...bound, form: "projection", query };
+
+	} else if ( variant.kind === "dictionary" && isQuery(query, isLocale) ) {
+
+		return { ...bound, form: "locale", query };
+
+	} else if ( (variant.kind === "resource" || variant.kind === "reference") && isQuery(query, isTemplate) ) {
+
+		return { ...bound, form: "template", query };
+
+	} else {
+
+		throw new RangeError(`unsupported query form <${JSON.stringify(query)}>`);
+
+	}
+
+}
+
+
+/**
  * Assembles a node's property-major {@link Entries} from its effective range and the requested model.
  *
- * Folds the `model` fragment against `range`, emitting one {@link Branch} per requested property a variant
- * declares. A multi-variant range reads the §5.4 keyed form: each object-valued alternative is matched against the
- * variants and the per-variant records are merged through {@link mergeEntries}. A single-variant range folds the
- * whole model against that variant. Either way each reachable variant resolves its target and folds every model
- * entry against the target's declared properties: vacuous placeholders and names the target does not declare are
- * dropped, `id` and `type` entries become terminal branches, and property entries carry their requested fragment as
- * their {@link Flake.drain | drain}. Only a single-valued range expanded inline as a nested object is descended for
- * nested properties; a leaf placeholder or a multi-valued range (which carries a
+ * Folds the `model` fragment against `range`, emitting one {@link Branch} per requested property some variant
+ * declares. A multi-variant range reads the query as a union (§5.5): each alternative is matched against the
+ * variants by form. A single-variant range folds the whole model against that variant. Either way each reachable
+ * variant resolves its target and folds every model entry against the target's declared properties: names the target
+ * does not declare are dropped, `id` and `type` entries become terminal branches, and property entries carry their
+ * requested query as their {@link Flake.drain | drain}. A name declared by several variants is one property (union
+ * coherence, §3.2): the requests reaching it fold through {@link mergeQueries} into one branch, entered through the
+ * first declaring variant's member and ranging over the disjunction of the per-variant declarations (§5.8.1). Only a
+ * single-valued range expanded inline as a nested object is descended for nested
+ * properties; a leaf placeholder or a multi-valued range (which carries a
  * {@link @metreeca/qest/model!Query | Query}) holds none (§6.2). `path` accumulates the branch path to this node
  * and is prefixed onto every emitted child branch.
  *
@@ -104,147 +306,147 @@ function getRange(source: Shape | Range, path: readonly Identifier[], pipe: read
  * non-object `model`, or a range no variant of which contributes a record (no variant resolves an owned target, or
  * a multi-variant range's alternatives match no variant)
  */
-export function getEntries(range: Range, path: readonly Identifier[], model: Mould): Entries | undefined {
+export function getEntries(range: Range, path: readonly Identifier[], model: Query<Slot>): Entries | undefined {
 
-	// each reachable variant folds its model fragment against its target's declared properties, merged across
-	// variants: a multi-variant range reads the §5.4 keyed union form (each object-valued alternative matched to
-	// the variants it fits by kind), a single-variant range takes the whole model
+	// each reachable variant folds its model fragment against its target's declared properties: a multi-variant
+	// range reads the query as a union (§5.5, each alternative matched to the variants it fits by form), a
+	// single-variant range takes the whole model
 
 	const variants = getShapeBranches(range.shape);
 
-	if ( !isObject(model) ) {
+	const requests: readonly (readonly [Shape, Query<Slot>])[] = !isObject(model) ? []
+		: variants.length > 1 ? getUnionBranches(range.shape, model)
+			: variants.map((variant): readonly [Shape, Query<Slot>] => [variant, model]);
 
-		return undefined;
+	// one record of declared requests per variant resolving a target, so a range no variant of which resolves one
+	// holds no record at all
 
-	} else if ( variants.length > 1 ) {
+	const records = requests.flatMap(([variant, request]) => opt(getShapeTarget(variant), target => [
 
-		return mergeEntries(getMouldEntries(model).flatMap(([, alternative]) =>
-			getModelBranches(alternative, variants)?.flatMap(variant => descend(variant, alternative)) ?? []
-		));
+		// a resource target is descended by a template (§5.3): any other form names no property of it
 
-	} else {
+		(isQuery(request, isTemplate) ? getQueryEntries(request) : []).flatMap(([name, query]) =>
+			opt(target.members[name], (member): readonly (readonly [Identifier, Member, Query<Slot>])[] =>
+				[[name, member, query]], []
+			)
+		)
 
-		return mergeEntries(variants.flatMap(variant =>
-			descend(variant, model)
-		));
+	], []));
 
-	}
+	// a name declared by several variants is one property (§3.2): its first declaring member enters it, and the
+	// requests reaching it fold into one
 
+	const declared = records.flat().reduce<Readonly<Record<Identifier, readonly [Member, Query<Slot>]>>>(
+		(folded, [name, member, query]) => ({
+			...folded, [name]: name in folded ? [folded[name][0], mergeQueries(folded[name][1], query)] : [member, query]
+		}),
+		{}
+	);
 
-	function descend(shape: Shape, model: Mould) {
-		return opt(getShapeTarget(shape), target => {
+	return records.length === 0 ? undefined : Object.fromEntries(Object.entries(declared).flatMap<[Identifier, Branch]>(([name, [member, query]]) => {
 
-			if ( isObject(model) ) {
+		const lower: readonly Identifier[] = [...path, name];
 
-				return [Object.fromEntries(getMouldEntries(model).flatMap<[Identifier, Branch[]]>(([k, v]) => {
+		if ( member.kind === "id" || member.kind === "type" ) {
 
-					const field = target.members[k];
-					const lower: readonly Identifier[] = [...path, k];
+			return [[name, {
 
-					if ( field === undefined ) {
+				entry: member,
 
-						return [];
+				path: lower,
+				pipe: [],
 
-					} else if ( field.kind === "id" || field.kind === "type" ) {
+				range: getPropertyRange(range, name)
 
-						return [[k, [{
+			}]];
 
-							entry: field,
+		} else if ( member.kind === "property" ) {
 
-							path: lower,
-							pipe: [],
+			const child = getPropertyRange(range, name);
 
-							range: getPropertyRange(range, k)
+			// the atomic leaf asks for the value as it stands (§5.3), so a reference under it comes back as the
+			// identifier naming its target rather than expanded; only a fragment stating retrieval keys of its own
+			// descends
 
-						}]]];
+			const entries = child.maxCount === 1 && !isQuery(query, isAtomic)
+				? getEntries(child, lower, query)
+				: undefined;
 
-					} else if ( field.kind === "property" ) {
+			return [[name, {
 
-						const child = getPropertyRange(range, k);
+				...(entries ? { entries } : {}),
 
-						// the atomic leaf asks for the value as it stands (§5.3), so a reference under it comes
-						// back as the identifier naming its target rather than expanded; only a fragment stating
-						// retrieval keys of its own descends
+				entry: member,
 
-						const entries = child.maxCount === 1 && getMouldEntries(v).length > 0
-							? getEntries(child, lower, v)
-							: undefined;
+				path: lower,
+				pipe: [],
 
-						return [[k, [{
+				range: child,
+				drain: getDrain(child, query)
 
-							...(entries ? { entries } : {}),
+			}]];
 
-							entry: field,
+		} else {
 
-							path: lower,
-							pipe: [],
+			return [];
 
-							range: child,
-							drain: { mould: v }
+		}
 
-						}]]];
-
-					} else {
-
-						return [];
-
-					}
-
-				}))];
-
-			} else {
-
-				return [];
-
-			}
-
-		}, []);
-	}
+	}));
 
 }
 
 /**
- * The retrieval half of a node's requested fragment.
+ * Merges property-major {@link Entries} records reaching the same node into one.
  *
- * Retrieval keys and constraint keys share one key space (§5.6), so a walk descending the retrieval keys drops
- * the {@link @metreeca/qest/model!Criteria | criteria} narrowing the node's own collection, which the node
- * carries in its own slots rather than in a branch. An entry set to the absent marker `undefined` names
- * nothing and is dropped with them.
+ * A name several records hold is one property, so its branches fold into one: the earlier branch's slots prevail
+ * and their nested entries merge recursively. With no records there are no properties, so the result is `undefined`
+ * and the caller omits the slot.
  *
- * @param mould The requested fragment to read
+ * @param entries The property-major records, in precedence order
  *
- * @returns The fragment's retrieval entries, in stated order, each pairing a key with the fragment requested
- * under it
- */
-export function getMouldEntries(mould: Mould): readonly (readonly [Identifier, Mould])[] {
-
-	// ;(cast) with the constraint keys dropped, qest's Template contract leaves a retrieval fragment under
-	// every remaining key
-
-	return Object.entries(mould)
-		.filter(([key, value]) => !isSelector(key) && value !== undefined)
-		.map(([key, value]) => [key, value as Mould] as const);
-
-}
-
-/**
- * Merges per-variant property-major {@link Entries} records into one.
- *
- * Concatenates the branches under each shared property name, so a name declared by several variants
- * keeps every declaring branch, never a lossy merge. With no records there are no properties, so the
- * result is `undefined` and the caller omits the slot.
- *
- * @param entries The per-variant property-major records, in variant order
- *
- * @returns The merged property-major {@link Entries} record (property names in first-seen order,
- * branches in variant order), or `undefined` when `entries` is empty
+ * @returns The merged property-major {@link Entries} record (property names in first-seen order), or `undefined`
+ * when `entries` is empty
  */
 export function mergeEntries(entries: readonly Entries[]): undefined | Entries {
 
 	return entries.length === 0 ? undefined
 		: entries.flatMap(record => Object.entries(record)).reduce<Entries>(
-			(merged, [name, branches]) => ({ ...merged, [name]: [...(merged[name] ?? []), ...branches] }),
+			(merged, [name, branch]) => ({ ...merged, [name]: name in merged ? mergeBranches(merged[name], branch) : branch }),
 			{}
 		);
+
+
+	function mergeBranches(earlier: Branch, later: Branch): Branch {
+
+		const entries = mergeEntries([earlier.entries, later.entries].filter(record => record !== undefined));
+
+		return { ...later, ...earlier, ...(entries ? { entries } : {}) };
+
+	}
+
+}
+
+
+/**
+ * Lists the retrieval entries a query states.
+ *
+ * Splits off the retrieval half a {@link @metreeca/qest/model!Query | query} states from the
+ * {@link @metreeca/qest/model!Criteria | criteria} it carries alongside (§5.6): the criteria constrain the collection
+ * the query retrieves and are held by the node retrieving it, so a walk descending into the entries leaves them
+ * behind. Every retrieval form keys its entries by string and nests a query under each, so the entries serve
+ * whatever form the query takes.
+ *
+ * @param query The query to read
+ *
+ * @returns The query's retrieval entries, in stated order, each pairing a key with the query it states
+ */
+export function getQueryEntries(query: Query<Slot>): readonly (readonly [string, Query<Slot>])[] {
+
+	return Object.entries(query).filter(entry => isEntry(entry));
+
+	function isEntry(value: unknown): value is readonly [string, Query<Slot>] {
+		return isArray(value, [key => !isSelector(key), value => isQuery(value, isSlot)]);
+	}
 
 }

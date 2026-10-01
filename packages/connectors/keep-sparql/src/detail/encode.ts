@@ -17,7 +17,7 @@
 /**
  * Resources-pass SPARQL emitter.
  *
- * Folds every batched request's {@link Flake | lookup plan} into one `SELECT` whose `WHERE` is a
+ * Folds every batched request's {@link Flake | detail plan} into one `SELECT` whose `WHERE` is a
  * `UNION` of arms. `UNION` sums solutions rather than joining them, so giving each fan-out source its
  * own arm keeps the row count a sum of per-slot cardinalities instead of a cross-product. Set-valued
  * properties go to the collections pass, so this pass sees only single-valued slots and the only
@@ -30,9 +30,8 @@
  *    embedded resources), every edge `OPTIONAL` so one row carries all bound slots;
  *  - a **localised** arm per `dictionary` leaf (from {@link composites}): the required path to the leaf's
  *    parent, then the localised edge binding one tagged-term column;
- *  - a **variant** arm per requested union variant (from {@link composites}; {@link getUnionPlaceholders},
- *    union.md §Model): the variant's object column gated by its {@link membership} constraint, then the
- *    variant's subtree.
+ *  - a **variant** arm per requested union variant (from {@link composites}; blue Unions §Model): the variant's object
+ * column gated by its {@link membership} constraint, then the variant's subtree.
  *
  * Variables come from the shared {@link Scope}, keyed on {@link Branch} identity (or the variant shape
  * for a variant column), so the decoder recovers each column by resolving the same node. Requests whose
@@ -41,16 +40,14 @@
  * @module
  */
 
-import { getShapeBranches } from "@metreeca/blue/union";
 import { eager } from "@metreeca/blue/value";
 import type { Scope } from "@metreeca/core/scope";
 import { type Branch, type Flake, getFlakeEntries, getFlakeVariant, isModelBranch } from "@metreeca/keep-flake";
-import type { Lookup } from "@metreeca/keep/batching";
+import type { Detail } from "@metreeca/keep/batching";
 import { named, type Named } from "@metreeca/trio";
 import { type SPARQL, type Variable } from "@metreeca/wire-sparql";
 import { all, fragment, optional, select, union, where } from "@metreeca/wire-sparql/builder";
 import { link, membership } from "../_/_encode.js";
-import { getUnionPlaceholders } from "../_/_union.js";
 
 
 /**
@@ -60,13 +57,13 @@ import { getUnionPlaceholders } from "../_/_union.js";
  * recover each request's columns.
  *
  * @param scope The variable allocator shared with the decoder, keyed on {@link Branch} identity
- * @param batch The root entries paired with their {@link Flake | lookup plans}
+ * @param batch The root entries paired with their {@link Flake | detail plans}
  *
  * @returns The unified SELECT query
  */
 export function encode(
 	scope: Scope<Variable>,
-	batch: readonly { readonly request: Lookup; readonly flake: Flake }[]
+	batch: readonly { readonly request: Detail; readonly flake: Flake }[]
 ): SPARQL {
 
 	return select(all(), where(
@@ -143,9 +140,14 @@ export function encode(
 
 			if ( shape.kind === "union" ) {
 
-				return [...getUnionPlaceholders(getShapeBranches(shape), branch.drain?.mould).keys()].flatMap(variant => {
+				const requested = branch.drain?.form === "union" ? [...branch.drain.variants.keys()] : [];
 
-					const target = scope.resolve(variant);
+				return requested.flatMap(variant => {
+
+					// keyed on the branch as well as the variant: a variant shape is shared by every request
+					// retrieving the same union, so the shape alone would conflate their columns
+
+					const target = scope.resolve(branch, variant);
 
 					return resource([
 							...path,

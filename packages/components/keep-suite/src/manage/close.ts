@@ -55,7 +55,7 @@ export function testManageClose(factory: TestFactory<Store>): void {
 		}));
 
 		([
-			["lookup", (s: Store) => s.lookup({ entry: closedEntry, shape: Product, model: { id: {} } })],
+			["detail", (s: Store) => s.lookup({ entry: closedEntry, shape: Product, model: { id: {} } })],
 			["delete", (s: Store) => s.delete({ entry: closedEntry, shape: Product })],
 			["execute", (s: Store) => s.execute(async () => undefined)],
 			["observe", (s: Store) => s.observe(() => {})]

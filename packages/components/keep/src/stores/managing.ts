@@ -106,14 +106,14 @@ export function createManagingStore(store: StoreClient, {
 
 	return immutable({
 
-		lookup: (specs, opts) => execute(store => store.lookup(specs, opts)),
+		lookup: (request, opts) => execute(store => store.lookup(request, opts)),
 
-		create: specs => notify(({ mutated }) => execute(store => store.create(specs).then(mutated))),
-		update: specs => notify(({ mutated }) => execute(store => store.update(specs).then(mutated))),
-		delete: specs => notify(({ deleted }) => execute(store => store.delete(specs).then(deleted))),
+		create: request => notify(({ mutated }) => execute(store => store.create(request).then(mutated))),
+		update: request => notify(({ mutated }) => execute(store => store.update(request).then(mutated))),
+		delete: request => notify(({ deleted }) => execute(store => store.delete(request).then(deleted))),
 
-		insert: specs => notify(({ mutated }) => execute(store => store.insert(specs).then(mutated))),
-		remove: specs => notify(({ deleted }) => execute(store => store.remove(specs).then(deleted))),
+		insert: request => notify(({ mutated }) => execute(store => store.insert(request).then(mutated))),
+		remove: request => notify(({ deleted }) => execute(store => store.remove(request).then(deleted))),
 
 
 		observe(observer, resources) {
@@ -146,14 +146,14 @@ export function createManagingStore(store: StoreClient, {
 
 			return notify(({ mutated, deleted }) => execute(store => task(immutable({
 
-				lookup: (specs, opts) => store.lookup(specs, opts),
+				lookup: (request, opts) => store.lookup(request, opts),
 
-				create: specs => store.create(specs).then(mutated),
-				update: specs => store.update(specs).then(mutated),
-				delete: specs => store.delete(specs).then(deleted),
+				create: request => store.create(request).then(mutated),
+				update: request => store.update(request).then(mutated),
+				delete: request => store.delete(request).then(deleted),
 
-				insert: specs => store.insert(specs).then(mutated),
-				remove: specs => store.remove(specs).then(deleted)
+				insert: request => store.insert(request).then(mutated),
+				remove: request => store.remove(request).then(deleted)
 
 			}))));
 

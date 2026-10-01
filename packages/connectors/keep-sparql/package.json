@@ -46,20 +46,20 @@
     "check": "npx vitest --typecheck run"
   },
   "dependencies": {
-    "@metreeca/blue": "^0.10.0",
-    "@metreeca/core": "^0.10.0",
+    "@metreeca/blue": "^0.11.0",
+    "@metreeca/core": "^0.12.0",
     "@metreeca/keep": "^0.11.0",
     "@metreeca/keep-flake": "^0.11.0",
-    "@metreeca/qest": "^0.10.0",
-    "@metreeca/tape": "^0.10.1",
-    "@metreeca/trio": "^0.1.1",
-    "@metreeca/wire-sparql": "^0.10.0"
+    "@metreeca/qest": "^0.11.0",
+    "@metreeca/tape": "^0.11.0",
+    "@metreeca/trio": "^0.1.2",
+    "@metreeca/wire-sparql": "^0.11.1"
   },
   "devDependencies": {
     "@metreeca/keep-suite": "^0.11.0",
-    "@metreeca/wire-sparql-http": "^0.10.0",
-    "@metreeca/wire-sparql-oxigraph": "^0.10.0",
-    "@metreeca/wire-sparql-rdf4j": "^0.10.0",
+    "@metreeca/wire-sparql-http": "^0.11.1",
+    "@metreeca/wire-sparql-oxigraph": "^0.11.1",
+    "@metreeca/wire-sparql-rdf4j": "^0.11.1",
     "oxigraph": "^0.5.8",
     "testcontainers": "^12.1.0",
     "typescript": "^5.9.3",

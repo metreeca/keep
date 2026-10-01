@@ -4,11 +4,13 @@
 
 Turnkey model-driven storage for linked data resources.
 
-> [!NOTE] Provisional notes:
->
-> - Storage layer for model-driven linked data management
-> - Data models defined using [@metreeca/blue](https://github.com/metreeca/blue)
-> - Declarative CRUD operations on linked data resources without hand-written queries
+**@metreeca/keep** stores and retrieves linked data resources independently of the backend holding them, driven by the
+resource models that describe them:
+
+- **Model-Driven Storage**: data models defined with [@metreeca/blue](https://github.com/metreeca/blue) drive storage
+  and validation
+- **Declarative Operations**: CRUD operations on linked data resources without hand-written queries
+- **Pluggable Connectors**: one storage API over every supported backend, one connector package per backend
 
 | Layer      | Package                                                 | Description                       |
 |------------|---------------------------------------------------------|-----------------------------------|

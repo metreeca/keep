@@ -15,15 +15,15 @@
  */
 
 import { reference } from "@metreeca/blue/reference";
-import { optional, type Property, resource, type ResourceShape } from "@metreeca/blue/resource";
+import { id, multiple, optional, type Property, required, resource, type ResourceShape } from "@metreeca/blue/resource";
+import { string } from "@metreeca/blue/string";
 import { eager } from "@metreeca/blue/value";
 import type { Lazy } from "@metreeca/core";
+import type { Query, Slot, Template } from "@metreeca/qest/model";
 import type { Reference } from "@metreeca/qest/state";
-import type { Template } from "@metreeca/qest/model";
-import type { Mould } from "../_inference.js";
 import { describe, expect, it } from "vitest";
-import { createBroker } from "./batching.core.js";
-import { type Broker, createBatchingStore, type Detect, type Lookup, type Modify, type Select } from "./batching.js";
+import { createBroker, mint } from "./batching.core.js";
+import { type Broker, createBatchingStore, type Detect, type Detail, type Modify, type Select } from "./batching.js";
 
 
 declare const process: {
@@ -35,18 +35,17 @@ declare const process: {
 describe("createBatchingStore", () => {
 
 	const shape: Lazy<ResourceShape> = () => ({ kind: "resource", classes: [], parents: [], members: {} });
-	const virtualShape: Lazy<ResourceShape> = () => ({ kind: "resource", classes: [], parents: [], members: {}, virtual: true });
 
 	const entry: Reference = "http://example.com/r";
 
-	// backs the store with stub handlers: `detect` reports the listed entries as present, `lookup`
-	// resolves a fixed instance, and `modify` resolves to the target entry. `detected`, `looked`, and
+	// backs the store with stub handlers: `detect` reports the listed entries as present, `detail`
+	// resolves a fixed instance, and `modify` resolves to the target entry. `detected`, `detailed`, and
 	// `modified` capture what reached each handler so tests can assert the conditional routing.
 
 	function batchedStore(present: readonly Reference[] = []) {
 
 		const detected: Reference[] = [];
-		const looked: Lookup[] = [];
+		const detailed: Detail[] = [];
 		const modified: Modify[] = [];
 		const instance = {};
 
@@ -57,9 +56,9 @@ describe("createBatchingStore", () => {
 					d.resolve(present.includes(d.request.entry));
 				});
 			},
-			async lookup(batch, _) {
+			async detail(batch, _) {
 				batch.forEach(d => {
-					looked.push(d.request);
+					detailed.push(d.request);
 					d.resolve(instance);
 				});
 			},
@@ -72,64 +71,51 @@ describe("createBatchingStore", () => {
 			}
 		});
 
-		return { store, detected, looked, modified, instance };
+		return { store, detected, detailed, modified, instance };
 
 	}
 
-	describe("lookup", () => {
+	describe("detail", () => {
 
-		it("returns the looked-up instance for a present resource", async () => {
+		it("returns the detailed instance for a present resource", async () => {
 
-			const { store, looked, instance } = batchedStore([entry]);
+			const { store, detailed, instance } = batchedStore([entry]);
 
 			const result = await store.lookup({ entry, shape, model: {} });
 
 			expect(result).toBe(instance);
-			expect(looked).toHaveLength(1);
+			expect(detailed).toHaveLength(1);
 
 		});
 
-		it("returns undefined for an absent resource without looking it up", async () => {
+		it("returns undefined for an absent resource without detailing it", async () => {
 
-			const { store, looked } = batchedStore([]);
+			const { store, detailed } = batchedStore([]);
 
 			const result = await store.lookup({ entry, shape, model: {} });
 
 			expect(result).toBeUndefined();
-			expect(looked).toEqual([]);
-
-		});
-
-		it("skips the existence probe for a virtual shape", async () => {
-
-			// the entry is absent, yet a virtual shape is looked up regardless of stored state
-
-			const { store, looked, instance } = batchedStore([]);
-
-			const result = await store.lookup({ entry, shape: virtualShape, model: {} });
-
-			expect(result).toBe(instance);
-			expect(looked).toHaveLength(1);
+			expect(detailed).toEqual([]);
 
 		});
 
 		it("defaults the locale to und when none is supplied", async () => {
 
-			const { store, looked } = batchedStore([entry]);
+			const { store, detailed } = batchedStore([entry]);
 
 			await store.lookup({ entry, shape, model: {} });
 
-			expect(looked[0].locale).toEqual(["und"]);
+			expect(detailed[0].locale).toEqual(["und"]);
 
 		});
 
 		it("forwards an explicitly supplied locale", async () => {
 
-			const { store, looked } = batchedStore([entry]);
+			const { store, detailed } = batchedStore([entry]);
 
 			await store.lookup({ entry, shape, model: {} }, { locale: ["en", "und"] });
 
-			expect(looked[0].locale).toEqual(["en", "und"]);
+			expect(detailed[0].locale).toEqual(["en", "und"]);
 
 		});
 
@@ -137,45 +123,105 @@ describe("createBatchingStore", () => {
 
 	describe("create", () => {
 
-		it("mutates an absent resource and resolves to its entry", async () => {
+		const Item = resource({ pattern: "/items/{code}" }, { id: id(), code: required(string()), name: required(string()) });
+		const Thing = resource({ id: id(), name: required(string()) });
+
+		const Catalogue = resource({ items: multiple(reference(Item)), things: multiple(reference(Thing)) });
+
+		const catalogue = "http://example.com/";
+		const item = "http://example.com/items/x1";
+
+		it("mints the identifier off the collected shape and mutates the new resource under it", async () => {
+
+			const { store, detected, modified } = batchedStore([]);
+
+			const result = await store.create({
+				entry: catalogue, shape: Catalogue, model: { items: {} }, state: { code: "x1", name: "x" }
+			});
+
+			expect(result).toBe(item);
+			expect(detected).toEqual([item]);
+			expect(modified[0].entry).toBe(item);
+			expect(modified[0].shape).toBe(Item);
+			expect(modified[0].state).toEqual({ code: "x1", name: "x" });
+
+		});
+
+		it("links the new resource into the collection through a plain property", async () => {
 
 			const { store, modified } = batchedStore([]);
 
-			const result = await store.create({ entry, shape, state: { label: "x" } });
+			await store.create({
+				entry: catalogue, shape: Catalogue, model: { items: {} }, state: { code: "x1", name: "x" }
+			});
 
-			expect(result).toBe(entry);
+			expect(modified).toHaveLength(2);
+			expect(modified[1]).toEqual({
+				entry: catalogue, shape: Catalogue, link: { property: eager(Catalogue).members.items, item }
+			});
+
+		});
+
+		it("doesn't link the new resource through a foreign property", async () => {
+
+			const Foreign = resource({ items: multiple(reference(Item), { foreign: true }) });
+
+			const { store, modified } = batchedStore([]);
+
+			await store.create({
+				entry: catalogue, shape: Foreign, model: { items: {} }, state: { code: "x1", name: "x" }
+			});
+
 			expect(modified).toHaveLength(1);
-			expect(modified[0].state).toEqual({ label: "x" });
+
+		});
+
+		it("takes the identifier the state carries", async () => {
+
+			const { store, modified } = batchedStore([]);
+
+			const result = await store.create({
+				entry: catalogue, shape: Catalogue, model: { items: {} }, state: { id: item, code: "x2", name: "x" }
+			});
+
+			expect(result).toBe(item);
+			expect(modified[0].entry).toBe(item);
+
+		});
+
+		it("mints an opaque identifier under the entry for a shape declaring no pattern", async () => {
+
+			const { store, modified } = batchedStore([]);
+
+			const result = await store.create({
+				entry: catalogue, shape: Catalogue, model: { things: {} }, state: { name: "x" }
+			});
+
+			expect(result).toMatch(/^http:\/\/example\.com\/[0-9a-f-]{36}$/);
+			expect(modified[0].entry).toBe(result);
 
 		});
 
 		it("returns undefined for an existing resource without mutating", async () => {
 
-			const { store, modified } = batchedStore([entry]);
+			const { store, modified } = batchedStore([item]);
 
-			const result = await store.create({ entry, shape, state: { label: "x" } });
+			const result = await store.create({
+				entry: catalogue, shape: Catalogue, model: { items: {} }, state: { code: "x1", name: "x" }
+			});
 
 			expect(result).toBeUndefined();
 			expect(modified).toEqual([]);
 
 		});
 
-		it("accepts a state whose id matches the entry", async () => {
+		it("rejects a bound member that is not a single path segment", async () => {
 
 			const { store } = batchedStore([]);
 
-			const result = await store.create({ entry, shape, state: { id: entry } });
-
-			expect(result).toBe(entry);
-
-		});
-
-		it("rejects a state whose id contradicts the entry", async () => {
-
-			const { store } = batchedStore([]);
-
-			await expect(store.create({ entry, shape, state: { id: "http://example.com/other" } }))
-				.rejects.toThrow(RangeError);
+			await expect(store.create({
+				entry: catalogue, shape: Catalogue, model: { items: {} }, state: { code: "a/b", name: "x" }
+			})).rejects.toThrow(RangeError);
 
 		});
 
@@ -315,10 +361,10 @@ describe("createBroker", () => {
 	const property: Property = broaderEntry;
 
 	const resourceModel: Template = {};
-	const collectionModel: Mould = {};
+	const collectionModel: Query<Slot> = {};
 
 
-	function lookupRequest(overrides?: Partial<Lookup>): Lookup {
+	function detailRequest(overrides?: Partial<Detail>): Detail {
 		return {
 			entry: "http://example.com/r",
 			shape,
@@ -368,7 +414,7 @@ describe("createBroker", () => {
 		it("resolves a present entry to true via the handler", async () => {
 
 			const loader = createBroker({
-				async lookup() {},
+				async detail() {},
 				async select() {},
 				async modify() {},
 				async detect(batch, _) { batch.forEach(d => d.resolve(true)); }
@@ -383,7 +429,7 @@ describe("createBroker", () => {
 		it("resolves an absent entry to false via the handler", async () => {
 
 			const loader = createBroker({
-				async lookup() {},
+				async detail() {},
 				async select() {},
 				async modify() {},
 				async detect(batch, _) { batch.forEach(d => d.resolve(false)); }
@@ -397,20 +443,20 @@ describe("createBroker", () => {
 
 	});
 
-	describe("lookup handler", () => {
+	describe("detail handler", () => {
 
 		it("resolves a single resource request via the handler", async () => {
 
 			const expected = {};
 
 			const loader = createBroker({
-				async lookup(batch, _) { batch.forEach(d => d.resolve(expected)); },
+				async detail(batch, _) { batch.forEach(d => d.resolve(expected)); },
 				async select() {},
 				async modify() {},
 				async detect() {}
 			});
 
-			const result = await loader.lookup(lookupRequest());
+			const result = await loader.detail(detailRequest());
 
 			expect(result).toBe(expected);
 
@@ -421,13 +467,13 @@ describe("createBroker", () => {
 			const error = new Error("boom");
 
 			const loader = createBroker({
-				async lookup(batch, _) { batch.forEach(d => d.reject(error)); },
+				async detail(batch, _) { batch.forEach(d => d.reject(error)); },
 				async select() {},
 				async modify() {},
 				async detect() {}
 			});
 
-			await expect(loader.lookup(lookupRequest())).rejects.toBe(error);
+			await expect(loader.detail(detailRequest())).rejects.toBe(error);
 
 		});
 
@@ -440,7 +486,7 @@ describe("createBroker", () => {
 			const expected: readonly string[] = [];
 
 			const loader = createBroker({
-				async lookup() {},
+				async detail() {},
 				async select(batch, _) { batch.forEach(d => d.resolve(expected)); },
 				async modify() {},
 				async detect() {}
@@ -461,7 +507,7 @@ describe("createBroker", () => {
 			const expected = "http://example.com/m";
 
 			const loader = createBroker({
-				async lookup() {},
+				async detail() {},
 				async select() {},
 				async modify(batch, _) { batch.forEach(d => d.resolve(d.request.entry)); },
 				async detect() {}
@@ -478,7 +524,7 @@ describe("createBroker", () => {
 	describe("batching", () => {
 
 		// the drain machinery is handler-agnostic: coalescing and ordering are exercised once through
-		// the lookup handler and hold identically for every other handler.
+		// the detail handler and hold identically for every other handler.
 
 		it("coalesces a synchronous burst into one handler call", async () => {
 
@@ -486,7 +532,7 @@ describe("createBroker", () => {
 			let batchSize = 0;
 
 			const loader = createBroker({
-				async lookup(batch, _) {
+				async detail(batch, _) {
 					calls++;
 					batchSize = batch.length;
 					batch.forEach(d => d.resolve({}));
@@ -497,8 +543,8 @@ describe("createBroker", () => {
 			});
 
 			await Promise.all([
-				loader.lookup(lookupRequest({ entry: "http://example.com/a" })),
-				loader.lookup(lookupRequest({ entry: "http://example.com/b" }))
+				loader.detail(detailRequest({ entry: "http://example.com/a" })),
+				loader.detail(detailRequest({ entry: "http://example.com/b" }))
 			]);
 
 			expect(calls).toBe(1);
@@ -511,7 +557,7 @@ describe("createBroker", () => {
 			const captured: Reference[] = [];
 
 			const loader = createBroker({
-				async lookup(batch, _) {
+				async detail(batch, _) {
 					batch.forEach(d => {
 						captured.push(d.request.entry);
 						d.resolve({});
@@ -523,8 +569,8 @@ describe("createBroker", () => {
 			});
 
 			await Promise.all([
-				loader.lookup(lookupRequest({ entry: "http://example.com/x" })),
-				loader.lookup(lookupRequest({ entry: "http://example.com/y" }))
+				loader.detail(detailRequest({ entry: "http://example.com/x" })),
+				loader.detail(detailRequest({ entry: "http://example.com/y" }))
 			]);
 
 			expect(captured).toEqual(["http://example.com/x", "http://example.com/y"]);
@@ -540,7 +586,7 @@ describe("createBroker", () => {
 			const seen: string[] = [];
 
 			const loader = createBroker({
-				async lookup(batch, _) {
+				async detail(batch, _) {
 					batch.forEach(d => {
 						seen.push(`R[${d.request.entry}]`);
 						d.resolve({});
@@ -558,7 +604,7 @@ describe("createBroker", () => {
 
 			await Promise.all([
 				loader.select(selectRequest({ entry: "http://example.com/c" })),
-				loader.lookup(lookupRequest({ entry: "http://example.com/r" }))
+				loader.detail(detailRequest({ entry: "http://example.com/r" }))
 			]);
 
 			expect(seen).toContain("R[http://example.com/r]");
@@ -566,12 +612,12 @@ describe("createBroker", () => {
 
 		});
 
-		it("runs the lookup handler before the select handler in the same round", async () => {
+		it("runs the detail handler before the select handler in the same round", async () => {
 
 			const seq: string[] = [];
 
 			const loader = createBroker({
-				async lookup(batch, _) {
+				async detail(batch, _) {
 					seq.push("R");
 					batch.forEach(d => d.resolve({}));
 				},
@@ -587,7 +633,7 @@ describe("createBroker", () => {
 
 			await Promise.all([
 				loader.select(selectRequest()),
-				loader.lookup(lookupRequest())
+				loader.detail(detailRequest())
 			]);
 
 			expect(seq).toEqual(["R", "C"]);
@@ -598,12 +644,12 @@ describe("createBroker", () => {
 
 	describe("nested retrieval", () => {
 
-		it("makes selects queued by the lookup handler visible to the same drain", async () => {
+		it("makes selects queued by the detail handler visible to the same drain", async () => {
 
 			let collectionsRan = 0;
 
 			const loader = createBroker({
-				async lookup(batch, inner) {
+				async detail(batch, inner) {
 					inner.select(selectRequest()).catch(() => {});
 					batch.forEach(d => d.resolve({}));
 				},
@@ -615,7 +661,7 @@ describe("createBroker", () => {
 				async detect() {}
 			});
 
-			await loader.lookup(lookupRequest());
+			await loader.detail(detailRequest());
 			// the nested collection is resolved within the same drain; flush to quiescence to observe it.
 			await flush();
 
@@ -623,18 +669,18 @@ describe("createBroker", () => {
 
 		});
 
-		it("defers lookups queued by the select handler to a later round", async () => {
+		it("defers detail calls queued by the select handler to a later round", async () => {
 
 			const seq: string[] = [];
 
 			const loader = createBroker({
-				async lookup(batch, _) {
+				async detail(batch, _) {
 					seq.push(`R[${batch.map(d => d.request.entry).join(",")}]`);
 					batch.forEach(d => d.resolve({}));
 				},
 				async select(batch, inner) {
 					seq.push(`C[${batch.map(d => d.request.entry).join(",")}]`);
-					inner.lookup(lookupRequest({ entry: "http://example.com/nested" })).catch(() => {});
+					inner.detail(detailRequest({ entry: "http://example.com/nested" })).catch(() => {});
 					batch.forEach(d => d.resolve([]));
 				},
 				async modify() {},
@@ -651,19 +697,19 @@ describe("createBroker", () => {
 
 		});
 
-		it("orders nested selects before next-round lookups", async () => {
+		it("orders nested selects before next-round detail calls", async () => {
 
 			const seq: string[] = [];
 			let resourceCount = 0;
 			let r2Done!: Promise<unknown>;
 
 			const loader = createBroker({
-				async lookup(batch, inner) {
+				async detail(batch, inner) {
 					resourceCount++;
 					seq.push(`R[${batch.map(d => d.request.entry).join(",")}]`);
 					if ( resourceCount === 1 ) {
 						inner.select(selectRequest({ entry: "http://example.com/c" })).catch(() => {});
-						r2Done = inner.lookup(lookupRequest({ entry: "http://example.com/r2" }));
+						r2Done = inner.detail(detailRequest({ entry: "http://example.com/r2" }));
 					}
 					batch.forEach(d => d.resolve({}));
 				},
@@ -675,7 +721,7 @@ describe("createBroker", () => {
 				async detect() {}
 			});
 
-			await loader.lookup(lookupRequest({ entry: "http://example.com/r1" }));
+			await loader.detail(detailRequest({ entry: "http://example.com/r1" }));
 			await r2Done;
 
 			expect(seq).toEqual([
@@ -693,10 +739,10 @@ describe("createBroker", () => {
 			let depth = 0;
 
 			const loader = createBroker({
-				async lookup(batch, inner) {
+				async detail(batch, inner) {
 					depth++;
 					if ( depth < 4 ) {
-						inner.lookup(lookupRequest({ entry: `http://example.com/d${depth}` })).catch(() => {});
+						inner.detail(detailRequest({ entry: `http://example.com/d${depth}` })).catch(() => {});
 					} else {
 						signalQuiescent();
 					}
@@ -707,7 +753,7 @@ describe("createBroker", () => {
 				async detect() {}
 			});
 
-			await loader.lookup(lookupRequest());
+			await loader.detail(detailRequest());
 			await quiescent;
 
 			expect(depth).toBe(4);
@@ -723,35 +769,35 @@ describe("createBroker", () => {
 			const error = new Error("boom");
 
 			const loader = createBroker({
-				async lookup() { throw error; },
+				async detail() { throw error; },
 				async select() {},
 				async modify() {},
 				async detect() {}
 			});
 
-			const p1 = loader.lookup(lookupRequest({ entry: "http://example.com/a" }));
-			const p2 = loader.lookup(lookupRequest({ entry: "http://example.com/b" }));
+			const p1 = loader.detail(detailRequest({ entry: "http://example.com/a" }));
+			const p2 = loader.detail(detailRequest({ entry: "http://example.com/b" }));
 
 			await expect(p1).rejects.toBe(error);
 			await expect(p2).rejects.toBe(error);
 
 		});
 
-		it("leaves an independent handler unpoisoned when the lookup handler throws", async () => {
+		it("leaves an independent handler unpoisoned when the detail handler throws", async () => {
 
 			const error = new Error("boom");
 
 			const loader = createBroker({
-				async lookup() { throw error; },
+				async detail() { throw error; },
 				async select(batch, _) { batch.forEach(d => d.resolve([])); },
 				async modify() {},
 				async detect() {}
 			});
 
-			const rp = loader.lookup(lookupRequest());
+			const rp = loader.detail(detailRequest());
 			const cp = loader.select(selectRequest());
 
-			// handlers drain concurrently: the failing lookup handler rejects its own entry, while the
+			// handlers drain concurrently: the failing detail handler rejects its own entry, while the
 			// independent select handler settles on its own rather than being cross-poisoned
 
 			await expect(rp).rejects.toBe(error);
@@ -765,7 +811,7 @@ describe("createBroker", () => {
 			const error = new Error("boom");
 
 			const loader = createBroker({
-				async lookup(batch, _) {
+				async detail(batch, _) {
 					batch[0].resolve(expected);
 					throw error;
 				},
@@ -774,8 +820,8 @@ describe("createBroker", () => {
 				async detect() {}
 			});
 
-			const first = loader.lookup(lookupRequest({ entry: "http://example.com/a" }));
-			const second = loader.lookup(lookupRequest({ entry: "http://example.com/b" }));
+			const first = loader.detail(detailRequest({ entry: "http://example.com/a" }));
+			const second = loader.detail(detailRequest({ entry: "http://example.com/b" }));
 
 			await expect(first).resolves.toBe(expected);
 			await expect(second).rejects.toBe(error);
@@ -794,13 +840,13 @@ describe("createBroker", () => {
 				const error = new Error("boom");
 
 				const loader = createBroker({
-					async lookup() { throw error; },
+					async detail() { throw error; },
 					async select() {},
 					async modify() {},
 					async detect() {}
 				});
 
-				await expect(loader.lookup(lookupRequest())).rejects.toBe(error);
+				await expect(loader.detail(detailRequest())).rejects.toBe(error);
 				// give the runtime two macrotasks for any deferred unhandled-rejection event
 				await new Promise(resolve => setTimeout(resolve, 10));
 
@@ -820,7 +866,7 @@ describe("createBroker", () => {
 			let throwOnce = true;
 
 			const loader = createBroker({
-				async lookup(batch, _) {
+				async detail(batch, _) {
 					if ( throwOnce ) {
 						throwOnce = false;
 						throw error;
@@ -832,8 +878,8 @@ describe("createBroker", () => {
 				async detect() {}
 			});
 
-			await expect(loader.lookup(lookupRequest())).rejects.toBe(error);
-			await expect(loader.lookup(lookupRequest())).resolves.toEqual({ ok: true });
+			await expect(loader.detail(detailRequest())).rejects.toBe(error);
+			await expect(loader.detail(detailRequest())).resolves.toEqual({ ok: true });
 
 		});
 
@@ -845,7 +891,7 @@ describe("createBroker", () => {
 			const gate = new Promise<void>(resolve => { release = resolve; });
 
 			const loader = createBroker({
-				async lookup(_, l) {
+				async detail(_, l) {
 					inner = l;
 					await gate;
 					throw error;
@@ -855,10 +901,10 @@ describe("createBroker", () => {
 				async detect() {}
 			});
 
-			const first = loader.lookup(lookupRequest({ entry: "http://example.com/a" }));
-			// wait for the lookup handler to start
+			const first = loader.detail(detailRequest({ entry: "http://example.com/a" }));
+			// wait for the detail handler to start
 			await flush();
-			const late = inner!.lookup(lookupRequest({ entry: "http://example.com/late" }));
+			const late = inner!.detail(detailRequest({ entry: "http://example.com/late" }));
 			release();
 
 			await expect(first).rejects.toBe(error);
@@ -875,7 +921,7 @@ describe("createBroker", () => {
 			let calls = 0;
 
 			const loader = createBroker({
-				async lookup(batch, _) {
+				async detail(batch, _) {
 					calls++;
 					batch.forEach(d => d.resolve({}));
 				},
@@ -884,22 +930,22 @@ describe("createBroker", () => {
 				async detect() {}
 			});
 
-			await loader.lookup(lookupRequest({ entry: "http://example.com/a" }));
-			await loader.lookup(lookupRequest({ entry: "http://example.com/b" }));
+			await loader.detail(detailRequest({ entry: "http://example.com/a" }));
+			await loader.detail(detailRequest({ entry: "http://example.com/b" }));
 
 			expect(calls).toBe(2);
 
 		});
 
-		it("does not kick a redundant drain on nested loader.lookup", async () => {
+		it("does not kick a redundant drain on nested loader.detail", async () => {
 
 			let calls = 0;
 
 			const loader = createBroker({
-				async lookup(batch, inner) {
+				async detail(batch, inner) {
 					calls++;
 					if ( calls === 1 ) {
-						inner.lookup(lookupRequest({ entry: "http://example.com/nested" })).catch(() => {});
+						inner.detail(detailRequest({ entry: "http://example.com/nested" })).catch(() => {});
 					}
 					batch.forEach(d => d.resolve({}));
 				},
@@ -908,7 +954,7 @@ describe("createBroker", () => {
 				async detect() {}
 			});
 
-			await loader.lookup(lookupRequest({ entry: "http://example.com/root" }));
+			await loader.detail(detailRequest({ entry: "http://example.com/root" }));
 			await flush();
 
 			// exactly two rounds: one for the root, one for the nested entry, no extra kicks
@@ -916,6 +962,118 @@ describe("createBroker", () => {
 
 		});
 
+		it("serves a chained request submitted as a settled round is checked for quiescence", async () => {
+
+			// a request submitted in the gap between a round settling and the drain re-checking its queues must be
+			// served exactly once: a second drain kicked in that gap would snapshot the same item and, on settling,
+			// splice out whatever was queued behind it, leaving that request pending forever
+
+			const handled: string[] = [];
+
+			const loader = createBroker({
+				async detect(batch, _) {
+					batch.forEach(d => { handled.push(d.request.entry); d.resolve(true); });
+				},
+				async detail() {},
+				async select() {},
+				async modify(batch, _) {
+					batch.forEach(d => { handled.push(d.request.entry); d.resolve(d.request.entry); });
+				}
+			});
+
+			await [0, 1, 2, 3, 4, 5, 6].reduce(async (prior, hops) => {
+
+				await prior;
+
+				await loader.detect(detectRequest({ entry: `http://example.com/${hops}` }));
+
+				await Array.from({ length: hops }).reduce<Promise<void>>(p => p.then(() => undefined), Promise.resolve());
+
+				// two dependent requests, the second submitted as the first settles
+
+				const chained = loader.detect(detectRequest({ entry: `http://example.com/${hops}/a` }))
+					.then(() => loader.modify({ entry: `http://example.com/${hops}/b`, shape }));
+
+				await expect(Promise.race([chained, timeout(200)])).resolves.toBe(`http://example.com/${hops}/b`);
+
+			}, Promise.resolve());
+
+			expect(new Set(handled).size).toBe(handled.length);
+
+
+			function timeout(ms: number): Promise<never> {
+				return new Promise((_, reject) => setTimeout(() => reject(new Error(`pending after ${ms}ms`)), ms));
+			}
+
+		});
+
+	});
+
+});
+
+describe("mint", () => {
+
+	const entry = "https://example.com/vendors/";
+
+	const Slugged = resource({ pattern: "/vendors/{code}" }, { id: id(), code: required(string()), name: required(string()) });
+	const Wild = resource({ pattern: "/vendors/*" }, { id: id(), name: required(string()) });
+	const Plain = resource({ id: id(), name: required(string()) });
+
+	const Absolute = resource({ pattern: "https://data.example.net/vendors/{code}" }, {
+		id: id(), code: required(string()), name: required(string())
+	});
+
+	const opaque = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+
+	it("reads a pattern slot off the like-named member of the state", async () => {
+		expect(mint(entry, Slugged, { code: "4711", name: "Acme" })).toBe("https://example.com/vendors/4711");
+	});
+
+	it("resolves a root-relative pattern against the collection entry", async () => {
+		expect(mint("https://example.com/other/", Slugged, { code: "4711", name: "Acme" }))
+			.toBe("https://example.com/vendors/4711");
+	});
+
+	it("takes an absolute pattern as it stands", async () => {
+		expect(mint(entry, Absolute, { code: "4711", name: "Acme" })).toBe("https://data.example.net/vendors/4711");
+	});
+
+	it("fills a slot the state doesn't bind with an opaque segment", async () => {
+
+		const minted = mint(entry, Slugged, { name: "Acme" });
+
+		expect(minted.startsWith("https://example.com/vendors/")).toBe(true);
+		expect(minted.slice("https://example.com/vendors/".length)).toMatch(opaque);
+
+	});
+
+	it("fills a trailing wildcard with an opaque segment", async () => {
+
+		const minted = mint(entry, Wild, { name: "Acme" });
+
+		expect(minted.slice("https://example.com/vendors/".length)).toMatch(opaque);
+
+	});
+
+	it("mints an opaque segment under the entry for a shape declaring no pattern", async () => {
+
+		const minted = mint(entry, Plain, { name: "Acme" });
+
+		expect(minted.startsWith(entry)).toBe(true);
+		expect(minted.slice(entry.length)).toMatch(opaque);
+
+	});
+
+	it("mints distinct opaque segments", async () => {
+		expect(mint(entry, Plain, { name: "Acme" })).not.toBe(mint(entry, Plain, { name: "Acme" }));
+	});
+
+	it("rejects a bound member that is not a single path segment", async () => {
+		expect(() => mint(entry, Slugged, { code: "a/b", name: "Acme" })).toThrow(RangeError);
+		expect(() => mint(entry, Slugged, { code: "a b", name: "Acme" })).toThrow(RangeError);
+		expect(() => mint(entry, Slugged, { code: "", name: "Acme" })).toThrow(RangeError);
+		expect(() => mint(entry, Slugged, { code: "a?b", name: "Acme" })).toThrow(RangeError);
 	});
 
 });

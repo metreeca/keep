@@ -72,14 +72,24 @@ import {
  * an IRI node rather than a literal, told apart from an IRI-shaped literal (a `url`) by datatype alone.
  */
 export function boundToTerm(value: Literal, range: Range): Term {
+	return valueToTerm(value, boundToVariant(value, range));
+}
+
+/**
+ * The {@link Range | range} variant a comparison bound (`<` / `>` / `<=` / `>=`) singles out (§5.7.1), the one
+ * the comparison runs in: {@link getBoundBranch} routes the bound, relaxing the value-domain facets a bound
+ * need not satisfy; a string bound no variant admits falls to a localised variant, whose coalesced label it
+ * compares against (§6).
+ *
+ * @throws {RangeError} If `value` singles out no variant of `range`
+ */
+export function boundToVariant(value: Literal, range: Range): Shape {
 
 	const variants = getShapeBranches(range.shape);
 
-	return valueToTerm(value,
-		getBoundBranch(value, variants)
+	return getBoundBranch(value, variants)
 		?? (isString(value) ? variants.find(variant => variant.kind === "dictionary") : undefined)
-		?? error(new RangeError(`unresolved range variant for value <${String(value)}>`))
-	);
+		?? error(new RangeError(`unresolved range variant for value <${String(value)}>`));
 
 }
 
@@ -310,12 +320,12 @@ export function reverse(
 
 
 /**
- * The gate binding a union shape's discriminator only for members belonging to it (union.md §Model).
+ * The gate binding a union shape's discriminator only for members belonging to it (blue Unions §Model).
  *
  * A classed node shape is gated by its stored `rdf:type` triple; a plain-string literal by a
  * datatype/kind `filter` (boolean datatype, numeric test, or plain string); a localised `dictionary` shape by
  * the language-tagged literal test, disjoint from the plain string; a classless node shape by the bare
- * IRI-kind test. Under the modeller's disjointness guarantee (union.md §State) at most one shape's arm
+ * IRI-kind test. Under the modeller's disjointness guarantee (blue Unions §State) at most one shape's arm
  * binds a given value.
  *
  * @param anchor The shape's value variable
@@ -340,14 +350,9 @@ export function membership(anchor: Variable, shape: Shape): SPARQL {
 
 			return filter(isNumeric(value));
 
-		case "string": // !!! review
+		case "string":
 
-			return filter(and(
-				isLiteral(value),
-				eq(lang(value), string("")),
-				ne(datatype(value), reference(xsd.boolean)),
-				not(isNumeric(value))
-			));
+			return filter(textual(value));
 
 		case "dictionary":
 
@@ -370,6 +375,24 @@ export function membership(anchor: Variable, shape: Shape): SPARQL {
 
 	}
 
+}
+
+/**
+ * The test admitting a plain string value: a literal carrying neither a language tag nor a boolean or
+ * numeric datatype, which is how a stored string, a temporal the backend leaves opaque, and a coalesced
+ * localised label (§6.2) all present.
+ *
+ * @param value The expression to test
+ *
+ * @returns The boolean expression holding when `value` is a plain string
+ */
+export function textual(value: SPARQL): SPARQL {
+	return and(
+		isLiteral(value),
+		eq(lang(value), string("")),
+		ne(datatype(value), reference(xsd.boolean)),
+		not(isNumeric(value))
+	);
 }
 
 /**
@@ -413,7 +436,11 @@ export function expression(anchor: Variable, pipe: readonly Transform[]): SPARQL
 
 				return max(expression);
 
-			case "avg": // !!! document rationale
+			case "avg":
+
+				// sparql averages an empty group to 0, where qest leaves the aggregate undefined (Appendix
+				// A.4.3): forcing an ill-typed cast on an empty count errors the expression, so the
+				// binding stays unbound and decodes as absent
 
 				return iif(
 					gt(count(expression), number(0)),

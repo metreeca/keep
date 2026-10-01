@@ -43,9 +43,11 @@ npm install @metreeca/keep
 
 [managing]: https://metreeca.github.io/keep/modules/_metreeca_keep.managing.html
 
-All store methods accept an `entry` that MUST be an absolute IRI without query string or fragment — non-conforming
-entries reject with `RangeError`. `model` and `state` are validated against the supplied shape; validation failures
-reject with a `TraceError`. Network, storage, and other processing errors reject with a structured `Problem`.
+All store methods accept an `entry` that MUST be an absolute IRI without query string or fragment: non-conforming
+entries reject with `RangeError`. `create` takes as `entry` the resource holding the collection, and as `model` the
+multi-valued property holding it; an `id` stated in a `create` state MUST be nested under `entry`. `model` and `state`
+are validated against the supplied shape; validation failures reject with a `TraceError`. Network, storage, and other
+processing errors reject with a structured `Problem`.
 
 ## Retrieving Resources
 
@@ -56,31 +58,31 @@ const product = await store.lookup({
 	entry: "http://example.com/products/1",
 	shape: ProductShape,
 	model: {
-		name: "",
-		price: 0,
+		name: {},
+		price: {},
 		vendor: {
-			id: "",
-			name: ""
+			id: {},
+			name: {}
 		}
 	}
 });
 
 // collection retrieval with filtering, ordering, and pagination
 
-const catalog = await store.lookup({
+const catalogue = await store.lookup({
 	entry: "http://example.com/products/",
-	shape: ProductShape,
+	shape: CatalogueShape,
 	model: {
-		products: [{
-			id: "",
-			name: "",
-			price: 0,
+		products: {
+			id: {},
+			name: {},
+			price: {},
 			">=price": 50,        // price ≥ 50
 			"~name": "widget",    // name contains "widget"
 			"^price": 1,          // sort by price ascending
 			"@": 0,               // offset
 			"#": 25               // limit
-		}]
+		}
 	}
 });
 ```
@@ -88,9 +90,10 @@ const catalog = await store.lookup({
 ## Creating and Updating Resources
 
 ```typescript
-await store.create({
-	entry: "http://example.com/products/42", shape: ProductShape, state: {
-		id: "http://example.com/products/42",
+// creation within the collection holding the new resource, its identifier minted by the store unless stated
+
+const product = await store.create({
+	entry: "http://example.com/products/", shape: CatalogueShape, model: { products: {} }, state: {
 		name: "Widget",
 		price: 29.99,
 		vendor: "http://example.com/vendors/acme"
@@ -151,7 +154,7 @@ collection of them, omit it to receive all mutations, or pass an empty collectio
 
 ```typescript
 await store.execute(async store => {
-	await store.create({ entry: product.id, shape: ProductShape, state: product });
+	await store.create({ entry: catalogue, shape: CatalogueShape, model: { products: {} }, state: product });
 	await store.update({ entry: inventory.id, shape: InventoryShape, state: inventory });
 });
 ```
@@ -178,9 +181,9 @@ function createMyStore(): Store {
 
 	const backend: StoreClient = {
 
-		lookup({ entry, shape, model }) { /* query the backend, return matching data or undefined */ },
+		lookup({ entry, shape, model }, scope) { /* query the backend, return matching data or undefined */ },
 
-		create({ entry, shape, state }) { /* create if absent, return entry or undefined */ },
+		create({ entry, shape, model, state }) { /* create under the collection, return the new entry or undefined */ },
 		update({ entry, shape, state }) { /* update if present, return entry or undefined */ },
 		delete({ entry, shape }) { /* delete if present, return entry or undefined */ },
 
@@ -200,8 +203,8 @@ function createMyStore(): Store {
 ```
 
 Pass `trusted: true` to `createValidatingStore` when the backend is trusted to deliver shape-conforming data, so
-`lookup` responses skip the redundant outbound validation pass. Supply `execute` to `createManagingStore` to route every
-standalone call and the entire `execute` task body through the backend's transaction primitive; omit it for
+`lookup` responses skip the redundant outbound validation pass. Supply `execute` to `createManagingStore` to route
+every standalone call and the entire `execute` task body through the backend's transaction primitive; omit it for
 non-transactional backends and the wrapper degrades to per-call atomicity. `close` defaults to a no-op.
 
 All errors reach the caller as promise rejections through the unified Store error channel — `RangeError` for malformed

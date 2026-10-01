@@ -40,9 +40,10 @@ description: Development guidelines and conventions for the @metreeca/keep packa
 
 # Testing
 
-The root `vitest.config.ts` aliases all workspace `@metreeca/keep*` packages to their TypeScript source via regex, so
-vitest transpiles directly from `src/` without requiring a prior build step. The aliases are convention-based and
-require no manual updates when adding packages or subpath exports.
+The root `vitest.config.ts` enables the `@metreeca/source` export condition, so workspace `@metreeca/keep*` imports
+resolve to the TypeScript source each `package.json` export declares and vitest transpiles directly from `src/`
+without requiring a prior build step. Every export MUST declare its `@metreeca/source` entry: one lacking it silently
+resolves to the stale `dist` build.
 
 # Git
 

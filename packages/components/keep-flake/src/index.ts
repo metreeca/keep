@@ -26,12 +26,12 @@
  * {@link createFlake} produces three flavours of the tree, one per overload:
  *
  * - **shape** — a resource full structural reach, with no input (a leaf for a non-resource root);
- * - **model** — the reach restricted to the properties a retrieval {@link @metreeca/qest/model!Template | Template} addresses, each node
- *   carrying the {@link Flake.drain | drain} requested for it (a
+ * - **model** — the reach restricted to the properties a retrieval {@link @metreeca/qest/model!Template | Template}
+ * addresses, each node carrying the {@link Flake.drain | drain} requested for it (a
  *   {@link @metreeca/qest/model!Template} on a resource root; any other form, or a non-resource root,
  *   degenerates to a leaf);
  * - **query** — a collection member shape tagged with the constraints, ordering, and projection a
- *   {@link Mould} expresses.
+ *   `Query<Slot>` expresses.
  *
  * Every node, the root included, is a {@link Flake} located by its {@link Flake.path | path} along the
  * property axis and its {@link Flake.pipe | pipe} along the transform axis, and sharing the same
@@ -39,8 +39,8 @@
  * node is a bare leaf:
  *
  * - **property branches** — a node steps through its {@link Flake.entries | entries} into one
- *   {@link Branch} per addressed {@link Id} / {@link Type} / {@link Property}, a union-typed property
- *   keeping one branch per variant. The {@link Flake.path | path} records this axis;
+ *   {@link Branch} per addressed {@link Id} / {@link Type} / {@link Property}, a name shared across the
+ *   variants of a union-typed node keeping one branch. The {@link Flake.path | path} records this axis;
  * - **transform stages** — a node hangs each {@link Transform} a query applies off its
  *   {@link Flake.transforms | transforms} as a nested {@link Flake}. The {@link Flake.pipe | pipe}
  *   records this axis.
@@ -55,19 +55,21 @@ import { eager, type Range, type Shape } from "@metreeca/blue/value";
 import { type Identifier, isObject, type Lazy } from "@metreeca/core";
 import { some } from "@metreeca/core/arrays";
 import { by } from "@metreeca/core/order";
-import type { Dictionary, Literal } from "@metreeca/qest/state";
 import {
+	type Atomic,
+	type Cell,
 	getOrderPrecedence,
 	isAggregate,
+	type Locale,
 	type Option,
 	type Options,
-	type Placeholder,
 	type Projection,
 	type Query,
+	type Slot,
 	type Template,
-	type Transform,
-	type Union
+	type Transform
 } from "@metreeca/qest/model";
+import type { Dictionary, Literal } from "@metreeca/qest/state";
 import { createModelFlake } from "./model.js";
 import { createQueryFlake as createFlakeQuery } from "./query.js";
 import { createShapeFlake } from "./shape.js";
@@ -108,9 +110,8 @@ export type Flake = {
 	/**
 	 * The retrieval requested at this node, in a model- or query-mode flake.
 	 *
-	 * On a {@link Branch}, the {@link Drain.mould | fragment} requested for the property; on the root
-	 * {@link Flake}, the whole retrieval. A query projecting the node also binds its
-	 * {@link Drain.alias | alias}. Absent where nothing is requested.
+	 * On a {@link Branch}, the `query` requested for the property; on the root {@link Flake}, the whole
+	 * retrieval. A query projecting the node also binds its `alias`. Absent where nothing is requested.
 	 */
 	readonly drain?: Drain;
 
@@ -206,9 +207,18 @@ export type Branch = Flake & {
 /**
  * The retrieval requested at a {@link Flake | node} of a flake.
  *
- * Pairs the requested template fragment with the projection alias a query binds to it, if any. The
- * fragment shape and the presence of an alias jointly classify the node: use {@link isModelBranch} /
- * {@link isQueryBranch} to split a plain retrieval, {@link isProbeBranch} to pick out a projected one.
+ * Pairs the {@link @metreeca/qest/model!Query | query} requested at the node with the projection alias a query
+ * binds to it, if any, and settles the `form` the query takes against the node's
+ * {@link Flake.range | range}, so a consumer switches on the form rather than re-classifying the query: a
+ * {@link @metreeca/qest/model!Template | template} on a resource, a {@link @metreeca/qest/model!Locale | locale}
+ * on a localised property, a {@link @metreeca/qest/model!Projection | projection} on a collection, the
+ * {@link @metreeca/qest/model!Atomic | atomic} wherever the query requests the value as it stands, and a union
+ * on a union-typed range, its alternatives resolved to the variants they reach. The form is decided by the query's
+ * retrieval keys: a query stating none reads as the atomic (§5.3).
+ *
+ * The cardinality of the property the node steps through and the presence of an alias jointly classify the node:
+ * use {@link isModelBranch} / {@link isQueryBranch} to split a plain retrieval, {@link isProbeBranch} to pick out a
+ * projected one.
  */
 export type Drain = {
 
@@ -220,28 +230,89 @@ export type Drain = {
 	 */
 	readonly alias?: Identifier;
 
+} & (
+
+	| {
+
 	/**
-	 * The requested template fragment.
+	 * The query requests the value as it stands: no further shape, whatever the range (§5.3).
 	 */
-	readonly mould: Mould;
+	readonly form: "atomic";
 
-};
+	/**
+	 * The query requested at the node, criteria included; its retrieval half states no present entry.
+	 */
+	readonly query: Query<Atomic>;
 
-/**
- * The retrieval fragment requested at a {@link Flake | node} of a flake.
- *
- * Every form a template entry takes, with the collection {@link @metreeca/qest/model!Criteria | criteria} constraining
- * it merged in: an {@link @metreeca/qest/model!Atomic | atomic} leaf, a nested
- * {@link @metreeca/qest/model!Template | template}, a {@link @metreeca/qest/model!Locale | locale} map, a
- * {@link @metreeca/qest/model!Union | union} of those, or a {@link @metreeca/qest/model!Projection | projection}.
- * Retrieval keys and constraint keys share one key space, so a node states what to retrieve and which items to
- * retrieve it for in one object.
- */
-export type Mould = Query<
-	| Placeholder
-	| Union<Placeholder>
-	| Projection
->;
+}
+
+	| {
+
+	/**
+	 * The query expands a resource, naming the properties to retrieve.
+	 */
+	readonly form: "template";
+
+	/**
+	 * The query requested at the node, criteria included; its retrieval half is the template.
+	 */
+	readonly query: Query<Template>;
+
+}
+
+	| {
+
+	/**
+	 * The query retrieves a localised property tag by tag, as a structured map (§5.4).
+	 */
+	readonly form: "locale";
+
+	/**
+	 * The query requested at the node; its retrieval half is the locale map.
+	 */
+	readonly query: Query<Locale>;
+
+}
+
+	| {
+
+	/**
+	 * The query retrieves a collection as rows of computed values (§5.2).
+	 */
+	readonly form: "projection";
+
+	/**
+	 * The query requested at the node, criteria included; its retrieval half is the projection.
+	 */
+	readonly query: Query<Projection>;
+
+}
+
+	| {
+
+	/**
+	 * The query addresses a union-typed range, one alternative per variant it reaches (§5.5).
+	 */
+	readonly form: "union";
+
+	/**
+	 * The query requested at the node, criteria included: a keyed union, or a single alternative standing for
+	 * every variant it fits.
+	 */
+	readonly query: Query<Cell>;
+
+	/**
+	 * The drain of each variant the query reaches, keyed by variant.
+	 *
+	 * Resolved once for the node: a variant no alternative fits is absent, a variant several alternatives reach
+	 * carries them folded into one request. A
+	 * variant's drain is settled against that variant alone, so it is never itself a union.
+	 */
+	readonly variants: ReadonlyMap<Shape, Drain>;
+
+}
+
+	);
 
 /**
  * A node's transform stages, keyed by the {@link Transform} each stage applies.
@@ -255,19 +326,14 @@ export type Transforms = {
 /**
  * A node's property branches, keyed by property name.
  *
- * Each name maps to the {@link Branch | branches} reachable through it: one branch for a plain
- * property, one per declaring variant for a union-typed property, so a name shared across variants
- * keeps every variant branch rather than collapsing to one.
- *
- * > [!IMPORTANT]
- * > Sibling branches under one name share identical {@link Flake} fields, differing only in
- * > {@link Branch | entry}, {@link Flake.drain | drain}, and {@link Flake.entries | entries}.
- * > The replication is intentional: it leaves every {@link Branch} a self-contained {@link Flake}, so
- * > consumers walk uniformly without special-casing union fan-out.
+ * Each name maps to the one {@link Branch} reachable through it. A name declared by several variants of a
+ * union-typed node is one property (union coherence, §3.2): its branch ranges over the disjunction of the
+ * per-variant declarations (§5.8.1), carries every request reaching it folded into one {@link Flake.drain | drain},
+ * and is entered through the first declaring variant's `entry`.
  */
 export type Entries = {
 
-	readonly [entry: Identifier]: readonly Branch[]; // !!! why Branch[]!? variants are stored in Branch.range
+	readonly [entry: Identifier]: Branch;
 
 };
 
@@ -324,7 +390,7 @@ export function createFlake(shape: Lazy<Shape>, model?: Template): Flake {
  *
  * @returns An immutable {@link Flake} tagged with the constraints, ordering, and projection `query` expresses
  */
-export function createQueryFlake(shape: Lazy<Shape>, query: Mould): Flake {
+export function createQueryFlake(shape: Lazy<Shape>, query: Query<Slot>): Flake {
 
 	return createFlakeQuery(eager(shape), query);
 
@@ -485,7 +551,7 @@ export function isRequiredFlake(flake: Flake): boolean {
 			|| flake.like !== undefined
 			|| hasValueOptions(flake)
 		)
-		|| Object.values(flake.entries ?? {}).flat().some(isRequiredFlake)
+		|| Object.values(flake.entries ?? {}).some(isRequiredFlake)
 		|| Object.values(flake.transforms ?? {}).some(isRequiredFlake);
 }
 
@@ -591,7 +657,7 @@ export function isPropertyBranch(flake: Flake): flake is Branch & {
 export function isModelBranch(flake: Flake): flake is Branch & {
 
 	readonly entry: Property;
-	readonly drain?: { readonly mould: Mould }
+	readonly drain?: Drain
 
 } {
 
@@ -617,7 +683,7 @@ export function isModelBranch(flake: Flake): flake is Branch & {
 export function isQueryBranch(flake: Flake): flake is Branch & {
 
 	readonly entry: Property;
-	readonly drain: { readonly mould: Mould }
+	readonly drain: Drain
 
 } {
 
@@ -652,7 +718,7 @@ function isCollection(entry: Property): boolean {
  */
 export function isProbeBranch(flake: Flake): flake is Branch & {
 
-	readonly drain: { readonly alias: Identifier; readonly mould: Mould }
+	readonly drain: Drain & { readonly alias: Identifier }
 
 } {
 
@@ -695,23 +761,22 @@ export function getFlakeTransforms(flake: Flake): readonly Flake[] {
 /**
  * Lists a flake's own property branches.
  *
- * Every {@link Branch} reachable through the flake's {@link Flake.entries | entries}, flattened across
- * property names and union variants into a single list. Local to the flake: branches nested deeper are not
- * included.
+ * Every {@link Branch} reachable through the flake's {@link Flake.entries | entries}, one per property name.
+ * Local to the flake: branches nested deeper are not included.
  *
  * @param flake The flake whose property branches to list
  *
  * @returns The flake's property branches
  */
 export function getFlakeEntries(flake: Flake): readonly Branch[] {
-	return Object.values(flake.entries ?? {}).flat();
+	return Object.values(flake.entries ?? {});
 }
 
 
 /**
  * Collects every projection in a {@link Flake} into an alias-keyed index.
  *
- * Each binding alias, unique within a projection (qest §5.6), maps to the single flake bearing it. A union-typed
+ * Each binding alias, unique within a projection (qest §5.2), maps to the single flake bearing it. A union-typed
  * binding folds its variants into that flake's {@link Flake.entries | entries} rather than fanning them to
  * sibling alias-bearing flakes, so no alias is ever shared.
  *
@@ -810,9 +875,8 @@ export function getFlakeOrdering(flake: Flake): readonly (Flake & { readonly ord
  * Slices a node's entry-major branch index down to the branches one variant shape contributes.
  *
  * A node's {@link Entries} index every union variant's branches by property name; this cross-cuts
- * that index along the shape axis, keeping at each name the branches whose name `shape` declares. A path
- * crossing the union under a shared predicate folds to a single branch (§5.8.1) contributed by every
- * variant declaring that name, so such a branch surfaces under each of them.
+ * that index along the shape axis, keeping the branches whose name `shape` declares. A name several
+ * variants declare is one branch (§3.2, §5.8.1), so such a branch surfaces under each of them.
  *
  * @param flake The node whose branch index to slice: any {@link Flake}, a collection flake root as well as a
  * {@link Branch}
@@ -824,8 +888,8 @@ export function getFlakeVariant(flake: Flake, shape: Shape): readonly Branch[] {
 
 	const entries = getShapeProperties(shape);
 
-	return Object.entries(flake.entries ?? {}).flatMap(([name, branches]) =>
-		entries[name] !== undefined ? branches : []
+	return Object.entries(flake.entries ?? {}).flatMap(([name, branch]) =>
+		entries[name] !== undefined ? [branch] : []
 	);
 
 }

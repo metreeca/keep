@@ -18,11 +18,11 @@
  * Resources-pass driver.
  *
  * Owns one SELECT round per drain iteration covering every queued
- * {@link Lookup}. The cycle is:
+ * {@link Detail}. The cycle is:
  *
  *   **plan** → **encode** → `client.select` → **decode**
  *
- *  - {@link _flake_!createFlake | createFlake} builds the per-request lookup plan
+ *  - {@link _flake_!createFlake | createFlake} builds the per-request detail plan
  *    ({@link Flake} IR) from `(shape, model)`;
  *  - {@link encode} folds every plan into one batched SELECT whose WHERE is a union of
  *    arms, coordinated with the decoder through the shared {@link Scope};
@@ -43,14 +43,14 @@
 import { eager } from "@metreeca/blue/value";
 import { createScope, type Scope } from "@metreeca/core/scope";
 import { createFlake, type Flake, isModelBranch } from "@metreeca/keep-flake";
-import type { Broker, Deferred, Lookup } from "@metreeca/keep/batching";
+import type { Broker, Deferred, Detail } from "@metreeca/keep/batching";
 import { type RepositoryClient, variable as toVariable } from "@metreeca/wire-sparql";
 import { decode } from "./decode.js";
 import { encode } from "./encode.js";
 
 
 /**
- * Per-batch body for the lookup handler.
+ * Per-batch body for the detail handler.
  *
  * Three phases run in sequence: **plan** every request via
  * {@link _flake_!createFlake | createFlake}; **fetch** by
@@ -66,23 +66,23 @@ import { encode } from "./encode.js";
  * yields `id` / `type` entries inline from the focus and shape and routes set-valued
  * slots through the collections pass.
  */
-export async function lookup(
-	batch: readonly Deferred<Lookup>[],
+export async function detail(
+	batch: readonly Deferred<Detail>[],
 	client: RepositoryClient,
 	broker: Broker
 ): Promise<void> {
 
 	const scope = createScope(toVariable);
 
-	const items = batch.map(lookup =>
-		({ ...lookup, flake: createFlake(eager(lookup.request.shape), lookup.request.model) })
+	const items = batch.map(detail =>
+		({ ...detail, flake: createFlake(eager(detail.request.shape), detail.request.model) })
 	);
 
 	// drop items whose union arm would be empty (only id/type or collection slots) from the fetch;
 	// they still flow through delivery, where decode yields id/type inline and routes collections
 
 	const effective = items.filter(({ flake }) =>
-		Object.values(flake.entries ?? {}).flat().some(isModelBranch)
+		Object.values(flake.entries ?? {}).some(isModelBranch)
 	);
 
 	decode(scope, items, broker, effective.length === 0 ? [] : await client.select(

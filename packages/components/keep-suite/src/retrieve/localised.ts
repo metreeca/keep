@@ -18,7 +18,7 @@
  * Localised retrieval conformance: coalesced access (single-string and string-array) under language negotiation.
  *
  * Covers the {@link https://www.rfc-editor.org/ QEST} §6 split between **structural** access (tag-preserving,
- * exercised by the template/query suites) and **coalesced** access (a localised property reduced to a plain string, or
+ * exercised by the template suite) and **coalesced** access (a localised property reduced to a plain string, or
  * an array of plain strings for an array-per-tag property, under language negotiation). Negotiation is driven by the
  * `locale` priority list passed to
  * `store.lookup` (defaulting to `["und"]` when omitted, §6.2): a property whose map carries the priority's first
@@ -83,7 +83,7 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 	};
 
 
-	describe("lookup localised", () => {
+	describe("localised", () => {
 
 		beforeAll(factory(async ({ populate }) => { await populate(); }).hook);
 
@@ -161,7 +161,7 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 
 			}));
 
-			it("should lookup one property both structurally and coalesced (§6)", factory(async ({ store }) => {
+			it("should detail one property both structurally and coalesced (§6)", factory(async ({ store }) => {
 
 				// §6: the same single-valued localised property is accessible both ways within one suite —
 				// structurally (a tag-range map, tag-preserving) and coalesced (a plain string).
@@ -293,6 +293,69 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 
 				expect(result).toHaveLength(vendors.length);
 				expect(result[0]?.id).toBe(focal.id);
+
+			}));
+
+		});
+
+
+		describe("folding across a union crossing — §3.2", () => {
+
+			// §3.2 / §5.8.1: `media.caption` crosses the media union into a property declared as a plain string on
+			// the Image variant and as localised text on the Video variant, so the path composes to a mixed range.
+			// The text variant folds into the string one before any construct reads the path: a video caption
+			// contributes its label under the request priority and nothing where no priority tag is present,
+			// an image caption contributes itself whatever the priority.
+
+			const { images, videos } = collections;
+
+			const product = lookup(products, p => (p.media ?? []).length > 0);
+			const image = lookup(images, i => (product?.media ?? []).includes(i.id) && typeof i.caption === "string");
+			const video = lookup(videos, v => (product?.media ?? []).includes(v.id) && v.caption?.en !== undefined);
+
+			const plain = image?.caption;
+			const text = video?.caption?.en;
+
+			it("should search the folded text of a crossing path under the request priority", factory(async ({ store }) => {
+
+				if ( product === undefined || plain === undefined || text === undefined ) { return; }
+
+				const token = text.split(/\s+/)[0].toLowerCase();
+
+				// fixture guard: the token lives in the video label alone, so the string variant never matches it
+				expect(plain.toLowerCase().includes(token)).toBe(false);
+
+				const und = members(await store.lookup({
+					entry: ProductCatalogue,
+					shape: Products,
+					model: catalogue({ id: {} }, { "~media.caption": token })
+				})) ?? [];
+
+				const en = members(await store.lookup({
+					entry: ProductCatalogue,
+					shape: Products,
+					model: catalogue({ id: {} }, { "~media.caption": token })
+				}, { locale: ["en"] })) ?? [];
+
+				expect(und).toHaveLength(0);
+				expect(en.map(r => r.id)).toEqual([product.id]);
+
+			}));
+
+			it("should project the folded text of a crossing path as plain strings", factory(async ({ store }) => {
+
+				if ( product === undefined || plain === undefined || text === undefined ) { return; }
+
+				const model = catalogue({ "id=id": {}, "cap=media.caption": {} }, { "?id": [product.id] });
+
+				const und = (members(await store.lookup({ entry: ProductCatalogue, shape: Products, model })) ?? [])
+					.flatMap(r => r.cap === undefined ? [] : [r.cap]);
+
+				const en = (members(await store.lookup({ entry: ProductCatalogue, shape: Products, model }, { locale: ["en"] })) ?? [])
+					.flatMap(r => r.cap === undefined ? [] : [r.cap]);
+
+				expect(sorted(und.map(String))).toEqual([plain]);
+				expect(sorted(en.map(String))).toEqual(sorted([plain, text]));
 
 			}));
 
@@ -820,9 +883,9 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 				["a leading-wildcard subtag", "*-CH"]
 			];
 
-			it.each(extendedRanges)("should reject %s extended language range as a tag-range key (§5.3)", (_label, range) => factory(async ({ store }) => {
+			it.each(extendedRanges)("should reject %s extended language range as a tag-range key (§5.4)", (_label, range) => factory(async ({ store }) => {
 
-				// §5.3: a tag-range key MUST be a basic language range (a subtag sequence or the standalone `*`
+				// §5.4: a tag-range key MUST be a basic language range (a subtag sequence or the standalone `*`
 				// wildcard). An extended range carrying `*` in a leading, interior, or trailing subtag position
 				// (`de-*`, `*-CH`) MUST be rejected, while the basic `*` wildcard stays admissible.
 

@@ -14,22 +14,15 @@
  * limitations under the License.
  */
 
-import { boolean } from "@metreeca/blue/boolean";
-import { dictionary } from "@metreeca/blue/dictionary";
-import { decimal, integer } from "@metreeca/blue/number";
-import { reference } from "@metreeca/blue/reference";
-import { id, type Member, multiple, optional, required, resource } from "@metreeca/blue/resource";
-import { string, url } from "@metreeca/blue/string";
-import { union } from "@metreeca/blue/union";
 import { isObject } from "@metreeca/core";
 import { ascending, by, compound, descending } from "@metreeca/core/order";
 import type { Resource } from "@metreeca/qest/state";
-import type { Criteria } from "@metreeca/qest/model";
+import type { Criteria, Projection } from "@metreeca/qest/model";
 import { beforeAll, describe, expect, it } from "vitest";
 import { lookup, type TestFactory } from "../index.core.js";
 import { collections } from "../toys.core.js";
-import { Categories, Products, toys, Vendor, Vendors } from "../toys.js";
-import { catalogue, num, rows as projected } from "./index.js";
+import { Categories, Products, toys, Vendors } from "../toys.js";
+import { catalogue, members, num, rows as projected } from "./index.js";
 
 
 const { categories, products, vendors } = collections;
@@ -51,7 +44,7 @@ export function testRetrieveProjection(factory: TestFactory): void {
 		items.reduce<Record<string, number>>((acc, item) => ({ ...acc, [key(item)]: (acc[key(item)] ?? 0)+1 }), {});
 
 
-	describe("lookup projection — §5.6", () => {
+	describe("projection — §5.2", () => {
 
 		beforeAll(factory(async ({ populate }) => { await populate(); }).hook);
 
@@ -65,44 +58,43 @@ export function testRetrieveProjection(factory: TestFactory): void {
 					readonly name: string;
 					readonly pipe: string;
 					readonly field: "change" | "price" | "sku" | "launched" | "created";
-					readonly shape: Member;
 					readonly fn: (v: undefined | Resource[string]) => undefined | Resource[string];
 				}
 
 				const cases: readonly ScalarCase[] = [
 
 					{
-						kind: "numeric", name: "absChange", pipe: "abs", field: "change", shape: optional(decimal),
+						kind: "numeric", name: "absChange", pipe: "abs", field: "change",
 						fn: lenient((v: Resource[string]) => Math.abs(v as number))
 					},
 					{
-						kind: "numeric", name: "floorPrice", pipe: "floor", field: "price", shape: optional(decimal()),
+						kind: "numeric", name: "floorPrice", pipe: "floor", field: "price",
 						fn: lenient((v: Resource[string]) => Math.floor(v as number))
 					},
 					{
-						kind: "numeric", name: "ceilPrice", pipe: "ceil", field: "price", shape: optional(decimal()),
+						kind: "numeric", name: "ceilPrice", pipe: "ceil", field: "price",
 						fn: lenient((v: Resource[string]) => Math.ceil(v as number))
 					},
 					{
-						kind: "numeric", name: "roundPrice", pipe: "round", field: "price", shape: optional(decimal()),
+						kind: "numeric", name: "roundPrice", pipe: "round", field: "price",
 						fn: lenient((v: Resource[string]) => Math.round(v as number))
 					},
 
 					{
-						kind: "textual", name: "lowerSku", pipe: "lower", field: "sku", shape: optional(string()),
+						kind: "textual", name: "lowerSku", pipe: "lower", field: "sku",
 						fn: lenient((v: Resource[string]) => (v as string).toLowerCase())
 					},
 					{
-						kind: "textual", name: "upperSku", pipe: "upper", field: "sku", shape: optional(string()),
+						kind: "textual", name: "upperSku", pipe: "upper", field: "sku",
 						fn: lenient((v: Resource[string]) => (v as string).toUpperCase())
 					},
 					{
-						kind: "textual", name: "skuLen", pipe: "length", field: "sku", shape: optional(integer),
+						kind: "textual", name: "skuLen", pipe: "length", field: "sku",
 						fn: lenient((v: Resource[string]) => (v as string).length)
 					},
 
 					{
-						kind: "temporal", name: "launchYear", pipe: "year", field: "launched", shape: optional(integer),
+						kind: "temporal", name: "launchYear", pipe: "year", field: "launched",
 						fn: lenient((v: Resource[string]) => new Date(v as string).getUTCFullYear())
 					},
 					{
@@ -110,11 +102,10 @@ export function testRetrieveProjection(factory: TestFactory): void {
 						name: "launchMonth",
 						pipe: "month",
 						field: "launched",
-						shape: optional(integer),
 						fn: lenient((v: Resource[string]) => new Date(v as string).getUTCMonth()+1)
 					},
 					{
-						kind: "temporal", name: "launchDay", pipe: "day", field: "launched", shape: optional(integer),
+						kind: "temporal", name: "launchDay", pipe: "day", field: "launched",
 						fn: lenient((v: Resource[string]) => new Date(v as string).getUTCDate())
 					},
 					{
@@ -122,7 +113,6 @@ export function testRetrieveProjection(factory: TestFactory): void {
 						name: "createdHours",
 						pipe: "hours",
 						field: "created",
-						shape: optional(integer),
 						fn: lenient((v: Resource[string]) => new Date(v as string).getUTCHours())
 					},
 					{
@@ -130,7 +120,6 @@ export function testRetrieveProjection(factory: TestFactory): void {
 						name: "createdMinutes",
 						pipe: "minutes",
 						field: "created",
-						shape: optional(integer),
 						fn: lenient((v: Resource[string]) => new Date(v as string).getUTCMinutes())
 					},
 					{
@@ -138,7 +127,6 @@ export function testRetrieveProjection(factory: TestFactory): void {
 						name: "createdSeconds",
 						pipe: "seconds",
 						field: "created",
-						shape: optional(decimal),
 						fn: lenient((v: Resource[string]) =>
 							new Date(v as string).getUTCSeconds()+new Date(v as string).getUTCMilliseconds()/1000)
 					}
@@ -149,19 +137,18 @@ export function testRetrieveProjection(factory: TestFactory): void {
 					name,
 					pipe,
 					field,
-					shape,
 					fn
 				}) => {
 
 					await factory(async ({ store }) => {
 
-						const result = projected(await store.lookup({
+						const result = projected(members(await store.lookup({
 							entry: Catalogue,
 							shape: Products,
-							model: catalogue(resource({ [`${name}=${pipe}:${field}`]: shape }), {
+							model: catalogue({ [`${name}=${pipe}:${field}`]: {} }, {
 								"?id": [AF001.id]
 							})
-						}));
+						})));
 
 						expect(result).toHaveLength(1);
 						expect(result?.[0]?.[name]).toBe(fn(AF001[field]));
@@ -175,24 +162,24 @@ export function testRetrieveProjection(factory: TestFactory): void {
 			describe("aggregate transforms on singleton set", () => {
 
 				it.each([
-					["cnt", "count", "price", optional(integer), 1],
-					["minPrice", "min", "price", optional(decimal()), AF001.price],
-					["maxPrice", "max", "price", optional(decimal()), AF001.price],
-					["minSku", "min", "sku", optional(string()), AF001.sku],
-					["maxLaunched", "max", "launched", optional(string()), AF001.launched],
-					["totalStock", "sum", "stock", optional(decimal), AF001.stock],
-					["avgPrice", "avg", "price", optional(decimal), AF001.price]
-				] as const)("should compute %s as %s on %s", async (name, pipe, field, shape, expected) => {
+					["cnt", "count", "price", 1],
+					["minPrice", "min", "price", AF001.price],
+					["maxPrice", "max", "price", AF001.price],
+					["minSku", "min", "sku", AF001.sku],
+					["maxLaunched", "max", "launched", AF001.launched],
+					["totalStock", "sum", "stock", AF001.stock],
+					["avgPrice", "avg", "price", AF001.price]
+				] as const)("should compute %s as %s on %s", async (name, pipe, field, expected) => {
 
 					await factory(async ({ store }) => {
 
-						const result = projected(await store.lookup({
+						const result = projected(members(await store.lookup({
 							entry: Catalogue,
 							shape: Products,
-							model: catalogue(resource({ [`${name}=${pipe}:${field}`]: shape }), {
+							model: catalogue({ [`${name}=${pipe}:${field}`]: {} }, {
 								"?id": [AF001.id]
 							})
-						}));
+						})));
 
 						expect(result).toHaveLength(1);
 						expect(result?.[0]?.[name]).toBe(expected);
@@ -212,14 +199,11 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 					const flags = categories.map(c => c.featured);
 
-					const result = projected(await store.lookup({
+					const result = projected(members(await store.lookup({
 						entry: CategoryCatalogue,
 						shape: Categories,
-						model: catalogue(resource({
-							"low=min:featured": optional(boolean),
-							"high=max:featured": optional(boolean)
-						}))
-					}));
+						model: catalogue({ "low=min:featured": {}, "high=max:featured": {} })
+					})));
 
 					expect(result).toHaveLength(1);
 					expect(result?.[0]?.low).toBe(flags.reduce((a, b) => a && b));
@@ -233,13 +217,13 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 				it("should compose scalar transforms in pipeline", factory(async ({ store }) => {
 
-					const result = projected(await store.lookup({
+					const result = projected(members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({ "floorAbs=floor:abs:change": optional(decimal) }), {
+						model: catalogue({ "floorAbs=floor:abs:change": {} }, {
 							"?id": [AF001.id]
 						})
-					}));
+					})));
 
 					expect(result).toHaveLength(1);
 					expect(result?.[0]?.floorAbs).toBe(Math.floor(Math.abs(AF001.change!)));
@@ -248,13 +232,13 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 				it("should compose aggregate with scalar transform", factory(async ({ store }) => {
 
-					const result = projected(await store.lookup({
+					const result = projected(members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({ "roundAvg=round:avg:price": optional(decimal) }), {
+						model: catalogue({ "roundAvg=round:avg:price": {} }, {
 							"?id": [AF001.id]
 						})
-					}));
+					})));
 
 					expect(result).toHaveLength(1);
 					expect(result?.[0]?.roundAvg).toBe(Math.round(AF001.price!));
@@ -272,25 +256,25 @@ export function testRetrieveProjection(factory: TestFactory): void {
 				// the empty-set undefined. count alone admits any value, references included (§5.8.2.1).
 
 				it.each([
-					["lowerId", "lower", "id", optional(string())],
-					["upperId", "upper", "id", optional(string())],
-					["idLen", "length", "id", optional(integer)],
-					["lowerType", "lower", "type", optional(string())],
-					["typeLen", "length", "type", optional(integer)],
-					["minId", "min", "id", optional(string())],
-					["maxId", "max", "id", optional(string())],
-					["minType", "min", "type", optional(string())]
-				] as const)("should resolve %s to undefined on a reference target", async (name, pipe, field, shape) => {
+					["lowerId", "lower", "id"],
+					["upperId", "upper", "id"],
+					["idLen", "length", "id"],
+					["lowerType", "lower", "type"],
+					["typeLen", "length", "type"],
+					["minId", "min", "id"],
+					["maxId", "max", "id"],
+					["minType", "min", "type"]
+				] as const)("should resolve %s to undefined on a reference target", async (name, pipe, field) => {
 
 					await factory(async ({ store }) => {
 
-						const result = projected(await store.lookup({
+						const result = projected(members(await store.lookup({
 							entry: Catalogue,
 							shape: Products,
-							model: catalogue(resource({ [`${name}=${pipe}:${field}`]: shape }), {
+							model: catalogue({ [`${name}=${pipe}:${field}`]: {} }, {
 								"?id": [AF001.id]
 							})
-						}));
+						})));
 
 						expect(result).toHaveLength(1);
 						expect(result?.[0]?.[name]).toBeUndefined();
@@ -306,13 +290,13 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 					await factory(async ({ store }) => {
 
-						const result = projected(await store.lookup({
+						const result = projected(members(await store.lookup({
 							entry: Catalogue,
 							shape: Products,
-							model: catalogue(resource({ [`${name}=${pipe}:${field}`]: optional(integer) }), {
+							model: catalogue({ [`${name}=${pipe}:${field}`]: {} }, {
 								"?id": [AF001.id]
 							})
-						}));
+						})));
 
 						expect(result).toHaveLength(1);
 						expect(result?.[0]?.[name]).toBe(1);
@@ -343,7 +327,7 @@ export function testRetrieveProjection(factory: TestFactory): void {
 						await expect(store.lookup({
 							entry: Catalogue,
 							shape: Products,
-							model: catalogue(resource({ [`${name}=${pipe}:${field}`]: optional(string()) }), {
+							model: catalogue({ [`${name}=${pipe}:${field}`]: {} }, {
 								"?id": [AF001.id]
 							})
 						})).rejects.toThrow();
@@ -354,13 +338,13 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 				it("should count a multi-valued reference property", factory(async ({ store }) => {
 
-					const result = projected(await store.lookup({
+					const result = projected(members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({ "cnt=count:categories": required(integer) }), {
+						model: catalogue({ "cnt=count:categories": {} }, {
 							"?id": [AF001.id]
 						})
-					}));
+					})));
 
 					expect(result).toHaveLength(1);
 					expect(result?.[0]?.cnt).toBe(AF001.categories.length);
@@ -369,7 +353,7 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 				it("should aggregate a union-typed literal path in a projection cell", factory(async ({ store }) => {
 
-					// §5.6/§5.8.2.1: an aggregate over a union path (Vendor.score = decimal | grade) is
+					// §5.2/§5.8.2.1: an aggregate over a union path (Vendor.score = decimal | grade) is
 					// admitted — both variants are literal — unlike an aggregate over a reference kind, which
 					// is rejected. count reduces over every value the path gathers, spanning both variants.
 					// (min/max over a mixed-datatype union are unspecified — no single total order the backend
@@ -379,13 +363,11 @@ export function testRetrieveProjection(factory: TestFactory): void {
 						.map(v => v.score)
 						.filter((s): s is number | string => s !== undefined);
 
-					const result = projected(await store.lookup({
+					const result = projected(members(await store.lookup({
 						entry: VendorsCatalogue,
 						shape: Vendors,
-						model: catalogue(resource({
-							"cnt=count:score": required(integer)
-						}))
-					}));
+						model: catalogue({ "cnt=count:score": {} })
+					})));
 
 					expect(result).toHaveLength(1);
 					expect(result?.[0]?.cnt).toBe(defined.length);
@@ -402,18 +384,18 @@ export function testRetrieveProjection(factory: TestFactory): void {
 				// year/month/etc. need temporal; each pairing below is domain-incompatible.
 
 				it.each([
-					["yearOfPrice", "year", "price", optional(integer)],
-					["lenOfPrice", "length", "price", optional(integer)],
-					["lowerOfPrice", "lower", "price", optional(string)],
-					["absOfSku", "abs", "sku", optional(decimal)]
-				] as const)("should reject %s as an incompatible transform", async (name, pipe, field, shape) => {
+					["yearOfPrice", "year", "price"],
+					["lenOfPrice", "length", "price"],
+					["lowerOfPrice", "lower", "price"],
+					["absOfSku", "abs", "sku"]
+				] as const)("should reject %s as an incompatible transform", async (name, pipe, field) => {
 
 					await factory(async ({ store }) => {
 
 						await expect(store.lookup({
 							entry: Catalogue,
 							shape: Products,
-							model: catalogue(resource({ [`${name}=${pipe}:${field}`]: shape }), {
+							model: catalogue({ [`${name}=${pipe}:${field}`]: {} }, {
 								"?id": [AF001.id]
 							})
 						})).rejects.toThrow();
@@ -431,13 +413,13 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 					if ( target === undefined ) { return; }
 
-					const result = projected(await store.lookup({
+					const result = projected(members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({ "h=hours:launched": optional(integer) }), {
+						model: catalogue({ "h=hours:launched": {} }, {
 							"?id": [target.id]
 						})
-					}));
+					})));
 
 					expect(result).toHaveLength(1);
 					expect(result?.[0]?.h).toBeUndefined();
@@ -453,16 +435,13 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 					const [hh, mm] = opens.split(":");
 
-					const result = projected(await store.lookup({
+					const result = projected(members(await store.lookup({
 						entry: VendorsCatalogue,
 						shape: Vendors,
-						model: catalogue(resource({
-							"h=hours:opens": optional(integer),
-							"m=minutes:opens": optional(integer)
-						}), {
+						model: catalogue({ "h=hours:opens": {}, "m=minutes:opens": {} }, {
 							"?id": [target.id]
 						})
-					}));
+					})));
 
 					expect(result).toHaveLength(1);
 					expect(result?.[0]?.h).toBe(Number(hh));
@@ -479,13 +458,13 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 					if ( target === undefined ) { return; }
 
-					const result = projected(await store.lookup({
+					const result = projected(members(await store.lookup({
 						entry: VendorsCatalogue,
 						shape: Vendors,
-						model: catalogue(resource({ "y=year:opens": optional(integer) }), {
+						model: catalogue({ "y=year:opens": {} }, {
 							"?id": [target.id]
 						})
-					}));
+					})));
 
 					expect(result).toHaveLength(1);
 					expect(result?.[0]?.y).toBeUndefined();
@@ -502,13 +481,13 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 					if ( !noLaunched ) { return; }
 
-					const result = projected(await store.lookup({
+					const result = projected(members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({ "launchYear=year:launched": optional(integer) }), {
+						model: catalogue({ "launchYear=year:launched": {} }, {
 							"?id": [noLaunched.id]
 						})
-					}));
+					})));
 
 					expect(result).toHaveLength(1);
 					expect(result?.[0]?.launchYear).toBeUndefined();
@@ -521,17 +500,17 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 				it("should return both plain and computed properties together", factory(async ({ store }) => {
 
-					const result = projected(await store.lookup({
+					const result = projected(members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							"price=price": optional(decimal()),
-							"floorPrice=floor:price": optional(decimal()),
-							"launchYear=year:launched": optional(integer)
-						}), {
+						model: catalogue({
+							"price=price": {},
+							"floorPrice=floor:price": {},
+							"launchYear=year:launched": {}
+						}, {
 							"?id": [AF001.id]
 						})
-					}));
+					})));
 
 					expect(result).toHaveLength(1);
 					expect(result?.[0]?.price).toBe(AF001.price);
@@ -549,19 +528,17 @@ export function testRetrieveProjection(factory: TestFactory): void {
 			it("should retrieve a bare identifier as a template entry, not a projection binding", factory(async ({ store }) => {
 
 				// a collection element whose keys are all bare identifiers is a template, not a projection
-				// (qest §5.6: a projection is told by its `=`-bearing binding keys); the entry is retrieved by
+				// (qest §5.2: a projection is told by its `=`-bearing binding keys); the entry is retrieved by
 				// descent, yielding the same flat value an explicit `price=price` binding would without being a
 				// projection
 
 				const expected = products.map(p => p.price).sort();
 
-				const result = projected(await store.lookup({
+				const result = projected(members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						"price": required(decimal())
-					}))
-				}));
+					model: catalogue({ price: {} })
+				})));
 
 				expect(result).toHaveLength(products.length);
 				expect(result?.map(p => p.price).sort()).toEqual(expected);
@@ -570,20 +547,18 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 			it("should accept explicit name=expression binding", factory(async ({ store }) => {
 
-				// §5.6 distinct rows: equal computed years collapse to one row, and the launched-less
+				// §5.2 distinct rows: equal computed years collapse to one row, and the launched-less
 				// products fold into a single omitted-label row (undefined-key equality)
 
 				const years = products.flatMap(p => p.launched !== undefined ? [new Date(p.launched).getUTCFullYear()] : []);
 				const distinctYears = [...new Set(years)].sort(ascending);
 				const anyAbsent = products.some(p => p.launched === undefined);
 
-				const result = projected(await store.lookup({
+				const result = projected(members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						"launchYear=year:launched": required(decimal)
-					}))
-				})) ?? [];
+					model: catalogue({ "launchYear=year:launched": {} })
+				}))) ?? [];
 
 				expect(result).toHaveLength(distinctYears.length+(anyAbsent ? 1 : 0));
 				expect(result.filter(r => "launchYear" in r).map(r => r.launchYear).sort(ascending)).toEqual(distinctYears);
@@ -593,18 +568,16 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 			it("should project path-based bindings", factory(async ({ store }) => {
 
-				// §5.6 distinct rows: many products share a vendor, so the projected vendor names
+				// §5.2 distinct rows: many products share a vendor, so the projected vendor names
 				// collapse to the distinct set
 
 				const expected = [...new Set(products.map(p => lookup(vendors, { id: p.vendor })!.name))].sort();
 
-				const result = projected(await store.lookup({
+				const result = projected(members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						"vendorName=vendor.name": required(string())
-					}))
-				}));
+					model: catalogue({ "vendorName=vendor.name": {} })
+				})));
 
 				expect([...new Set(result?.map(p => p.vendorName))].sort()).toEqual(expected);
 				expect(result).toHaveLength(expected.length);
@@ -613,18 +586,16 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 			it("should project path ending with id", factory(async ({ store }) => {
 
-				// §5.6 distinct rows: the projected vendor reference collapses to the distinct set of
+				// §5.2 distinct rows: the projected vendor reference collapses to the distinct set of
 				// referenced vendors
 
 				const expected = [...new Set(products.map(p => p.vendor))].sort();
 
-				const result = projected(await store.lookup({
+				const result = projected(members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						"vendorId=vendor.id": required(string())
-					}))
-				}));
+					model: catalogue({ "vendorId=vendor.id": {} })
+				})));
 
 				expect([...new Set(result?.map(p => p.vendorId))].sort()).toEqual(expected);
 				expect(result).toHaveLength(expected.length);
@@ -633,16 +604,14 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 			it("should project path ending with type", factory(async ({ store }) => {
 
-				// §5.6 distinct rows: every product's vendor shares one type, so the projection
+				// §5.2 distinct rows: every product's vendor shares one type, so the projection
 				// collapses to a single row
 
-				const result = projected(await store.lookup({
+				const result = projected(members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						"vendorType=vendor.type": required(string())
-					}))
-				}));
+					model: catalogue({ "vendorType=vendor.type": {} })
+				})));
 
 				expect(result).toHaveLength(1);
 				expect(result?.[0]?.vendorType).toBe(toys.Vendor);
@@ -654,24 +623,24 @@ export function testRetrieveProjection(factory: TestFactory): void {
 				await expect(store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						[`broken=vendor.${step}.name`]: required(string)
-					}))
+					model: catalogue({
+						[`broken=vendor.${step}.name`]: {}
+					})
 				})).rejects.toThrow();
 
 			})());
 
 			it.each([
 				["duplicate binding names", Catalogue, Products,
-					{ "foo=price": required(decimal), "foo=stock": required(decimal) }],
+					{ "foo=price": {}, "foo=stock": {} }],
 				["shorthand and explicit bindings sharing a name", VendorsCatalogue, Vendors,
-					{ "name": required(string), "name=email": required(string) }]
+					{ "name": {}, "name=email": {} }]
 			] as const)("should reject %s", (_label, entry, shape, projection) => factory(async ({ store }) => {
 
 				await expect(store.lookup({
 					entry,
 					shape,
-					model: catalogue(resource(projection))
+					model: catalogue(projection)
 				})).rejects.toThrow();
 
 			})());
@@ -679,18 +648,16 @@ export function testRetrieveProjection(factory: TestFactory): void {
 			it("should project multi-transform pipe over multi-step path", factory(async ({ store }) => {
 
 				// abs:length: — length yields a non-negative integer, so abs is a structural no-op;
-				// the composition exercises multi-transform pipe over a multi-step path. §5.6 distinct
+				// the composition exercises multi-transform pipe over a multi-step path. §5.2 distinct
 				// rows collapse equal computed lengths
 
 				const expected = [...new Set(products.map(p => lookup(vendors, { id: p.vendor })!.name.length))].sort(ascending);
 
-				const result = projected(await store.lookup({
+				const result = projected(members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						"nameLen=abs:length:vendor.name": required(integer)
-					}))
-				}));
+					model: catalogue({ "nameLen=abs:length:vendor.name": {} })
+				})));
 
 				expect([...new Set(result?.map(p => p.nameLen))].sort(ascending)).toEqual(expected);
 				expect(result).toHaveLength(expected.length);
@@ -702,13 +669,11 @@ export function testRetrieveProjection(factory: TestFactory): void {
 				// `count:` with empty path denotes an aggregate over the root collection —
 				// it reduces the collection to a single scalar projection row.
 
-				const result = projected(await store.lookup({
+				const result = projected(members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						"total=count:": required(decimal)
-					}))
-				}));
+					model: catalogue({ "total=count:": {} })
+				})));
 
 				expect(result).toHaveLength(1);
 				expect(result?.[0]?.total).toBe(products.length);
@@ -721,18 +686,16 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 			it("should project reference-typed binding as id", factory(async ({ store }) => {
 
-				// §5.6 distinct rows: many products share a vendor, so the projected references
+				// §5.2 distinct rows: many products share a vendor, so the projected references
 				// collapse to the distinct set
 
 				const expected = [...new Set(products.map(p => p.vendor))].sort();
 
-				const result = projected(await store.lookup({
+				const result = projected(members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						"vendor=vendor": required(reference(Vendor))
-					}))
-				}));
+					model: catalogue({ "vendor=vendor": {} })
+				})));
 
 				expect([...new Set(result?.map(p => p.vendor))].sort()).toEqual(expected);
 				expect(result).toHaveLength(expected.length);
@@ -741,19 +704,14 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 			it("should project embedded-template binding inline", factory(async ({ store }) => {
 
-				// the id binding keeps one row per product (§5.6): without it the shared vendors would
+				// the id binding keeps one row per product (§5.2): without it the shared vendors would
 				// collapse, obscuring the embedded-template expansion this test exercises
 
-				const result = projected(await store.lookup({
+				const result = projected(members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						"id=id": id(),
-						"vendor=vendor": required(resource({
-							name: required(string())
-						}))
-					}))
-				}));
+					model: catalogue({ "id=id": {}, "vendor=vendor": { name: {} } })
+				})));
 
 				expect(result).toHaveLength(products.length);
 				result?.forEach(p => {
@@ -777,7 +735,7 @@ export function testRetrieveProjection(factory: TestFactory): void {
 				const image = collections.images[0];
 				const video = collections.videos[0];
 
-				const result = projected(await store.lookup({
+				const result = projected(members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
 					model: catalogue({
@@ -786,7 +744,7 @@ export function testRetrieveProjection(factory: TestFactory): void {
 					}, {
 						"?id": [AF001.id]
 					})
-				}));
+				})));
 
 				const caps = (result ?? []).map(r => r.cap).filter(c => c !== undefined);
 
@@ -802,32 +760,27 @@ export function testRetrieveProjection(factory: TestFactory): void {
 				const present = expected.filter(a => a !== undefined);
 				const strings = present.filter(a => typeof a === "string").sort();
 
-				// the id binding keeps one row per product (§5.6): without it the shared vendor addresses
+				// the id binding keeps one row per product (§5.2): without it the shared vendor addresses
 				// would collapse, obscuring the per-branch matching this test exercises
 
-				const result = projected(await store.lookup({
+				const result = projected(members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						"id=id": id(),
-						"addr=vendor.address": optional(union(
-							string(),
-							resource({
-								street: required(string()),
-								city: required(string())
-							}),
-							resource({
-								latitude: required(decimal()),
-								longitude: required(decimal())
-							})
-						))
-					}))
-				}));
+					model: catalogue({
+						"id=id": {},
+						"addr=vendor.address": {
+							"0": {},
+							"1": { street: {}, city: {} },
+							"2": { latitude: {}, longitude: {} }
+						}
+					})
+				})));
 
 				expect(result).toHaveLength(products.length);
 
 				// each cell carries its vendor's branch value, the branch singled out by matching the
-				// keyed alternative (string by kind, each embedded branch by structure), not by key
+				// keyed alternative by form (the atomic the string branch, each template the embedded branch
+				// it is valid on), not by key
 
 				const cells = (result ?? []).map(r => r.addr).filter(a => a !== undefined);
 
@@ -846,23 +799,85 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 			}));
 
+			it("should expand a multi-valued union-typed binding under each item's own variant", factory(async ({ store }) => {
+
+				// §5.5 in a projection cell: the media union binding fans one row per item, and each item expands
+				// under the template alternative matching its own variant (the width template the Image, the
+				// duration template the Video), never under the first alternative the binding states
+
+				const result = projected(members(await store.lookup({
+					entry: Catalogue,
+					shape: Products,
+					model: catalogue({
+						"id=id": {},
+						"m=media": { "0": { url: {}, width: {} }, "1": { url: {}, duration: {} } }
+					}, {
+						"?id": [AF001.id]
+					})
+				}))) ?? [];
+
+				const items = result.flatMap(r => r.m === undefined ? [] : [r.m]);
+
+				expect(items).toHaveLength(AF001.media?.length ?? 0);
+				expect(items.some(m => isObject(m) && "width" in m && !("duration" in m))).toBe(true);
+				expect(items.some(m => isObject(m) && "duration" in m && !("width" in m))).toBe(true);
+				items.forEach(m => expect(isObject(m) && "url" in m).toBe(true));
+
+			}));
+
+			it("should project the declared class of each member reached through a union path", factory(async ({ store }) => {
+
+				// §5.2 over §5.5: `media.type` crosses the media union, so each fanned row carries the class the
+				// item's own variant declares (Image or Video), read off that variant rather than off the first
+				// branch the path resolves to
+
+				const result = projected(members(await store.lookup({
+					entry: Catalogue,
+					shape: Products,
+					model: catalogue({ "id=id": {}, "kind=media.type": {} }, { "?id": [AF001.id] })
+				}))) ?? [];
+
+				const kinds = result.flatMap(r => r.kind === undefined ? [] : [r.kind]).sort();
+
+				expect(kinds).toEqual([toys.Image, toys.Video].sort());
+
+			}));
+
+			it("should expand a nested collection inside a projected template cell", factory(async ({ store }) => {
+
+				// a template alternative under a projection cell is expanded as any resource is, its own
+				// multi-valued slots included: the vendor cell carries the vendor's whole alias set
+
+				const result = projected(members(await store.lookup({
+					entry: Catalogue,
+					shape: Products,
+					model: catalogue({ "id=id": {}, "v=vendor": { code: {}, aliases: {} } }, { "?id": [AF001.id] })
+				}))) ?? [];
+
+				const vendor = lookup(vendors, { id: AF001.vendor })!;
+				const cell = result[0]?.v;
+
+				expect(result).toHaveLength(1);
+				expect(isObject(cell) ? cell.code : undefined).toBe(vendor.code);
+				expect(isObject(cell) ? [...((cell.aliases ?? []) as readonly string[])].sort() : undefined)
+					.toEqual([...(vendor.aliases ?? [])].sort());
+
+			}));
+
 			it("should expand a media.subject multistep path under each branch's resource shape", factory(async ({ store }) => {
 
-				// media.subject crosses the media union — Image.subject → Product, Video.subject → Category —
+				// media.subject crosses the media union (Image.subject → Product, Video.subject → Category),
 				// so the path's effective type is union(Product, Category). Each projected subject MUST expand
 				// under the branch matching its own variant, not merely the first branch the path resolves to.
 
-				const subjectRows = projected(await store.lookup({
+				const subjectRows = projected(members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						"id=id": id(),
-						"subj=media.subject": optional(union(
-							resource({ name: required(dictionary({ uniqueLang: true, languageIn: ["en"] })) }),
-							resource({ title: required(dictionary({ uniqueLang: true, languageIn: ["en"] })) })
-						))
-					}))
-				})) ?? [];
+					model: catalogue({
+						"id=id": {},
+						"subj=media.subject": { "0": { name: { en: {} } }, "1": { title: { en: {} } } }
+					})
+				}))) ?? [];
 
 				// the sample wires media to a single product; select its rows by the presence of the fanned
 				// `subj` cell rather than a hardcoded id, and skip when no media fixture is present
@@ -899,9 +914,9 @@ export function testRetrieveProjection(factory: TestFactory): void {
 			// preserved. An empty binding contributes a single row with its cell as `undefined`
 			// rather than collapsing the cross-product.
 
-			it("should fan two multi-valued bindings into their full cross-product (§5.6)", factory(async ({ store }) => {
+			it("should fan two multi-valued bindings into their full cross-product (§5.2)", factory(async ({ store }) => {
 
-				// §5.6: two multi-valued projection bindings emit the cross-product of their values —
+				// §5.2: two multi-valued projection bindings emit the cross-product of their values —
 				// one row per (category, document) pair per product — never regrouped into arrays. A
 				// product empty on either axis preserves a single row with that label omitted, so the
 				// per-product row count is max(1, |categories|) × max(1, |documents|).
@@ -911,15 +926,11 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 				const expectedRows = products.reduce((sum, p) => sum+rowsFor(p), 0);
 
-				const result = projected(await store.lookup({
+				const result = projected(members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						"sku=sku": required(string()),
-						"category=categories.id": required(string()),
-						"document=documents": required(url)
-					}))
-				}));
+					model: catalogue({ "sku=sku": {}, "category=categories.id": {}, "document=documents": {} })
+				})));
 
 				expect(result).toHaveLength(expectedRows);
 
@@ -932,14 +943,11 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 				const expectedRows = products.reduce((sum, p) => sum+p.documents.length, 0);
 
-				const result = projected(await store.lookup({
+				const result = projected(members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						"sku=sku": required(string()),
-						"document=documents": required(url)
-					}))
-				}));
+					model: catalogue({ "sku=sku": {}, "document=documents": {} })
+				})));
 
 				expect(result).toHaveLength(expectedRows);
 
@@ -952,14 +960,11 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 				const expectedRows = products.reduce((sum, p) => sum+p.categories.length, 0);
 
-				const result = projected(await store.lookup({
+				const result = projected(members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						"sku=sku": required(string()),
-						"category=categories.id": required(string())
-					}))
-				}));
+					model: catalogue({ "sku=sku": {}, "category=categories.id": {} })
+				})));
 
 				expect(result).toHaveLength(expectedRows);
 
@@ -970,20 +975,17 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 			it("should preserve focus rows with the label omitted for absent optional scalars", factory(async ({ store }) => {
 
-				// §5.6: outer-join row preservation at the path level. Products with `launched ===
+				// §5.2: outer-join row preservation at the path level. Products with `launched ===
 				// undefined` still appear as rows, but a binding that resolves to no value has its
 				// label OMITTED from the row, not present as `undefined`.
 
 				const expectedAbsent = products.filter(p => p.launched === undefined).length;
 
-				const result = projected(await store.lookup({
+				const result = projected(members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						"sku=sku": required(string()),
-						"launched=launched": optional(string())
-					}))
-				})) ?? [];
+					model: catalogue({ "sku=sku": {}, "launched=launched": {} })
+				}))) ?? [];
 
 				expect(result).toHaveLength(products.length);
 
@@ -1016,37 +1018,28 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 						if ( !v ) { return; }
 
-						// §5.4: the union-typed `contacts` binding is addressable only through the
-						// keyed form, one placeholder per branch matched by kind (email and phone share the
-						// string kind) or structure (the PostalAddress and Place templates)
+						// §5.5: the union-typed `contacts` binding retrieves its variants to different depths
+						// through the keyed form, one placeholder per alternative matched by form (the atomic
+						// the email and phone strings, the PostalAddress and Place templates their branches)
 
-						const result = projected(await store.lookup({
+						const result = projected(members(await store.lookup({
 							entry: VendorsCatalogue,
 							shape: Vendors,
-							model: catalogue(resource({
-								"alias=aliases": optional(string),
-								"contact=contacts": optional(union(
-									// §5.4: a single string alternative matches BOTH same-kind string variants
-									// (email and phone) by kind, its value immaterial; the two templates match the
-									// node variants by structure
-									string(),
-									resource({
-										street: required(string()),
-										city: required(string())
-									}),
-									resource({
-										latitude: required(decimal()),
-										longitude: required(decimal())
-									})
-								))
-							}), {
+							model: catalogue({
+								"alias=aliases": {},
+								"contact=contacts": {
+									"0": {},
+									"1": { street: {}, city: {} },
+									"2": { latitude: {}, longitude: {} }
+								}
+							}, {
 								"?id": [v.id]
 							})
-						}));
+						})));
 
 						expect(result).toHaveLength(rows);
 
-						// §5.6 empty-side outer-join: a binding with no resolved values preserves a single
+						// §5.2 empty-side outer-join: a binding with no resolved values preserves a single
 						// row but has its label OMITTED, rather than collapsing the cross-product or
 						// appearing as a present `undefined` cell.
 
@@ -1060,9 +1053,9 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 		});
 
-		describe("distinct rows — §5.6", () => {
+		describe("distinct rows — §5.2", () => {
 
-			// §5.6: a projection yields the set of distinct binding tuples. Rows sharing the same cell
+			// §5.2: a projection yields the set of distinct binding tuples. Rows sharing the same cell
 			// values collapse — folding both cross-product fan-out duplicates and equal tuples
 			// contributed by different items — unless an identifying binding keeps them apart.
 
@@ -1073,13 +1066,11 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 				const expected = [...new Set(products.map(p => p.condition))].sort();
 
-				const result = projected(await store.lookup({
+				const result = projected(members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						"condition=condition": required(string())
-					}))
-				}));
+					model: catalogue({ "condition=condition": {} })
+				})));
 
 				expect([...new Set(result?.map(r => r.condition))].sort()).toEqual(expected);
 				expect(result).toHaveLength(expected.length);
@@ -1088,20 +1079,18 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 			it("should collapse rows with a shared omitted label (undefined-key equality)", factory(async ({ store }) => {
 
-				// §5.6: a pair of omitted labels counts as equal, so the products with no launched date
+				// §5.2: a pair of omitted labels counts as equal, so the products with no launched date
 				// fold into a single label-less row rather than one row each
 
 				const anyAbsent = products.some(p => p.launched === undefined);
 
 				if ( !anyAbsent ) { return; }
 
-				const result = projected(await store.lookup({
+				const result = projected(members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						"launched=launched": optional(string())
-					}))
-				})) ?? [];
+					model: catalogue({ "launched=launched": {} })
+				}))) ?? [];
 
 				expect(result.filter(r => !("launched" in r))).toHaveLength(1);
 
@@ -1109,17 +1098,14 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 			it("should keep otherwise-equal items apart with an identifying binding", factory(async ({ store }) => {
 
-				// §5.6: an id binding makes every item's tuple unique, restoring one row per item even
+				// §5.2: an id binding makes every item's tuple unique, restoring one row per item even
 				// when the sibling cell values coincide
 
-				const result = projected(await store.lookup({
+				const result = projected(members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						"id=id": id(),
-						"condition=condition": required(string())
-					}))
-				}));
+					model: catalogue({ "id=id": {}, "condition=condition": {} })
+				})));
 
 				expect(result).toHaveLength(products.length);
 
@@ -1127,21 +1113,19 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 		});
 
-		// §9.2 / §5.6: a localised projection binding yields ONE complete Localised cell per focus
+		// §5.2 / §5.4: a localised projection binding yields ONE complete Localised cell per focus
 		// row — all tags matching the binding's TagRange patterns in a single tag-keyed map — via
 		// deferred two-pass expansion, never a per-(focus, tag) fan-out. Focus rows with no
-		// matching tag are preserved with the label omitted (§5.6).
-		describe("localised projection — §5.6", () => {
+		// matching tag are preserved with the label omitted (§5.2).
+		describe("localised projection — §5.2", () => {
 
 			it("should yield one complete cell per focus for the wildcard pattern", factory(async ({ store }) => {
 
-				const result = projected(await store.lookup({
+				const result = projected(members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						"label=name": required(dictionary({ uniqueLang: true }))
-					}))
-				}));
+					model: catalogue({ "label=name": { "*": {} } })
+				})));
 
 				// one row per focus, with every name tag regrouped into its focus cell (no fan-out)
 
@@ -1158,13 +1142,11 @@ export function testRetrieveProjection(factory: TestFactory): void {
 				// Every product carries an `en` name, so the `en` range matches all focus rows; each
 				// focus cell carries only its `en*` tags.
 
-				const result = projected(await store.lookup({
+				const result = projected(members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						"label=name": required(dictionary({ uniqueLang: true, languageIn: ["en"] }))
-					}))
-				}));
+					model: catalogue({ "label=name": { en: {} } })
+				})));
 
 				expect(result).toHaveLength(products.length);
 				result?.forEach(r => {
@@ -1174,17 +1156,31 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 			}));
 
+			it("should project the coalesced label of a localised property through an atomic binding (§5.3)", factory(async ({ store }) => {
+
+				// an atomic over a localised property requests its coalesced label (§6.2), a plain string cell
+				// rather than the tag-keyed map a locale binding yields
+
+				const result = projected(members(await store.lookup({
+					entry: Catalogue,
+					shape: Products,
+					model: catalogue({ "sku=sku": {}, "label=name": {} })
+				}, { locale: ["en"] })));
+
+				expect(result).toHaveLength(products.length);
+				result?.forEach(r => expect(r.label).toBe(lookup(products, p => p.sku === r.sku)?.name?.en));
+
+			}));
+
 			it("should combine multiple tag-range patterns into one cell per focus", factory(async ({ store }) => {
 
 				const expectedRows = products.filter(p => p.name?.en !== undefined || p.name?.fr !== undefined).length;
 
-				const result = projected(await store.lookup({
+				const result = projected(members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						"label=name": required(dictionary({ uniqueLang: true, languageIn: ["en", "fr"] }))
-					}))
-				}));
+					model: catalogue({ "label=name": { en: {}, fr: {} } })
+				})));
 
 				expect(result).toHaveLength(expectedRows);
 				result?.forEach(r => {
@@ -1197,22 +1193,39 @@ export function testRetrieveProjection(factory: TestFactory): void {
 			it("should preserve focus rows with the label omitted for non-matching tag", factory(async ({ store }) => {
 
 				// description is optional; products without an `en` description still appear once,
-				// with the binding's label OMITTED from the row (§5.6 outer-join optionality).
+				// with the binding's label OMITTED from the row (§5.2 outer-join optionality).
 
 				const presentEn = products.filter(p => p.description?.en !== undefined).length;
 				const missingEn = products.filter(p => p.description?.en === undefined).length;
 
-				const result = projected(await store.lookup({
+				const result = projected(members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						"sku=sku": required(string()),
-						"desc=description": optional(dictionary({ uniqueLang: true, languageIn: ["en"] }))
-					}))
-				}));
+					model: catalogue({ "sku=sku": {}, "desc=description": { en: {} } })
+				})));
 
 				expect(result).toHaveLength(presentEn+missingEn);
 				expect(result?.filter(r => !("desc" in r))).toHaveLength(missingEn);
+
+			}));
+
+			it("should yield one complete cell per focus for a localised property reached through a path", factory(async ({ store }) => {
+
+				// §5.2 / §5.4 through a reference step: `vendor.label` is expanded under the shape the path
+				// reaches (the vendor's), so each product row carries its vendor's full label map
+
+				const result = projected(members(await store.lookup({
+					entry: Catalogue,
+					shape: Products,
+					model: catalogue({ "id=id": {}, "label=vendor.label": { "*": {} } })
+				}))) ?? [];
+
+				expect(result).toHaveLength(products.length);
+
+				result.forEach(r => {
+					const vendor = lookup(vendors, { id: lookup(products, { id: r.id as string })!.vendor })!;
+					expect(r.label).toEqual(vendor.label);
+				});
 
 			}));
 
@@ -1227,13 +1240,11 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 				const expected = [...names].sort(ascending)[0];
 
-				const result = projected(await store.lookup({
+				const result = projected(members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						"first=min:name": required(string)
-					}))
-				}, { locale: ["en"] }));
+					model: catalogue({ "first=min:name": {} })
+				}, { locale: ["en"] })));
 
 				expect(result).toHaveLength(1);
 				expect(result?.[0]?.first).toBe(expected);
@@ -1251,13 +1262,11 @@ export function testRetrieveProjection(factory: TestFactory): void {
 					.map(l => l.length)
 					.sort(ascending);
 
-				const result = projected(await store.lookup({
+				const result = projected(members(await store.lookup({
 					entry: VendorsCatalogue,
 					shape: Vendors,
-					model: catalogue(resource({
-						"len=length:label": required(integer)
-					}))
-				})) ?? [];
+					model: catalogue({ "len=length:label": {} })
+				}))) ?? [];
 
 				expect(result.map(r => r.len).sort(ascending)).toEqual(expected);
 
@@ -1268,32 +1277,27 @@ export function testRetrieveProjection(factory: TestFactory): void {
 				// an array-per-tag property cannot coalesce, so the step contributes no value and the
 				// piped aggregate evaluates under the empty-set rules: count: totals 0 despite stored keywords
 
-				const result = projected(await store.lookup({
+				const result = projected(members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						"kw=count:keywords": required(integer)
-					}))
-				}));
+					model: catalogue({ "kw=count:keywords": {} })
+				})));
 
 				expect(result).toHaveLength(1);
 				expect(result?.[0]?.kw).toBe(0);
 
 			}));
 
-			// §5.6: a structural locale binding counts as a single value and does not fan out rows, so the
+			// §5.2: a structural locale binding counts as a single value and does not fan out rows, so the
 			// localised cell is one complete `Localised` per focus; composing with a non-localised sibling
 			// yields one row per focus (no per-tag cartesian).
 			it("should compose with non-localised siblings without per-tag fan-out", factory(async ({ store }) => {
 
-				const result = projected(await store.lookup({
+				const result = projected(members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						"sku=sku": required(string()),
-						"label=name": required(dictionary({ uniqueLang: true }))
-					}))
-				}));
+					model: catalogue({ "sku=sku": {}, "label=name": { "*": {} } })
+				})));
 
 				// one row per focus — each sku appears exactly once, paired with its complete name cell
 
@@ -1311,7 +1315,6 @@ export function testRetrieveProjection(factory: TestFactory): void {
 			interface GroupCase {
 				readonly label: string;
 				readonly key: string;
-				readonly shape: Member;
 				readonly groups: number;
 				readonly check: (key: Resource[string]) => boolean;
 			}
@@ -1321,32 +1324,30 @@ export function testRetrieveProjection(factory: TestFactory): void {
 				{
 					label: "plain key",
 					key: "condition=condition",
-					shape: required(string()),
 					groups: new Set(products.map(p => p.condition)).size,
 					check: k => typeof k === "string"
 				},
 				{
 					label: "path key",
 					key: "vendorName=vendor.name",
-					shape: required(string()),
 					groups: new Set(products.map(p => lookup(vendors, { id: p.vendor })!.name)).size,
 					check: k => typeof k === "string"
 				}
 
 			];
 
-			it.each(cases)("should group by $label", async ({ key, shape, groups, check }) => {
+			it.each(cases)("should group by $label", async ({ key, groups, check }) => {
 
 				await factory(async ({ store }) => {
 
-					const result = projected(await store.lookup({
+					const result = projected(members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							[key]: shape,
-							"cnt=count:sku": required(decimal)
-						}))
-					}));
+						model: catalogue({
+							[key]: {},
+							"cnt=count:sku": {}
+						})
+					})));
 
 					expect(result).toHaveLength(groups);
 					expect(result?.every(r => check(r[key.split("=")[0]]))).toBe(true);
@@ -1360,7 +1361,7 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 					// §5.8.2.1: grouping on the optional computed key year:launched. Rows whose key is
 					// undefined (the launched-less products) collapse into one additional group whose
-					// output row OMITS the key, extending the no-value rule of §5.6.
+					// output row OMITS the key, extending the no-value rule of §5.2.
 
 					const name = "launchYear";
 
@@ -1370,18 +1371,36 @@ export function testRetrieveProjection(factory: TestFactory): void {
 					const distinctYears = new Set(years).size;
 					const anyAbsent = products.some(p => p.launched === undefined);
 
-					const result = projected(await store.lookup({
+					const result = projected(members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							"launchYear=year:launched": optional(integer),
-							"cnt=count:sku": required(decimal)
-						}))
-					})) ?? [];
+						model: catalogue({ "launchYear=year:launched": {}, "cnt=count:sku": {} })
+					}))) ?? [];
 
 					expect(result).toHaveLength(distinctYears+(anyAbsent ? 1 : 0));
 					expect(result.filter(r => !(name in r))).toHaveLength(anyAbsent ? 1 : 0);
 					expect(result.filter(r => name in r).every(r => typeof r[name] === "number")).toBe(true);
+
+				}));
+
+			it("should group by a union-typed key, one group per distinct value across variants (§5.8.2.1)",
+				factory(async ({ store }) => {
+
+					// §5.8.2.1 over §5.5: a union-typed grouping key groups by the stored value whatever its
+					// variant, numeric scores and grade strings alike, plus one group for the score-less vendors
+
+					const expected = vendors.reduce<Record<string, number>>(
+						(acc, v) => ({ ...acc, [String(v.score)]: (acc[String(v.score)] ?? 0)+1 }), {}
+					);
+
+					const result = projected(members(await store.lookup({
+						entry: VendorsCatalogue,
+						shape: Vendors,
+						model: catalogue({ "score=score": { "0": {}, "1": {} }, "cnt=count:id": {} })
+					}))) ?? [];
+
+					expect(result).toHaveLength(Object.keys(expected).length);
+					result.forEach(r => expect(r.cnt).toBe(expected[String(r.score)]));
 
 				}));
 
@@ -1396,14 +1415,11 @@ export function testRetrieveProjection(factory: TestFactory): void {
 					const byCategory = products.reduce<Record<string, number>>((acc, p) =>
 						p.categories.reduce((a, c) => ({ ...a, [c]: (a[c] ?? 0)+1 }), acc), {});
 
-					const result = projected(await store.lookup({
+					const result = projected(members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							"category=categories.id": required(string()),
-							"cnt=count:sku": required(decimal)
-						}))
-					})) ?? [];
+						model: catalogue({ "category=categories.id": {}, "cnt=count:sku": {} })
+					}))) ?? [];
 
 					expect(result).toHaveLength(Object.keys(byCategory).length);
 					result.forEach(r => expect(r.cnt).toBe(byCategory[String(r.category)]));
@@ -1416,7 +1432,7 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 			interface CompositionCase {
 				readonly label: string;
-				readonly projection: Record<string, Member>;
+				readonly projection: Projection;
 				readonly expected: number;
 				readonly verify: (result: readonly Resource[]) => void;
 			}
@@ -1432,10 +1448,10 @@ export function testRetrieveProjection(factory: TestFactory): void {
 				{
 					label: "projected fields only (P)",
 					projection: {
-						"price=price": required(decimal()),
-						"stock=stock": required(decimal)
+						"price=price": {},
+						"stock=stock": {}
 					},
-					// §5.6 distinct rows: products sharing a (price, stock) tuple collapse to one row
+					// §5.2 distinct rows: products sharing a (price, stock) tuple collapse to one row
 					expected: new Set(products.map(p => `${p.price}|${p.stock}`)).size,
 					verify: result => {
 						const expected = [...new Set(products.map(p => `${p.price}|${p.stock}`))].sort();
@@ -1446,8 +1462,8 @@ export function testRetrieveProjection(factory: TestFactory): void {
 				{
 					label: "aggregate fields only (A)",
 					projection: {
-						"totalCount=count:sku": required(decimal),
-						"avgPrice=avg:price": required(decimal)
+						"totalCount=count:sku": {},
+						"avgPrice=avg:price": {}
 					},
 					expected: 1,
 					verify: result => {
@@ -1458,8 +1474,8 @@ export function testRetrieveProjection(factory: TestFactory): void {
 				{
 					label: "projected then aggregate (P A)",
 					projection: {
-						"condition=condition": required(string()),
-						"avgPrice=avg:price": required(decimal)
+						"condition=condition": {},
+						"avgPrice=avg:price": {}
 					},
 					expected: groupCount,
 					verify: result => {
@@ -1474,8 +1490,8 @@ export function testRetrieveProjection(factory: TestFactory): void {
 				{
 					label: "aggregate then projected (A P)",
 					projection: {
-						"avgPrice=avg:price": required(decimal()),
-						"condition=condition": required(string())
+						"avgPrice=avg:price": {},
+						"condition=condition": {}
 					},
 					expected: groupCount,
 					verify: result => {
@@ -1490,9 +1506,9 @@ export function testRetrieveProjection(factory: TestFactory): void {
 				{
 					label: "projected, aggregate, projected (P A P)",
 					projection: {
-						"condition=condition": required(string()),
-						"avgPrice=avg:price": required(decimal),
-						"stock=stock": required(decimal)
+						"condition=condition": {},
+						"avgPrice=avg:price": {},
+						"stock=stock": {}
 					},
 					expected: new Set(products.map(p => `${p.condition}|${p.stock}`)).size,
 					verify: result => {
@@ -1511,11 +1527,11 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 				await factory(async ({ store }) => {
 
-					const result = projected(await store.lookup({
+					const result = projected(members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource(projection))
-					}));
+						model: catalogue(projection)
+					})));
 
 					expect(result).toHaveLength(expected);
 					verify(result ?? []);
@@ -1532,15 +1548,13 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 				it("should filter on scalar fields in projected queries", factory(async ({ store }) => {
 
-					const result = projected(await store.lookup({
+					const result = projected(members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							"price=price": required(decimal())
-						}), {
+						model: catalogue({ "price=price": {} }, {
 							">=price": 20
 						})
-					}));
+					})));
 
 					expect(result?.every(p => num(p.price) >= 20)).toBe(true);
 
@@ -1548,16 +1562,13 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 				it("should filter on aggregate expressions in aggregate queries", factory(async ({ store }) => {
 
-					const result = projected(await store.lookup({
+					const result = projected(members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							"condition=condition": required(string()),
-							"cnt=count:sku": required(decimal)
-						}), {
+						model: catalogue({ "condition=condition": {}, "cnt=count:sku": {} }, {
 							">=count:sku": 2
 						})
-					}));
+					})));
 
 					expect(result?.every(p => num(p.cnt) >= 2)).toBe(true);
 
@@ -1577,16 +1588,13 @@ export function testRetrieveProjection(factory: TestFactory): void {
 						.map(([condition]) => condition)
 						.sort();
 
-					const result = projected(await store.lookup({
+					const result = projected(members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							"condition=condition": required(string()),
-							"cnt=count:id": required(decimal)
-						}), {
+						model: catalogue({ "condition=condition": {}, "cnt=count:id": {} }, {
 							">=count:id": threshold
 						})
-					}));
+					})));
 
 					expect(expected.length).toBeGreaterThan(0);
 					expect(expected.length).toBeLessThan(new Set(products.map(p => p.condition)).size);
@@ -1607,16 +1615,13 @@ export function testRetrieveProjection(factory: TestFactory): void {
 					const token = minSku("new");
 					const expected = conditions.filter(c => minSku(c).toLowerCase().includes(token.toLowerCase())).sort();
 
-					const result = projected(await store.lookup({
+					const result = projected(members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							"condition=condition": required(string()),
-							"cnt=count:sku": required(decimal)
-						}), {
+						model: catalogue({ "condition=condition": {}, "cnt=count:sku": {} }, {
 							"~min:sku": token
 						})
-					}));
+					})));
 
 					expect(expected.length).toBeGreaterThan(0);
 					expect(expected.length).toBeLessThan(conditions.length);
@@ -1635,16 +1640,13 @@ export function testRetrieveProjection(factory: TestFactory): void {
 					const options = [minSku("new"), minSku("used")];
 					const expected = conditions.filter(c => options.includes(minSku(c))).sort();
 
-					const result = projected(await store.lookup({
+					const result = projected(members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							"condition=condition": required(string()),
-							"cnt=count:sku": required(decimal)
-						}), {
+						model: catalogue({ "condition=condition": {}, "cnt=count:sku": {} }, {
 							"?min:sku": options
 						})
-					}));
+					})));
 
 					expect(expected.length).toBeGreaterThan(0);
 					expect(expected.length).toBeLessThan(conditions.length);
@@ -1664,16 +1666,13 @@ export function testRetrieveProjection(factory: TestFactory): void {
 					const target = minSku("new");
 					const expected = conditions.filter(c => minSku(c) === target).sort();
 
-					const result = projected(await store.lookup({
+					const result = projected(members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							"condition=condition": required(string()),
-							"cnt=count:sku": required(decimal)
-						}), {
+						model: catalogue({ "condition=condition": {}, "cnt=count:sku": {} }, {
 							"!min:sku": [target]
 						})
-					}));
+					})));
 
 					expect(expected.length).toBeGreaterThan(0);
 					expect(expected.length).toBeLessThan(conditions.length);
@@ -1683,17 +1682,14 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 				it("should filter on both scalar and aggregate in mixed queries", factory(async ({ store }) => {
 
-					const result = projected(await store.lookup({
+					const result = projected(members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							"condition=condition": required(string()),
-							"avgPrice=avg:price": required(decimal)
-						}), {
+						model: catalogue({ "condition=condition": {}, "avgPrice=avg:price": {} }, {
 							"?condition": ["new"],
 							">=avg:price": 10
 						})
-					}));
+					})));
 
 					expect(result?.every(p => p.condition === "new" && num(p.avgPrice) >= 10)).toBe(true);
 
@@ -1701,20 +1697,18 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 				it("should filter on non-projected fields", factory(async ({ store }) => {
 
-					// §5.6 distinct rows: filtering restricts the items, then equal projected prices
+					// §5.2 distinct rows: filtering restricts the items, then equal projected prices
 					// collapse
 
 					const expected = [...new Set(products.filter(p => p.condition === "new").map(p => p.price))];
 
-					const result = projected(await store.lookup({
+					const result = projected(members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							"price=price": required(decimal())
-						}), {
+						model: catalogue({ "price=price": {} }, {
 							"?condition": ["new"]
 						})
-					}));
+					})));
 
 					expect(result).toHaveLength(expected.length);
 
@@ -1729,18 +1723,61 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 					const expected = products.filter(p => p.categories.length >= 2);
 
-					const result = projected(await store.lookup({
+					const result = projected(members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							"sku=sku": required(string())
-						}), {
+						model: catalogue({ "sku=sku": {} }, {
 							">=count:categories": 2
 						})
-					}));
+					})));
 
 					expect(expected.length).toBeGreaterThan(0);
 					expect(result?.map(r => r.sku).sort()).toEqual(expected.map(p => p.sku).sort());
+
+				}));
+
+				it("should collapse distinct rows after an ungrouped per-item reduction (§5.2, §5.8.2.1)", factory(async ({ store }) => {
+
+					// §5.8.2.1 then §5.2: the selection aggregate reduces per item, keeping the products with at
+					// least two categories, and the projection then yields the distinct conditions among them,
+					// never one row per qualifying product and never one group per condition over all products
+
+					const expected = [...new Set(products.filter(p => p.categories.length >= 2).map(p => p.condition))].sort();
+
+					expect(expected.length).toBeGreaterThan(0);
+					expect(expected.length).toBeLessThan(products.filter(p => p.categories.length >= 2).length);
+
+					const result = projected(members(await store.lookup({
+						entry: Catalogue,
+						shape: Products,
+						model: catalogue({ "condition=condition": {} }, {
+							">=count:categories": 2
+						})
+					}))) ?? [];
+
+					expect(result.map(r => r.condition).sort()).toEqual(expected);
+
+				}));
+
+				it("should order ungrouped rows by a per-item reduction (§5.8.2.1)", factory(async ({ store }) => {
+
+					// §5.8.2.1: a selection aggregate orders items by their own reduced value even when the
+					// projection carries no aggregate; the sku rows come back by descending category count
+
+					const countOf = (sku: unknown): number => lookup(products, { sku: sku as string })!.categories.length;
+
+					const result = projected(members(await store.lookup({
+						entry: Catalogue,
+						shape: Products,
+						model: catalogue({ "sku=sku": {} }, {
+							"^count:categories": -1
+						})
+					}))) ?? [];
+
+					const counts = result.map(r => countOf(r.sku));
+
+					expect(result).toHaveLength(products.length);
+					expect(counts).toEqual([...counts].sort(descending));
 
 				}));
 
@@ -1752,16 +1789,13 @@ export function testRetrieveProjection(factory: TestFactory): void {
 						.filter(p => p.price >= threshold)
 						.forEach(p => expectedCountsByVendor.set(p.vendor, (expectedCountsByVendor.get(p.vendor) ?? 0)+1));
 
-					const result = projected(await store.lookup({
+					const result = projected(members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							"vendor=vendor": required(reference(Vendor)),
-							"cnt=count:sku": required(decimal)
-						}), {
+						model: catalogue({ "vendor=vendor": {}, "cnt=count:sku": {} }, {
 							">=price": threshold
 						})
-					}));
+					})));
 
 					expect(result?.length).toBe(expectedCountsByVendor.size);
 					result?.forEach(r => {
@@ -1783,17 +1817,14 @@ export function testRetrieveProjection(factory: TestFactory): void {
 						.filter(([, n]) => n >= countThreshold)
 						.sort(([a], [b]) => a.localeCompare(b));
 
-					const result = projected(await store.lookup({
+					const result = projected(members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							"condition=condition": required(string()),
-							"cnt=count:sku": required(decimal)
-						}), {
+						model: catalogue({ "condition=condition": {}, "cnt=count:sku": {} }, {
 							">=price": priceThreshold,
 							">=count:sku": countThreshold
 						})
-					}));
+					})));
 
 					expect(result?.length).toBe(expected.length);
 					expect(result?.map(r => [r.condition, r.cnt] as const).sort(([a], [b]) => String(a).localeCompare(String(b))))
@@ -1807,15 +1838,13 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 				it("should sort on scalar fields in projected queries", factory(async ({ store }) => {
 
-					const result = projected(await store.lookup({
+					const result = projected(members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							"price=price": required(decimal())
-						}), {
+						model: catalogue({ "price=price": {} }, {
 							"^price": 1
 						})
-					}));
+					})));
 
 					const prices = result?.map(p => p.price) ?? [];
 
@@ -1825,16 +1854,13 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 				it("should sort on aggregate expressions", factory(async ({ store }) => {
 
-					const result = projected(await store.lookup({
+					const result = projected(members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							"condition=condition": required(string()),
-							"cnt=count:sku": required(decimal)
-						}), {
+						model: catalogue({ "condition=condition": {}, "cnt=count:sku": {} }, {
 							"^count:sku": 1
 						})
-					}));
+					})));
 
 					const counts = result?.map(p => p.cnt) ?? [];
 
@@ -1858,20 +1884,13 @@ export function testRetrieveProjection(factory: TestFactory): void {
 							|| (typeof a === "string" && typeof b === "string" ? ascending(a, b) : 0)))
 						.map(v => v.code);
 
-					const result = projected(await store.lookup({
+					const result = projected(members(await store.lookup({
 						entry: VendorsCatalogue,
 						shape: Vendors,
-						model: catalogue(resource({
-							// §5.2/§5.4: placeholder values are immaterial — the bare string() matches
-							// Vendor.code by kind, and the score union's alternatives match their branches
-							// by kind (decimal → number, grade → string), so neither placeholder need be a
-							// legal value of its property
-							"code=code": required(string()),
-							"score=score": optional(union(decimal(), string()))
-						}), {
+						model: catalogue({ "code=code": {}, "score=score": { "0": {}, "1": {} } }, {
 							"^score": 1
 						})
-					}));
+					})));
 
 					expect(result?.map(r => r.code)).toEqual(expected);
 
@@ -1879,20 +1898,18 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 				it("should sort on non-projected fields", factory(async ({ store }) => {
 
-					// §5.6 distinct rows: only price is projected, so equal prices collapse regardless
+					// §5.2 distinct rows: only price is projected, so equal prices collapse regardless
 					// of the non-projected sort key
 
 					const expected = new Set(products.map(p => p.price)).size;
 
-					const result = projected(await store.lookup({
+					const result = projected(members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							"price=price": required(decimal())
-						}), {
+						model: catalogue({ "price=price": {} }, {
 							"^condition": 1
 						})
-					}));
+					})));
 
 					expect(result).toHaveLength(expected);
 
@@ -1913,10 +1930,7 @@ export function testRetrieveProjection(factory: TestFactory): void {
 					await expect(store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							"condition=condition": required(string()),
-							"cnt=count:sku": required(decimal)
-						}), selection)
+						model: catalogue({ "condition=condition": {}, "cnt=count:sku": {} }, selection)
 					})).rejects.toThrow();
 
 				})());
@@ -1932,15 +1946,13 @@ export function testRetrieveProjection(factory: TestFactory): void {
 						// schema (surname-only) is unchanged but rows whose `condition` matches the
 						// focus value appear first.
 
-						const result = projected(await store.lookup({
+						const result = projected(members(await store.lookup({
 							entry: Catalogue,
 							shape: Products,
-							model: catalogue(resource({
-								"sku=sku": required(string())
-							}), {
+							model: catalogue({ "sku=sku": {} }, {
 								"+condition": ["refurbished"]
 							})
-						}));
+						})));
 
 						expect(result).toHaveLength(products.length);
 
@@ -1952,17 +1964,15 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 				it("should slice projected queries via offset and limit", factory(async ({ store }) => {
 
-					const result = projected(await store.lookup({
+					const result = projected(members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							"price=price": required(decimal())
-						}), {
+						model: catalogue({ "price=price": {} }, {
 							"^price": 1,
 							"@": 0,
 							"#": 3
 						})
-					}));
+					})));
 
 					expect(result?.length ?? 0).toBeLessThanOrEqual(3);
 
@@ -1970,38 +1980,33 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 				it("should slice grouped rows", factory(async ({ store }) => {
 
-					const result = projected(await store.lookup({
+					const result = projected(members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							"condition=condition": required(string()),
-							"cnt=count:sku": required(decimal)
-						}), {
+						model: catalogue({ "condition=condition": {}, "cnt=count:sku": {} }, {
 							"#": 2
 						})
-					}));
+					})));
 
 					expect(result?.length ?? 0).toBeLessThanOrEqual(2);
 
 				}));
 
-				it("should apply filter, order, and slice together on projected rows (§5.6)", factory(async ({ store }) => {
+				it("should apply filter, order, and slice together on projected rows (§5.2)", factory(async ({ store }) => {
 
-					// §5.6 + §5.7: filter, order, and slice all apply to the projected schema. Filter
+					// §5.2 + §5.7: filter, order, and slice all apply to the projected schema. Filter
 					// price >= 10, order by price ascending, limit 5; the qualifying rows come back
 					// ordered and bounded.
 
-					const result = projected(await store.lookup({
+					const result = projected(members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							"price=price": required(decimal())
-						}), {
+						model: catalogue({ "price=price": {} }, {
 							">=price": 10,
 							"^price": 1,
 							"#": 5
 						})
-					})) ?? [];
+					}))) ?? [];
 
 					const prices = result.map(r => r.price);
 
@@ -2034,17 +2039,14 @@ export function testRetrieveProjection(factory: TestFactory): void {
 					.map(([name, count]) => ({ name, count }))
 					.sort(compound(by(x => x.count, descending), by(x => x.name)));
 
-				const result = projected(await store.lookup({
+				const result = projected(members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						"vendorName=vendor.name": required(string()),
-						"cnt=count:sku": required(decimal)
-					}), {
+					model: catalogue({ "vendorName=vendor.name": {}, "cnt=count:sku": {} }, {
 						"^count:sku": -1,
 						"^vendor.name": 2
 					})
-				})) ?? [];
+				}))) ?? [];
 
 				const actual = result.map(r => ({ name: r.vendorName, count: r.cnt }));
 
@@ -2073,20 +2075,17 @@ export function testRetrieveProjection(factory: TestFactory): void {
 					.sort(compound(by(x => x.cnt, descending), by(x => x.condition)))
 					.slice(0, 5);
 
-				const result = projected(await store.lookup({
+				const result = projected(members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						"condition=condition": required(string()),
-						"cnt=count:sku": required(decimal)
-					}), {
+					model: catalogue({ "condition=condition": {}, "cnt=count:sku": {} }, {
 						">=price": 10,
 						">=count:sku": 2,
 						"^count:sku": -1,
 						"^condition": 2,
 						"#": 5
 					})
-				})) ?? [];
+				}))) ?? [];
 
 				const actual = result.map(r => ({ condition: r.condition, cnt: r.cnt }));
 
@@ -2104,16 +2103,13 @@ export function testRetrieveProjection(factory: TestFactory): void {
 					(acc, p) => ({ ...acc, [p.condition]: (acc[p.condition] ?? 0)+1 }), {});
 				const expected = Object.entries(counts).sort(by(e => e[1], descending)).map(([condition]) => condition);
 
-				const result = projected(await store.lookup({
+				const result = projected(members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						"condition=condition": required(string()),
-						"total=sum:stock": required(decimal)
-					}), {
+					model: catalogue({ "condition=condition": {}, "total=sum:stock": {} }, {
 						"^count:sku": -1
 					})
-				})) ?? [];
+				}))) ?? [];
 
 				expect(result.map(r => r.condition)).toEqual(expected);
 
@@ -2126,11 +2122,11 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 				const expected = products.reduce((s, p) => s+p.categories.length, 0);
 
-				const result = projected(await store.lookup({
+				const result = projected(members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({ "total=count:categories": required(decimal) }))
-				})) ?? [];
+					model: catalogue({ "total=count:categories": {} })
+				}))) ?? [];
 
 				expect(result[0]?.total).toBe(expected);
 
@@ -2141,16 +2137,13 @@ export function testRetrieveProjection(factory: TestFactory): void {
 				// §5.7.4 + §5.8.2.1: focus on the grouping key ranks the matching group first. Group by
 				// condition, count per group, focus "refurbished".
 
-				const result = projected(await store.lookup({
+				const result = projected(members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						"condition=condition": required(string()),
-						"cnt=count:sku": required(decimal)
-					}), {
+					model: catalogue({ "condition=condition": {}, "cnt=count:sku": {} }, {
 						"+condition": ["refurbished"]
 					})
-				})) ?? [];
+				}))) ?? [];
 
 				expect(result[0]?.condition).toBe("refurbished");
 
@@ -2172,11 +2165,11 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 				await factory(async ({ store }) => {
 
-					const result = projected(await store.lookup({
+					const result = projected(members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({ [binding]: required(decimal()) }), impossibleFilter)
-					}));
+						model: catalogue({ [binding]: {} }, impossibleFilter)
+					})));
 
 					expect(result?.[0]?.[binding.split("=")[0]]).toBe(expected);
 
@@ -2186,13 +2179,11 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 			it("should return empty result set for impossible filter without aggregates", factory(async ({ store }) => {
 
-				const result = projected(await store.lookup({
+				const result = projected(members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						"price=price": required(decimal())
-					}), impossibleFilter)
-				}));
+					model: catalogue({ "price=price": {} }, impossibleFilter)
+				})));
 
 				expect(result).toHaveLength(0);
 

@@ -52,7 +52,7 @@ import { union } from "@metreeca/blue/union";
 import type { Lazy } from "@metreeca/core";
 import { createNamespace } from "@metreeca/core/resource";
 
-export { collections, identify, clone } from "./toys.core.js";
+export { catalogues, collections, identify, clone } from "./toys.core.js";
 
 
 /**
@@ -230,14 +230,12 @@ export function Entity() {
 }
 
 /**
- * Virtual collection exposing members of a given entity type.
+ * Collection holding the resources of a given entity type as its members.
  *
  * @param member - The resource shape factory for collection members
  */
 export function Catalogue<M extends Lazy<ResourceShape>>(member: M) {
 	return resource(Resource,{
-
-		virtual: true,
 
 		class: toys.Collection
 
@@ -411,7 +409,7 @@ export function Vendor() {
  * Rating union for `Vendor.score`: a bounded decimal rating or a letter-grade string.
  *
  * The decimal and string variants are storage-class disjoint, so a stored value singles out its branch by
- * datatype alone (§5.4).
+ * datatype alone (§3.3).
  */
 export function Score() {
 	return union(
@@ -426,7 +424,7 @@ export function Score() {
  *
  * Spans the full §5.7.5 processing-type ladder (`xsd:boolean` < numeric < `xsd:string` < temporal); the grade
  * pattern keeps the string variant lexically disjoint from the gYear variant, so every value singles out
- * exactly one branch (§5.4).
+ * exactly one branch (§3.3).
  */
 export function Certified() {
 	return union(
@@ -442,7 +440,7 @@ export function Certified() {
  * {@link Place}.
  *
  * The literal variant is storage-class disjoint from the two node variants, which are in turn structurally
- * disjoint from each other, so a stored value singles out its branch by datatype or structure (§5.4).
+ * disjoint from each other, so a stored value singles out its branch by datatype or structure (§3.3).
  */
 export function Address() {
 	return union(
@@ -508,7 +506,7 @@ export function Place() {
  * geolocated {@link Place}.
  *
  * The email and phone variants share the string storage class but carry disjoint patterns; the two node
- * variants are structurally disjoint, so each value singles out exactly one branch (§5.4).
+ * variants are structurally disjoint, so each value singles out exactly one branch (§3.3).
  */
 export function Contacts() {
 	return union(
@@ -583,7 +581,7 @@ export function Product() {
  * Media union for `Product.media`: a captive {@link Image} or {@link Video} reference.
  *
  * Both variants share the reference storage class but carry disjoint IRI patterns, so a stored reference
- * singles out its branch by target-identifier pattern (§5.4). The declaring {@link Product} `media` property
+ * singles out its branch by target-identifier pattern (§3.3). The declaring {@link Product} `media` property
  * marks them captive, so they are cascade-deleted with the owning product.
  */
 export function Media() {

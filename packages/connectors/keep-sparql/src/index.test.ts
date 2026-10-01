@@ -15,9 +15,19 @@
  */
 
 
-import { getShapeClass, getShapeClasses, getShapeType, type ResourceShape } from "@metreeca/blue/resource";
-import type { StringShape } from "@metreeca/blue/string";
-import { eager, type Instance, type Shape } from "@metreeca/blue/value";
+import { reference } from "@metreeca/blue/reference";
+import {
+	getShapeClass,
+	getShapeClasses,
+	getShapeType,
+	id,
+	multiple,
+	required,
+	resource as shaped,
+	type ResourceShape
+} from "@metreeca/blue/resource";
+import { string, type StringShape } from "@metreeca/blue/string";
+import { eager, type Shape, type State } from "@metreeca/blue/value";
 import { error, isBoolean, isNumber, isString, type Lazy, map, type Scalar } from "@metreeca/core";
 import { xsd } from "@metreeca/core/datatype";
 import { createNamespace } from "@metreeca/core/resource";
@@ -27,6 +37,7 @@ import type { StoreTestScope } from "@metreeca/keep-suite";
 import { testStore } from "@metreeca/keep-suite";
 import {
 	base,
+	catalogues,
 	Category,
 	clone,
 	collections,
@@ -36,9 +47,11 @@ import {
 	PostalAddress,
 	Product,
 	rdfs,
+	Resources,
 	Review,
 	toys,
 	Vendor,
+	Vendors,
 	Video
 } from "@metreeca/keep-suite/toys";
 import { type Reference, type Resource } from "@metreeca/qest/state";
@@ -809,9 +822,9 @@ const rdf = createNamespace("http://www.w3.org/1999/02/22-rdf-syntax-ns#", ["typ
 
 
 /**
- * A deeply-partial {@link Instance} of a toys resource shape, the input form accepted by the `encode*` encoders.
+ * A deeply-partial {@link State} of a toys resource shape, the input form accepted by the `encode*` encoders.
  */
-type Fragment<T extends Lazy<Shape>> = Partial<Instance<T>>;
+type Fragment<T extends Lazy<Shape>> = Partial<State<T>>;
 
 
 /**
@@ -823,7 +836,12 @@ const dataset: readonly Triple[] = immutable([
 	...collections.vendors.flatMap(encodeVendor),
 	...collections.products.flatMap(encodeProduct),
 	...collections.images.flatMap(encodeImage),
-	...collections.videos.flatMap(encodeVideo)
+	...collections.videos.flatMap(encodeVideo),
+
+	...encodeCatalogue(catalogues.resources),
+	...encodeCatalogue(catalogues.categories),
+	...encodeCatalogue(catalogues.vendors),
+	...encodeCatalogue(catalogues.products)
 
 ]);
 
@@ -835,6 +853,7 @@ const encoders = (() => {
 
 	return immutable(Object.fromEntries([
 
+		encoder(Resources, encodeCatalogue),
 		encoder(Category, encodeCategory),
 		encoder(Vendor, encodeVendor),
 		encoder(PostalAddress, encodePostalAddress),
@@ -880,7 +899,7 @@ const encoders = (() => {
 function isInstance<S extends Lazy<ResourceShape>>(
 	shape: S,
 	resource: Resource
-): resource is Instance<S> & Resource {
+): resource is State<S> & Resource {
 
 	return map(eager(shape), shape =>
 		(resource[getShapeType(shape) ?? ""] ?? shape.class) === shape.class
@@ -995,7 +1014,7 @@ function testSPARQLStore(factory: () => Repository, {
 
 		},
 
-		async generate<S extends Lazy<ResourceShape>>(sample: Instance<S> & Resource, shape: S) {
+		async generate<S extends Lazy<ResourceShape>>(sample: State<S> & Resource, shape: S) {
 
 			const clazz = map(eager(shape), shape => shape.class);
 			const encoder = encoders[clazz ?? ""];
@@ -1006,7 +1025,10 @@ function testSPARQLStore(factory: () => Repository, {
 
 			const entry = clone(sample, shape);
 
-			await insert(encoder(entry));
+			// a generated resource is linked into the catalogues collecting its type, as a store creating it
+			// through them would, so that a catalogue retrieval reaches it as it reaches the sample resources
+
+			await insert([...encoder(entry), ...membership(entry, shape)]);
 
 			return entry;
 
@@ -1030,8 +1052,9 @@ function testSPARQLStore(factory: () => Repository, {
 
 			await store.create({
 
-				entry: id,
-				shape: Vendor,
+				entry: `${base}vendors/`,
+				shape: Vendors,
+				model: { members: {} },
 
 				state: {
 					id,
@@ -1051,12 +1074,67 @@ function testSPARQLStore(factory: () => Repository, {
 
 		});
 
+		it("should link a created resource into the plain collection holding it", async () => {
+
+			// synthetic mutation on a fresh repository: a resource created through a collection a plain forward
+			// property holds is asserted as a member of it, so that the holder reaches it as any other value
+
+			const Note = shaped({ id: id(), text: required(string()) });
+			const Bin = shaped({ notes: multiple(reference(Note), { forward: `${base}toys#note` }) });
+
+			const probe = factory();
+			const store = createSPARQLStore(probe);
+
+			const holder: Reference = `${base}bins/1`;
+
+			const created = await store.create({
+				entry: holder,
+				shape: Bin,
+				model: { notes: {} },
+				state: { text: "linked" }
+			});
+
+			expect(created?.startsWith(`${holder}/`)).toBe(true);
+			expect(await probe.ask(`ask { <${holder}> <${base}toys#note> <${created}> }`)).toBe(true);
+
+		});
+
 	});
 
 }
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * Encodes the membership edges linking a resource into the catalogues collecting its type.
+ */
+function membership(entry: Resource, shape: Lazy<ResourceShape>): readonly Triple[] {
+
+	const lineage = [getShapeClass(shape), ...(getShapeClasses(shape) ?? [])];
+
+	const holders = [
+		...(lineage.includes(toys.Resource) ? [catalogues.resources] : []),
+		...(lineage.includes(toys.Category) ? [catalogues.categories] : []),
+		...(lineage.includes(toys.Vendor) ? [catalogues.vendors] : []),
+		...(lineage.includes(toys.Product) ? [catalogues.products] : [])
+	];
+
+	return holders.flatMap(catalogue =>
+		identify(entry, shape, id => property(link(catalogue.id), rdfs.member, link(id)))
+	);
+
+}
+
+function encodeCatalogue(catalogue: Fragment<typeof Resources>) {
+	return identify(catalogue, Resources, entry => about(entry, id => resource(
+		property(id, rdf.type, catalogue.type && getShapeClass(Resources)),
+		property(id, rdf.type, catalogue.type && getShapeClasses(Resources)),
+		property(id, rdfs.label, text(catalogue.label)),
+		property(id, toys.created, data(catalogue.created, xsd.dateTime)),
+		property(id, rdfs.member, link(catalogue.members))
+	)));
+}
 
 function encodeCategory(category: Fragment<typeof Category>) {
 	return identify(category, Category, entry => about(entry, id => resource(

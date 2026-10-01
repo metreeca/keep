@@ -42,8 +42,9 @@
  * const store = createSPARQLStore(createOxiRepository());
  *
  * await store.create({
- *     entry: "http://example.com/products/1",
- *     shape: ProductShape,
+ *     entry: "http://example.com/products/",
+ *     shape: CatalogueShape,
+ *     model: { products: {} },
  *     state: { name: "Widget", price: 9.99 }
  * });
  * ```
@@ -92,7 +93,7 @@ import {
 	type RepositoryClient
 } from "@metreeca/wire-sparql";
 import { detect } from "./detect/index.js";
-import { lookup } from "./lookup/index.js";
+import { detail } from "./detail/index.js";
 import { modify } from "./modify/index.js";
 import { select } from "./select/index.js";
 
@@ -148,7 +149,7 @@ export function createSPARQLStore(repository: Repository): Store {
 		return createValidatingStore(createBatchingStore({
 
 			detect: (batch) => detect(batch, client),
-			lookup: (batch, broker) => lookup(batch, client, broker),
+			detail: (batch, broker) => detail(batch, client, broker),
 			select: (batch, broker) => select(batch, client, broker),
 			modify: (batch) => modify(batch, client)
 

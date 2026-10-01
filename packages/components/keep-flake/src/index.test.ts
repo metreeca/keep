@@ -24,9 +24,10 @@ import { eager, effective, type Range } from "@metreeca/blue/value";
 import type { Identifier } from "@metreeca/core";
 import { createNamespace } from "@metreeca/core/resource";
 import { PostalAddress, Product, Vendor } from "@metreeca/keep-suite/toys";
-import type { Probe, Query, Template, Transform } from "@metreeca/qest/model";
-import { describe, expect, it } from "vitest";
-import type { Branch, Entries, Flake, Mould } from "./index.js";
+import type { Probe, Query, Slot, Template, Transform } from "@metreeca/qest/model";
+import { describe, expect, expectTypeOf, it } from "vitest";
+import { getQueryEntries, getUnionBranches, getUnionPlaceholders } from "./index.core.js";
+import type { Branch, Entries, Flake } from "./index.js";
 import {
 	createFlake,
 	createQueryFlake,
@@ -44,9 +45,9 @@ import {
  */
 function at(node: Flake | Branch, ...steps: readonly Identifier[]): Branch {
 	return steps.reduce<Branch>((current, step) => {
-		const branches = (current.entries ?? {})[step];
-		if ( branches === undefined || branches.length === 0 ) { throw new Error(`no branch at step <${step}>`); }
-		return branches[0];
+		const branch = (current.entries ?? {})[step];
+		if ( branch === undefined ) { throw new Error(`no branch at step <${step}>`); }
+		return branch;
 	}, node as Branch);
 }
 
@@ -58,8 +59,8 @@ function props(node: Flake | Branch): Entries {
 }
 
 /**
- * The branches the union variant at `index` declares, keyed by property name — located by entry
- * identity, since property-major arrays mix variants and drop non-declaring ones. The coordinate's
+ * The branches the union variant at `index` declares, keyed by property name — located by the names the
+ * variant's target declares, since a name shared across variants folds to one branch. The coordinate's
  * flattened {@link Flake.range | range} carries the variants directly, so a root member union and a
  * branch's union range read alike.
  */
@@ -68,10 +69,7 @@ function variant(node: Flake | Branch, index: number): Record<Identifier, Branch
 	if ( variants.length <= 1 ) { throw new Error("not a union coordinate"); }
 	const target = getShapeTarget(variants[index]);
 	return Object.fromEntries(
-		Object.entries(node.entries ?? {}).flatMap(([name, branches]) => {
-			const kept = branches.filter(branch => target?.members[name] === branch.entry);
-			return kept.length === 0 ? [] : [[name, kept[0]] as const];
-		})
+		Object.entries(node.entries ?? {}).filter(([name]) => target?.members[name] !== undefined)
 	);
 }
 
@@ -327,7 +325,7 @@ describe("createFlake", () => {
 
 				const template = { label: {} } as Template;
 
-				expect(createFlake(Thing, template).drain).toEqual({ mould: template });
+				expect(createFlake(Thing, template).drain).toEqual({ form: "template", query: template });
 
 			});
 
@@ -400,7 +398,7 @@ describe("createFlake", () => {
 				const flake = createFlake(Thing, { label: {} } as Template);
 
 				expect(at(flake, "label").entry.kind).toBe("property");
-				expect(Array.isArray(at(flake, "label").drain?.mould)).toBe(false);
+				expect(Array.isArray(at(flake, "label").drain?.query)).toBe(false);
 				expect(at(flake, "label").entries).toBeUndefined();
 
 			});
@@ -424,7 +422,7 @@ describe("createFlake", () => {
 				const tags = at(flake, "tags");
 
 				expect(tags.entry.kind).toBe("property");
-				expect(tags.drain).toEqual({ mould: { label: {} } });
+				expect(tags.drain).toEqual({ form: "template", query: { label: {} } });
 				expect(tags.entries).toBeUndefined();
 
 			});
@@ -438,7 +436,7 @@ describe("createFlake", () => {
 				// drain is a Model (not a Query tuple), so gather assembles the `Localised` value from
 				// the source model directly in the resources pass
 
-				expect(Array.isArray(description.drain?.mould)).toBe(false);
+				expect(Array.isArray(description.drain?.query)).toBe(false);
 				expect(description.entries).toBeUndefined();
 
 			});
@@ -448,7 +446,7 @@ describe("createFlake", () => {
 				const flake = createFlake(Thing, { description: {} } as Template);
 				const description = at(flake, "description");
 
-				expect(Array.isArray(description.drain?.mould)).toBe(false);
+				expect(Array.isArray(description.drain?.query)).toBe(false);
 				expect(description.entries).toBeUndefined();
 
 			});
@@ -465,7 +463,7 @@ describe("createFlake", () => {
 				const field = keywords.entry;
 				if ( field.kind !== "property" ) { throw new Error("expected a property entry"); }
 
-				expect(keywords.drain).toEqual({ mould: {} });
+				expect(keywords.drain).toEqual({ form: "atomic", query: {} });
 				expect(eager(field.range.shape).kind).toBe("dictionary");
 				expect(keywords.entries).toBeUndefined();
 
@@ -481,7 +479,7 @@ describe("createFlake", () => {
 				const flake = createFlake(Thing, { parent: {} } as Template);
 				const parent = at(flake, "parent");
 
-				expect(parent.drain?.mould).toEqual({});
+				expect(parent.drain?.query).toEqual({});
 				expect(parent.entries).toBeUndefined();
 
 			});
@@ -500,8 +498,8 @@ describe("createFlake", () => {
 
 		describe("union-ranged single-valued property", () => {
 
-			// §5.4: union slot keys are opaque — the branch is fixed by matching the placeholder's
-			// kind/structure against the declared variants, never by the key. The nested template
+			// §5.5: union slot keys are opaque — the branch is fixed by matching the placeholder's
+			// form against the declared variants, never by the key. The nested template
 			// { city } structurally singles out the Postal variant whatever integer key carries it,
 			// so an arbitrary key "7" routes it to the Postal branch (member index 1).
 
@@ -537,13 +535,13 @@ describe("createFlake", () => {
 			it("routes each branch to its matched variant under opaque keys", async () => {
 
 				const flake = createFlake(Thing, {
-					address: { "0": { city: {} }, "1": "" }
-				} as Template);
+					address: { "0": { city: {} }, "1": {} }
+				});
 				const address = at(flake, "address");
 
-				// keys carry no positional meaning: the object placeholder structurally matches Postal
-				// (kept, with its city branch) and the string placeholder "" matches the string variant
-				// (a non-descending leaf → contributes no branch), regardless of which key holds which
+				// keys carry no positional meaning: the template alternative structurally matches Postal
+				// (kept, with its city branch) and the atomic alternative matches every variant as a
+				// non-descending leaf (§5.3, contributes no branch), regardless of which key holds which
 				expect(hasVariant(address, 1)).toBe(true);
 				expect(variant(address, 1)["city"]).toBeDefined();
 
@@ -561,15 +559,6 @@ describe("createFlake", () => {
 				expect(at(flake, "label")).toBeDefined();
 				expect("<" in props(flake)).toBe(false);
 				expect("@" in props(flake)).toBe(false);
-
-			});
-
-			it("filters out an absent (undefined) entry", async () => {
-
-				const flake = createFlake(Thing, { label: {}, count: undefined } as Template);
-
-				expect(at(flake, "label")).toBeDefined();
-				expect("count" in props(flake)).toBe(false);
 
 			});
 
@@ -600,7 +589,7 @@ describe("createFlake", () => {
 
 				const flake = createFlake(Thing, { label: {} } as Template);
 
-				expect(at(flake, "label").drain).toEqual({ mould: {} });
+				expect(at(flake, "label").drain).toEqual({ form: "atomic", query: {} });
 
 			});
 
@@ -608,7 +597,7 @@ describe("createFlake", () => {
 
 				const flake = createFlake(Thing, { description: { en: {} } } as Template);
 
-				expect(at(flake, "description").drain).toEqual({ mould: { en: {} } });
+				expect(at(flake, "description").drain).toEqual({ form: "locale", query: { en: {} } });
 
 			});
 
@@ -616,7 +605,7 @@ describe("createFlake", () => {
 
 				const flake = createFlake(Thing, { parent: { label: {} } } as Template);
 
-				expect(at(flake, "parent").drain).toEqual({ mould: { label: {} } });
+				expect(at(flake, "parent").drain).toEqual({ form: "template", query: { label: {} } });
 
 			});
 
@@ -625,9 +614,55 @@ describe("createFlake", () => {
 				// the slot key "7" is opaque and stashed verbatim on the branch drain; the { city }
 				// placeholder is routed to the Postal variant (member index 1) by structure, not by key
 				const flake = createFlake(Thing, { address: { "7": { city: {} } } } as Template);
+				const address = at(flake, "address");
+				const [text, postal] = getShapeBranches(address.range.shape);
 
-				expect(at(flake, "address").drain).toEqual({ mould: { "7": { city: {} } } });
-				expect(variant(at(flake, "address"), 1)["city"].drain).toEqual({ mould: {} });
+				expect(address.drain?.form).toBe("union");
+				expect(address.drain?.query).toEqual({ "7": { city: {} } });
+				expect(variant(address, 1)["city"].drain).toEqual({ form: "atomic", query: {} });
+
+				// the variants each alternative reaches are resolved once, on the drain, each under its own drain
+
+				if ( address.drain?.form !== "union" ) { throw new Error("expected a union drain"); }
+
+				expect(address.drain.variants.has(text)).toBe(false);
+				expect(address.drain.variants.get(postal)).toEqual({ form: "template", query: { city: {} } });
+
+			});
+
+			it("resolves an atomic alternative to every variant it can stand for", async () => {
+
+				// an embedded resource states no identifier to come back as, so the atomic reaches the string
+				// variant alone
+
+				const flake = createFlake(Thing, { address: {} } as Template);
+				const address = at(flake, "address");
+				const [text, postal] = getShapeBranches(address.range.shape);
+
+				if ( address.drain?.form !== "union" ) { throw new Error("expected a union drain"); }
+
+				expect(address.drain.variants.get(text)).toEqual({ form: "atomic", query: {} });
+				expect(address.drain.variants.has(postal)).toBe(false);
+
+			});
+
+			it("resolves a single template alternative to the variants it fits", async () => {
+
+				const flake = createFlake(Thing, { address: { city: {} } } as Template);
+				const address = at(flake, "address");
+				const [text, postal] = getShapeBranches(address.range.shape);
+
+				if ( address.drain?.form !== "union" ) { throw new Error("expected a union drain"); }
+
+				expect(address.drain.variants.has(text)).toBe(false);
+				expect(address.drain.variants.get(postal)).toEqual({ form: "template", query: { city: {} } });
+
+			});
+
+			it("rejects a form the property does not admit", async () => {
+
+				expect(() => createFlake(Thing, { label: { nope: {} } } as Template)).toThrow(RangeError);
+				expect(() => createFlake(Thing, { parent: { "n=label": {} } } as Template)).toThrow(RangeError);
 
 			});
 
@@ -635,7 +670,7 @@ describe("createFlake", () => {
 
 				const flake = createFlake(Thing, { tags: { label: {} } } as Template);
 
-				expect(at(flake, "tags").drain?.mould).toEqual({ label: {} });
+				expect(at(flake, "tags").drain?.query).toEqual({ label: {} });
 
 			});
 
@@ -672,7 +707,7 @@ describe("createFlake", () => {
 
 				const query = { label: {} };
 
-				expect(createFlake(Thing, query).drain).toEqual({ mould: query });
+				expect(createFlake(Thing, query).drain).toEqual({ form: "template", query });
 
 			});
 
@@ -720,26 +755,26 @@ describe("createFlake", () => {
 			it("routes a union member placeholder to its structurally matched variant", async () => {
 
 				const Address = () => union(string(), PostalAddress);
-				const flake = createQueryFlake(Address, { "0": { "c=city": {} } });
+				const flake = createQueryFlake(Address, { "0": { city: {} } });
 
-				// key "0" is opaque: the { city } projection structurally singles out the PostalAddress
+				// key "0" is opaque: the { city } placeholder structurally singles out the PostalAddress
 				// variant (member index 1), not the string variant the key would positionally name
 				expect(hasVariant(flake, 1)).toBe(true);
-				expect(variant(flake, 1)["city"]?.drain).toEqual({ alias: "c", mould: {} });
+				expect(variant(flake, 1)["city"]?.drain).toEqual({ alias: "city", form: "atomic", query: {} });
 
 			});
 
 			it("splits a union node's key space, criteria apart from alternatives", async () => {
 
 				const Address = () => union(string(), PostalAddress);
-				const flake = createQueryFlake(Address, { "#": 10, "0": { "c=city": {} } });
+				const flake = createQueryFlake(Address, { "#": 10, "0": { city: {} } });
 
 				// a union node carries the collection's criteria alongside its alternatives (§5.6): the key
 				// space tells the two apart, the bearing union shape making every remaining key an
 				// alternative (§5.5), so neither kind is decided by inspecting one key in isolation
 
 				expect(flake.limit).toBe(10);
-				expect(variant(flake, 1)["city"]?.drain).toEqual({ alias: "c", mould: {} });
+				expect(variant(flake, 1)["city"]?.drain).toEqual({ alias: "city", form: "atomic", query: {} });
 
 			});
 
@@ -751,7 +786,15 @@ describe("createFlake", () => {
 
 				const flake = createQueryFlake(Product, { "n=name": {} });
 
-				expect(at(flake, "name").drain).toEqual({ alias: "n", mould: {} });
+				expect(at(flake, "name").drain).toEqual({ alias: "n", form: "atomic", query: {} });
+
+			});
+
+			it("carries the projection on the root drain", async () => {
+
+				const query = { "n=name": {}, "#": 10 };
+
+				expect(createQueryFlake(Product, query).drain).toEqual({ form: "projection", query });
 
 			});
 
@@ -760,7 +803,7 @@ describe("createFlake", () => {
 				const flake = createQueryFlake(Product, { "v=vendor.name": {} });
 
 				expect(at(flake, "vendor").drain?.alias).toBeUndefined();
-				expect(at(flake, "vendor", "name").drain).toEqual({ alias: "v", mould: {} });
+				expect(at(flake, "vendor", "name").drain).toEqual({ alias: "v", form: "atomic", query: {} });
 
 			});
 
@@ -769,7 +812,7 @@ describe("createFlake", () => {
 				const flake = createQueryFlake(Product, { "y=year:launched": {} });
 
 				expect(at(flake, "launched").drain?.alias).toBeUndefined();
-				expect(at(flake, "launched").transforms?.["year"]?.drain).toEqual({ alias: "y", mould: {} });
+				expect(at(flake, "launched").transforms?.["year"]?.drain).toEqual({ alias: "y", form: "atomic", query: {} });
 
 			});
 
@@ -777,7 +820,7 @@ describe("createFlake", () => {
 
 				const flake = createQueryFlake(Product, { "c=count:": {} });
 
-				expect(flake.transforms?.["count"]?.drain).toEqual({ alias: "c", mould: {} });
+				expect(flake.transforms?.["count"]?.drain).toEqual({ alias: "c", form: "atomic", query: {} });
 
 			});
 
@@ -789,9 +832,9 @@ describe("createFlake", () => {
 					"y=year:launched": {}
 				});
 
-				expect(at(flake, "name").drain).toEqual({ alias: "n", mould: {} });
-				expect(at(flake, "vendor", "name").drain).toEqual({ alias: "v", mould: {} });
-				expect(at(flake, "launched").transforms?.["year"]?.drain).toEqual({ alias: "y", mould: {} });
+				expect(at(flake, "name").drain).toEqual({ alias: "n", form: "atomic", query: {} });
+				expect(at(flake, "vendor", "name").drain).toEqual({ alias: "v", form: "atomic", query: {} });
+				expect(at(flake, "launched").transforms?.["year"]?.drain).toEqual({ alias: "y", form: "atomic", query: {} });
 
 			});
 
@@ -802,7 +845,7 @@ describe("createFlake", () => {
 
 				expect(address.drain?.alias).toBeUndefined();
 				expect(hasVariant(address, 1)).toBe(true);
-				expect(variant(address, 1)["city"]?.drain).toEqual({ alias: "c", mould: {} });
+				expect(variant(address, 1)["city"]?.drain).toEqual({ alias: "c", form: "atomic", query: {} });
 
 			});
 
@@ -810,17 +853,17 @@ describe("createFlake", () => {
 
 				const flake = createQueryFlake(Product, { "n=name": {}, "~name": "toy" });
 
-				expect(at(flake, "name").drain).toEqual({ alias: "n", mould: {} });
+				expect(at(flake, "name").drain).toEqual({ alias: "n", form: "atomic", query: {} });
 				expect(at(flake, "name").like).toBe("toy");
 
 			});
 
-			it("folds a resource binding's nested template into the terminal's properties (§5.6)", async () => {
+			it("folds a resource binding's nested template into the terminal's properties (§5.2)", async () => {
 
 				const flake = createQueryFlake(Product, { "v=vendor": { name: {} } });
 
-				expect(at(flake, "vendor").drain).toEqual({ alias: "v", mould: { name: {} } });
-				expect(at(flake, "vendor", "name").drain).toEqual({ mould: {} });
+				expect(at(flake, "vendor").drain).toEqual({ alias: "v", form: "template", query: { name: {} } });
+				expect(at(flake, "vendor", "name").drain).toEqual({ form: "atomic", query: {} });
 
 			});
 
@@ -832,10 +875,10 @@ describe("createFlake", () => {
 
 			});
 
-			it("folds a union-crossing binding to a single branch with a disjunction range (§5.6, §5.8.1)", async () => {
+			it("folds a union-crossing binding to a single branch with a disjunction range (§5.2, §5.8.1)", async () => {
 
 				// media crosses the Image|Video union — Image.subject → Product, Video.subject → Category, under the
-				// shared `subject` predicate — so the binding is one cell (§5.6) whose range is the disjunction
+				// shared `subject` predicate — so the binding is one cell (§5.2) whose range is the disjunction
 				// (§5.8.1), not one subject branch per media variant
 
 				const flake = createQueryFlake(Product, {
@@ -847,13 +890,12 @@ describe("createFlake", () => {
 
 				const subject = at(flake, "media", "subject");
 
-				expect(props(at(flake, "media"))["subject"]).toHaveLength(1);          // one binding, one branch
-				expect(getShapeBranches(subject.range.shape)).toHaveLength(2);         // disjunction [Product,
+				expect(getShapeBranches(subject.range.shape)).toHaveLength(2);        // disjunction [Product,
 			                                                                           // Category]
 				expect(subject.drain?.alias).toBe("s");
 
-				expect(variant(subject, 0)["name"]?.drain).toEqual({ mould: {} });     // Product arm
-				expect(variant(subject, 1)["title"]?.drain).toEqual({ mould: {} });    // Category arm
+				expect(variant(subject, 0)["name"]?.drain).toEqual({ form: "atomic", query: {} });     // Product arm
+				expect(variant(subject, 1)["title"]?.drain).toEqual({ form: "atomic", query: {} });    // Category arm
 
 			});
 
@@ -867,7 +909,6 @@ describe("createFlake", () => {
 
 				const caption = at(flake, "media", "caption");
 
-				expect(props(at(flake, "media"))["caption"]).toHaveLength(1);          // one binding, one branch
 				expect(getShapeBranches(caption.range.shape).map(v => v.kind)).toEqual(["string", "dictionary"]);
 				expect(caption.drain?.alias).toBe("cap");
 
@@ -878,7 +919,7 @@ describe("createFlake", () => {
 				const flake = createQueryFlake(Vendor, { "a=address": { "0": { street: {} } } });
 
 				expect(at(flake, "address").drain?.alias).toBe("a");
-				expect(variant(at(flake, "address"), 1)["street"]?.drain).toEqual({ mould: {} });
+				expect(variant(at(flake, "address"), 1)["street"]?.drain).toEqual({ form: "atomic", query: {} });
 
 			});
 
@@ -898,7 +939,7 @@ describe("createFlake", () => {
 				["order", "^price", "price", 1]
 			] as const)("populates %s slot at the path coordinate", async (slot, key, prop, value) => {
 
-				const flake = createQueryFlake(Product, { [key]: value } as Mould);
+				const flake = createQueryFlake(Product, { [key]: value } as Query<Slot>);
 
 				expect(at(flake, prop)[slot]).toEqual(value);
 
@@ -1208,24 +1249,61 @@ describe("createFlake", () => {
 
 		});
 
-		describe("vacuous placeholders", () => {
+	});
 
-			it("elides entries with `undefined` value", async () => {
+	describe("union-crossing names", () => {
 
-				const flake = createQueryFlake(Product, { "<price": 100, "<launched": undefined });
+		// `name` and `owner` are declared by both item variants, with differing ranges for `name`: union
+		// coherence (§3.2) makes each one property, reached through one branch whose range is the disjunction
+		// of the per-variant declarations (§5.8.1)
 
-				expect("price" in props(flake)).toBe(true);
-				expect("launched" in props(flake)).toBe(false);
+		const Owner = resource({ name: optional(string()), code: optional(string()) });
+		const Label = resource({ name: optional(string()), code: optional(string()), owner: optional(reference(Owner)) });
+		const Count = resource({ name: optional(integer()), owner: optional(reference(Owner)) });
 
-			});
+		const Holder = resource({ item: optional(union(Label, Count)) });
 
-			it("elides identity bindings with vacuous value", async () => {
 
-				const flake = createQueryFlake(Product, { "n=name": undefined });
+		it("types a name as mapping to a single branch", async () => {
 
-				expect("name" in props(flake)).toBe(false);
+			expectTypeOf<Entries[Identifier]>().toEqualTypeOf<Branch>();
 
-			});
+		});
+
+		it("folds a shared name to one branch in shape mode", async () => {
+
+			const name = props(at(createFlake(Holder), "item")).name;
+
+			expect(name.path).toEqual(["item", "name"]);
+			expect(getShapeBranches(name.range.shape)).toHaveLength(2);
+
+		});
+
+		it("folds a shared name to one branch in model mode", async () => {
+
+			const name = props(at(createFlake(Holder, { item: { name: {} } } as Template), "item")).name;
+
+			expect(name.path).toEqual(["item", "name"]);
+			expect(name.drain?.query).toEqual({});
+
+		});
+
+		it("folds the requests alternatives state for a shared name into one drain", async () => {
+
+			const owner = props(at(createFlake(Holder, {
+				item: { "0": { owner: { name: {} } }, "1": { owner: { code: {} } } }
+			} as Template), "item")).owner;
+
+			expect(owner.drain).toEqual({ form: "template", query: { name: {}, code: {} } });
+			expect(Object.keys(props(owner)).sort()).toEqual(["code", "name"]);
+
+		});
+
+		it("folds a projected path and a binding's nested template naming it to one branch in query mode", async () => {
+
+			const name = props(at(createQueryFlake(Product, { "v=vendor": { name: {} }, "n=vendor.name": {} }), "vendor")).name;
+
+			expect(name.drain?.alias).toBe("n");
 
 		});
 
@@ -1344,7 +1422,7 @@ describe("flake methods", () => {
 		});
 
 		it("propagates required up a nested child path", async () => {
-			expect(isRequiredFlake(root({ entries: { parent: [branch({ gt: 5 })] } }))).toBe(true);
+			expect(isRequiredFlake(root({ entries: { parent: branch({ gt: 5 }) } }))).toBe(true);
 		});
 
 	});
@@ -1356,27 +1434,27 @@ describe("flake methods", () => {
 		});
 
 		it("indexes a root projection by its alias", async () => {
-			const node = root({ drain: { alias: "r", mould: {} } });
+			const node = root({ drain: { alias: "r", form: "atomic", query: {} } });
 			expect(getFlakeProjection(node).r).toEqual(node);
 		});
 
 		it("indexes a projection on a transform stage", async () => {
-			const counted = stage(["count"], { drain: { alias: "c", mould: {} } });
+			const counted = stage(["count"], { drain: { alias: "c", form: "atomic", query: {} } });
 			expect(getFlakeProjection(root({ transforms: { count: counted } })).c).toEqual(counted);
 		});
 
 		it("indexes a projection on a nested branch", async () => {
-			const child = branch({ drain: { alias: "p", mould: {} } });
-			expect(getFlakeProjection(root({ entries: { parent: [child] } })).p).toEqual(child);
+			const child = branch({ drain: { alias: "p", form: "atomic", query: {} } });
+			expect(getFlakeProjection(root({ entries: { parent: child } })).p).toEqual(child);
 		});
 
 		it("collects projections across all axes, keyed by alias", async () => {
-			const counted = stage(["count"], { drain: { alias: "c", mould: {} } });
-			const child = branch({ drain: { alias: "p", mould: {} } });
+			const counted = stage(["count"], { drain: { alias: "c", form: "atomic", query: {} } });
+			const child = branch({ drain: { alias: "p", form: "atomic", query: {} } });
 			const node = root({
-				drain: { alias: "r", mould: {} },
+				drain: { alias: "r", form: "atomic", query: {} },
 				transforms: { count: counted },
-				entries: { parent: [child] }
+				entries: { parent: child }
 			});
 			expect(Object.keys(getFlakeProjection(node)).sort()).toEqual(["c", "p", "r"]);
 		});
@@ -1512,6 +1590,183 @@ describe("branch methods", () => {
 
 			expect(getFlakeVariant(media, branches[0]).map(leafName)).toEqual(["caption"]);  // Image
 			expect(getFlakeVariant(media, branches[1]).map(leafName)).toEqual(["caption"]);  // Video
+		});
+
+	});
+
+});
+
+describe("union methods", () => {
+
+	const Owner = resource({ name: optional(string()), code: optional(string()) });
+	const Dealer = resource({ name: optional(string()), code: optional(string()), owner: optional(reference(Owner)) });
+
+	const text = string();
+	const link = reference(Dealer);
+	const label = dictionary();
+
+
+	describe("getUnionBranches", () => {
+
+		describe("a single alternative", () => {
+
+			it("reaches every variant an atomic stands for", async () => {
+
+				expect(getUnionBranches(union(text, link), {})).toEqual([[text, {}], [link, {}]]);
+
+			});
+
+			it("reaches the nested-resource variants a template is valid on", async () => {
+
+				expect(getUnionBranches(union(text, link), { name: {} })).toEqual([[link, { name: {} }]]);
+
+			});
+
+			it("is returned without the criteria riding on the query", async () => {
+
+				expect(getUnionBranches(union(text, link), { name: {}, "#": 10 })).toEqual([[link, { name: {} }]]);
+
+			});
+
+			it("reaches nothing where it matches no variant", async () => {
+
+				expect(getUnionBranches(union(text, link), { nope: {} })).toEqual([]);
+
+			});
+
+			it("reaches the variants of a nested union", async () => {
+
+				expect(getUnionBranches(union(union(text, link), label), {})).toEqual([[text, {}], [link, {}], [label, {}]]);
+
+			});
+
+		});
+
+		describe("a keyed union", () => {
+
+			it("pairs each alternative with every variant it reaches", async () => {
+
+				expect(getUnionBranches(union(text, link), { "0": { name: {} }, "1": {} })).toEqual([
+					[link, { name: {} }],
+					[text, {}],
+					[link, {}]
+				]);
+
+			});
+
+			it("is told apart from the criteria riding on it", async () => {
+
+				expect(getUnionBranches(union(text, link), { "0": { name: {} }, "#": 10 })).toEqual([[link, { name: {} }]]);
+
+			});
+
+			it("is recognised by canonical branch keys alone", async () => {
+
+				expect(getUnionBranches(union(text, link), { "07": {} })).toEqual([]);
+
+			});
+
+		});
+
+	});
+
+	describe("getUnionPlaceholders", () => {
+
+		it("maps each variant to the alternative reaching it", async () => {
+
+			expect(getUnionPlaceholders(union(text, link), { "0": {}, "1": { name: {} } })).toEqual(new Map<unknown, unknown>([
+				[text, {}],
+				[link, { name: {} }]
+			]));
+
+		});
+
+		it("resolves the variants of a nested union", async () => {
+
+			expect(getUnionPlaceholders(union(union(text, link), label), { "0": {} })).toEqual(new Map<unknown, unknown>([
+				[text, {}],
+				[link, {}],
+				[label, {}]
+			]));
+
+		});
+
+		describe("alternatives reaching the same variant", () => {
+
+			it("fold a template over the atomic, whatever their order", async () => {
+
+				expect(getUnionPlaceholders(union(text, link), { "0": { name: {} }, "1": {} })).toEqual(new Map<unknown, unknown>([
+					[link, { name: {} }],
+					[text, {}]
+				]));
+
+			});
+
+			it("fold a locale over the atomic", async () => {
+
+				expect(getUnionPlaceholders(union(text, label), { "0": { "*": {} }, "1": {} })).toEqual(new Map<unknown, unknown>([
+					[label, { "*": {} }],
+					[text, {}]
+				]));
+
+			});
+
+			it("merge the keys of their templates", async () => {
+
+				expect(getUnionPlaceholders(union(text, link), { "0": { name: {} }, "1": { code: {} } }))
+					.toEqual(new Map<unknown, unknown>([
+						[link, { name: {}, code: {} }]
+					]));
+
+			});
+
+			it("merge nested templates recursively", async () => {
+
+				expect(getUnionPlaceholders(union(text, link), {
+					"0": { owner: { name: {} } },
+					"1": { owner: { code: {} } }
+				})).toEqual(new Map<unknown, unknown>([
+					[link, { owner: { name: {}, code: {} } }]
+				]));
+
+			});
+
+		});
+
+	});
+
+});
+
+describe("query methods", () => {
+
+	describe("getQueryEntries", () => {
+
+		it("lists retrieval entries in stated order", async () => {
+
+			expect(getQueryEntries({ name: {}, vendor: { name: {} } }))
+				.toEqual([["name", {}], ["vendor", { name: {} }]]);
+
+		});
+
+		it("leaves criteria behind", async () => {
+
+			expect(getQueryEntries({ name: {}, "~name": "widget", "^name": "asc", "@": 0, "#": 25 }))
+				.toEqual([["name", {}]]);
+
+		});
+
+		it("returns entries as stated, whatever the retrieval form", async () => {
+
+			expect(getQueryEntries({ "n=name": {} })).toEqual([["n=name", {}]]);
+			expect(getQueryEntries({ "0": {} })).toEqual([["0", {}]]);
+			expect(getQueryEntries({ en: {} })).toEqual([["en", {}]]);
+
+		});
+
+		it("types entries as keys paired with the queries they state, whatever the retrieval form", async () => {
+
+			expectTypeOf(getQueryEntries).returns.toEqualTypeOf<readonly (readonly [string, Query<Slot>])[]>();
+
 		});
 
 	});

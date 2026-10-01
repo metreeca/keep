@@ -23,8 +23,7 @@
  *
  * | Operation | HTTP | `Prefer` | Behaviour | Validated |
  * |---|---|---|---|---|
- * | {@link Store.lookup lookup} | `GET` | — | Template in query string; `404` → `undefined` | `model`, response
- * |
+ * | {@link Store.lookup lookup} | `GET` | — | Template in query string; `404` → `undefined` | `model`, response |
  * | {@link Store.create create} | `POST` | — | Child IRI from `Location` header; `409` → `undefined` | `state` |
  * | {@link Store.update update} | `PUT` | — | Conditional; `404` → `undefined` | `state` |
  * | {@link Store.delete delete} | `DELETE` | — | Conditional; `404` → `undefined` | — |
@@ -32,14 +31,12 @@
  * | {@link Store.remove remove} | `DELETE` | `handling=lenient` | Unconditional; `404` silently ignored | — |
  *
  * > [!IMPORTANT]
- * > Each HTTP verb is shared by a conditional and an unconditional method, disambiguated through the RFC 7240
- * > `Prefer` request header:
+ * > Each mutating HTTP verb is shared by a conditional and an unconditional method, disambiguated through the
+ * > RFC 7240 `Prefer` request header:
  * >
- * > - **Conditional** ({@link Store.update update} via `PUT`, {@link Store.delete delete} via `DELETE`)
- * send bare
+ * > - **Conditional** ({@link Store.update update} via `PUT`, {@link Store.delete delete} via `DELETE`) send bare
  * >   requests, so the server rejects a missing target with `404`.
- * > - **Unconditional** ({@link Store.insert insert} via `PUT`, {@link Store.remove remove} via `DELETE`)
- * send
+ * > - **Unconditional** ({@link Store.insert insert} via `PUT`, {@link Store.remove remove} via `DELETE`) send
  * >   `Prefer: handling=lenient`, so a `PUT` against a missing resource becomes an upsert and a `DELETE` against one
  * >   succeeds silently.
  * >
@@ -50,33 +47,28 @@
  * otherwise-successful responses (a missing `Location` header, a malformed response body). Callers therefore observe
  * a single rejection type for all error origins.
  *
- * {@link Store.create create} resolves the returned `Location` against the request `entry` per RFC 3986 § 5.2
- * and
+ * {@link Store.create create} resolves the returned `Location` against the request `entry` per RFC 3986 § 5.2 and
  * returns it verbatim, including across origins: the proxy applies no same-origin or path-containment check, so
  * callers MUST trust the service's choice of child IRI. Standard merge semantics apply, so an `entry` without a
  * trailing `/` strips its last path segment before merging. An unparseable `Location` surfaces as a `RangeError`
  * rather than a {@link @metreeca/http!Problem | Problem}.
  *
- * {@link Store.lookup lookup} encodes its `model` as a URL-safe base64 query string, so any template (filter
- * operators such as `~name` and `>=price`, nested shapes, aggregates) survives transport intact; an empty template
- * omits the query string. Root-relative references (`/…`) in the response are resolved against the origin of the
- * request `entry`, so the service may return them in place of absolute IRIs; any other relative reference fails
- * response validation.
+ * {@link Store.lookup lookup} carries its `model` as a URL-safe base64 query string, so any template (filter
+ * operators such as `~name` and `>=price`, nested shapes, aggregates, collection pagination) survives transport
+ * intact; an empty template omits the query string. Root-relative references (`/…`) in the response are
+ * resolved against the origin of the request `entry`, so the service may return them in place of absolute IRIs; any
+ * other relative reference fails response validation.
  *
  * > [!IMPORTANT]
  * > `entry` parameters MUST be bare absolute IRIs with no query string (`?…`) or fragment (`#…`): a query string
- * > would collide with the base64 template appended by {@link Store.lookup lookup}, and a fragment would be
- * stripped
- * > by `fetch` before the request reached the wire. The wrapping
- * > {@link createValidatingStore} rejects non-conforming entries with a
- * > `RangeError` on every method.
+ * > would collide with the template carried by {@link Store.lookup lookup}, and a fragment would be stripped by
+ * > `fetch` before the request reached the wire. Non-conforming entries are rejected with a `RangeError` on every
+ * > method.
  *
- * The wrapping {@link createValidatingStore} validates inputs
- * (`model` on {@link Store.lookup lookup}, `state` on every mutation) against the shape before the network
- * call. Because the remote endpoint is untrusted, {@link Store.lookup lookup} responses are re-validated
- * locally against the shape narrowed by the caller's `model`. Failures reject with a
- * {@link @metreeca/core!TraceError | TraceError} carrying `"invalid model"`, `"invalid state"`, or
- * `"invalid response"`, per the unified {@link Store} error channel.
+ * Inputs are validated against the shape before the network call: `model` on {@link Store.lookup lookup}, `state`
+ * on every mutation. Because the remote endpoint is untrusted by default, {@link Store.lookup lookup} responses are
+ * also validated against the shape narrowed by the caller's `model`. Failures reject with a {@link @metreeca/core!TraceError | TraceError} carrying
+ * `"invalid model"`, `"invalid state"`, or `"invalid response"`, per the unified {@link Store} error channel.
  *
  * @see {@link https://www.rfc-editor.org/rfc/rfc3986 RFC 3986 — URI Generic Syntax}
  * @see {@link https://www.rfc-editor.org/rfc/rfc7240 RFC 7240 — Prefer Header for HTTP}
@@ -87,18 +79,18 @@
  * @module
  */
 
-import { isError, isObject } from "@metreeca/core";
+import { isError, isObject, type Optional } from "@metreeca/core";
 import type { Tag } from "@metreeca/core/language";
 import { getIRIBase, resolve } from "@metreeca/core/resource";
 import { immutable } from "@metreeca/core/values";
 import { Conflict, createFetch, NotFound } from "@metreeca/http";
 import { type Problem, success } from "@metreeca/http/success";
 import { transport } from "@metreeca/http/transport";
-import type { Store } from "@metreeca/keep";
+import type { Store, StoreScope } from "@metreeca/keep";
 import { createManagingStore } from "@metreeca/keep/managing";
 import { createValidatingStore } from "@metreeca/keep/validating";
+import { encodeTemplate, type Template } from "@metreeca/qest/model";
 import { decodeResource, encodeResource } from "@metreeca/qest/state";
-import { encodeTemplate } from "@metreeca/qest/model";
 
 
 /**
@@ -132,7 +124,7 @@ export function createRESTStore({
 }: {
 
 	/**
-	 * Whether to skip re-validation of {@link Store.lookup lookup} responses against the projected shape.
+	 * Whether to accept retrieval responses without validating them against the model.
 	 *
 	 * @defaultValue `false`, treating the remote endpoint as untrusted
 	 */
@@ -152,45 +144,52 @@ export function createRESTStore({
 	const remote = createFetch(success(), transport(fetch));
 
 
+	function retrieve(entry: string, model: Template, opts: Optional<StoreScope>) {
+
+		const url = Object.keys(model).length === 0 ? entry
+			: `${entry}?${encodeTemplate(model, { base: getIRIBase(entry), format: "base64" })}`;
+
+		return remote(url, {
+
+			method: "GET",
+
+			headers: {
+				"Accept": "application/json",
+				...(opts?.locale?.length ? { "Accept-Language": acceptLanguage(opts.locale) } : {})
+			}
+
+		}).then(response => {
+
+			// ;(cast) the decoded body is only resolved, not checked: the wrapping validating store validates it
+			// against the requested shape and model, unless the endpoint is trusted to deliver conforming data
+
+			return response.text().then(json => decodeResource(json, {
+
+				lenient: true,
+				base: getIRIBase(entry)
+
+			}) as never).catch(e => {
+
+				throw immutable<Problem>({
+					detail: `malformed JSON in response to GET <${entry}>: ${isError(e) ? e.message : String(e)}`
+				});
+
+			});
+
+		}).catch(e => {
+
+			return isProblem(e, NotFound) ? undefined : Promise.reject(e);
+
+		});
+
+	}
+
+
 	return createManagingStore(createValidatingStore(immutable({
 
 		lookup({ entry, model }, opts) {
 
-			const url = Object.keys(model).length === 0 ? entry
-				: `${entry}?${encodeTemplate(model, { base: getIRIBase(entry), format: "base64" })}`;
-
-			return remote(url, {
-
-				method: "GET",
-
-				headers: {
-					"Accept": "application/json",
-					...(opts?.locale?.length ? { "Accept-Language": acceptLanguage(opts.locale) } : {})
-				}
-
-			}).then(response => {
-
-				// ;(cast) the decoded resource is only resolved, not checked: the wrapping validating store validates it
-				// against the requested shape and model, unless the endpoint is trusted to deliver conforming data
-
-				return response.text().then(json => decodeResource(json, {
-
-					lenient: true,
-					base: getIRIBase(entry)
-
-				}) as never).catch(e => {
-
-					throw immutable<Problem>({
-						detail: `malformed JSON in response to GET <${entry}>: ${isError(e) ? e.message : String(e)}`
-					});
-
-				});
-
-			}).catch(e => {
-
-				return isProblem(e, NotFound) ? undefined : Promise.reject(e);
-
-			});
+			return retrieve(entry, model, opts);
 
 		},
 
@@ -309,7 +308,8 @@ export function createRESTStore({
 
 			}).catch(e => {
 
-				return isProblem(e, NotFound) ? entry : Promise.reject(e); // unconditional remove — 404 is a silent no-op
+				return isProblem(e, NotFound) ? entry : Promise.reject(e); // unconditional remove — 404 is a silent
+																		   // no-op
 
 			});
 

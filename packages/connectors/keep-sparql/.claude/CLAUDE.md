@@ -33,7 +33,7 @@ description: Development guidelines and conventions for the SPARQL store engine.
 
 # Encoder Conventions
 
-Conventions for `src/**/encode.ts` modules. Existing encoders (`persist/insert/encode.ts`,`lookup/encode.ts`,
+Conventions for `src/**/encode.ts` modules. Existing encoders (`persist/insert/encode.ts`,`detail/encode.ts`,
 `select/encode.ts`) follow these patterns — match them when adding new ones.
 
 > [!NOTE]
@@ -50,11 +50,12 @@ Conventions for `src/**/encode.ts` modules. Existing encoders (`persist/insert/e
   etc. — those are already at the leaf.
 - **Key `scope.resolve` on the Flake node** (the SPARQL instance of the skill's identity-keyed variable allocation
   rule): allocate a coordinate's variable with [`scope.resolve(locus)`](../src/_/scope.ts) keyed on its immutable
-  `Locus` / `Branch` node, never on a path string. A flake is frozen once through `immutable(...)`, so every node —
-  including each union variant's own `Branch` — holds a stable identity: the same coordinate always yields the same
-  variable, and colliding property names (`Person.name` vs `Organization.name`) stay on distinct variables without a
-  path-string discriminator. This is the identity-keyed numeric allocation the legacy selector reached for via
-  `id(path)`.
+  `Locus` / `Branch` node, never on a path string. A flake is frozen once through `immutable(...)`, so every node
+  holds a stable identity: the same coordinate always yields the same variable, and the same property name at
+  distinct coordinates (`name` vs `vendor.name`) stays on distinct variables without a path-string discriminator. A
+  name declared by several variants of a union (`Person.name` and `Organization.name` under `creator`) is one
+  property by union coherence (qest §3.2), reached through a single `Branch` and bound to a single variable. This is
+  the identity-keyed numeric allocation the legacy selector reached for via `id(path)`.
 
 # Transaction Isolation and Mutation Event Declarations
 

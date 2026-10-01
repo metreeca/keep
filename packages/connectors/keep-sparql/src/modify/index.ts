@@ -24,15 +24,15 @@ import { encode } from "./encode.js";
 /**
  * Applies a batch of {@link Modify} requests against a repository as a single update.
  *
- * Each request is encoded by the presence of its `state`: a present `state` inserts (creates or
- * updates) the entry, an omitted `state` removes it. Every request's operations are folded into one
- * SPARQL update joined in submission order, so the backend applies them sequentially
- * ({@link https://www.w3.org/TR/sparql11-update/#updateLanguage SPARQL 1.1 Update §3}) and, where
- * supported, atomically (§3.2). The batch arrives pre-validated by the batching layer, which rejects
- * any request whose `state` carries an `id` other than its `entry` (§4.1) before it reaches here, so
- * every request is applied unconditionally; each batched {@link Deferred} resolves to its entry once
- * the update completes, while a backend failure propagates for the batching layer to settle as a
- * rejection across the batch.
+ * Each request is encoded by what it carries: a `link` asserts the entry's membership edge to an item,
+ * a present `state` inserts (creates or updates) the entry, an omitted `state` removes it. Every
+ * request's operations are folded into one SPARQL update joined in submission order, so the backend
+ * applies them sequentially ({@link https://www.w3.org/TR/sparql11-update/#updateLanguage SPARQL 1.1
+ * Update §3}) and, where supported, atomically (§3.2). The batch arrives pre-validated by the batching
+ * layer, which rejects any request whose `state` carries an `id` other than its `entry` (§4.1) before
+ * it reaches here, so every request is applied unconditionally; each batched {@link Deferred} resolves
+ * to its entry once the update completes, while a backend failure propagates for the batching layer
+ * to settle as a rejection across the batch.
  *
  * @param batch The modify requests to apply
  * @param client The repository the mutations are applied against

@@ -25,9 +25,9 @@ import { describe, expect, it } from "vitest";
  */
 function at(node: Flake | Branch, ...steps: readonly Identifier[]): Branch {
 	return steps.reduce<Branch>((current, step) => {
-		const branches = (current.entries ?? {})[step];
-		if ( branches === undefined || branches.length === 0 ) { throw new Error(`no branch at step <${step}>`); }
-		return branches[0];
+		const branch = (current.entries ?? {})[step];
+		if ( branch === undefined ) { throw new Error(`no branch at step <${step}>`); }
+		return branch;
 	}, node as Branch);
 }
 

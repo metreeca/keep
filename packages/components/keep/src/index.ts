@@ -17,13 +17,13 @@
 /**
  * Model-driven storage API.
  *
- * Splits the storage surface across two interfaces: {@link StoreClient} carries the CRUD and data-loading methods
- * that read and write linked-data resources described as {@link Resource} states and {@link Template} retrieval
- * templates from the [@metreeca/qest](https://github.com/metreeca/qest) data-modelling library, validated against
- * {@link ResourceShape shapes} defined using the [@metreeca/blue](https://github.com/metreeca/blue) validation
- * library; {@link Store} extends it with management facilities (mutation events, transactional execution, lifecycle).
- * Connectors compose the two — typically via {@link createManagingStore} —
- * into a single store exposing both surfaces through one object.
+ * Persists and retrieves linked data resources independently of the backend holding them. Resources are described by
+ * {@link ResourceShape shapes} defined with the [@metreeca/blue](https://github.com/metreeca/blue) validation library,
+ * and are read and written as {@link Resource} states, {@link Template} retrieval templates and {@link Projection}
+ * queries following the data and query models of the [@metreeca/qest](https://github.com/metreeca/qest) data-modelling
+ * library. The data operations of a {@link StoreClient} are what a connector implements against its backend; a
+ * {@link Store} adds mutation events, transactional execution and lifecycle on top, typically supplied by
+ * {@link createManagingStore}, and exposes both surfaces through one object.
  *
  * {@link StoreClient} implementations are expected to fully support the {@link Template | query language}
  * defined by [@metreeca/qest](https://github.com/metreeca/qest), including property selection, linked
@@ -33,8 +33,8 @@
  *
  * The {@link StoreClient} interface supports conditional resource operations for standard CRUD workflows:
  *
- * - {@link StoreClient.lookup lookup} — Retrieve a resource matching a validated retrieval template
- * - {@link StoreClient.create create} — Create a resource from a validated state
+ * - {@link StoreClient.lookup lookup} — Retrieve a resource, narrowed to a validated retrieval template
+ * - {@link StoreClient.create create} — Add a resource from a validated state to the collection a resource holds
  * - {@link StoreClient.update update} — Replace a resource state with a validated state
  * - {@link StoreClient.delete delete} — Delete a resource identified by a validated entry
  *
@@ -65,9 +65,9 @@
  *
  * Resource data is automatically {@link validate | validated} against the supplied shape:
  *
- * - `model` is validated for {@link StoreClient.lookup lookup}
- * - `state` is validated for {@link StoreClient.create create}, {@link StoreClient.update update},
- * and {@link StoreClient.insert insert}
+ * - `model` is validated for {@link StoreClient.lookup lookup} and {@link StoreClient.create create}
+ * - `state` is validated for {@link StoreClient.create create}, against the shape the collecting property ranges over,
+ * and for {@link StoreClient.update update} and {@link StoreClient.insert insert}, against the supplied shape
  *
  * Validation failures surface as a {@link TraceError} carrying the collected failure trace.
  *
@@ -76,8 +76,9 @@
  * Every {@link StoreClient} method returns a `Promise<…>`; **all** errors are delivered as promise
  * rejections, regardless of origin:
  *
- * - `RangeError` — malformed `entry` (not an absolute IRI, contains `?` or `#`) or a `state` carrying an `id`
- * differing from `entry`
+ * - {@link !RangeError RangeError} — malformed `entry` (not an absolute IRI, contains `?` or `#`), a `state` whose
+ * `id` conflicts with `entry` (not nested under it on creation, differing from it otherwise), or a `state` member
+ * filling an identifier slot that is not a single path segment
  * - {@link TraceError} — `model` or `state` fails {@link validate} against the shape
  * - {@link Problem} — network, storage, or other processing failures
  *
@@ -93,36 +94,28 @@
  *   entry: "http://example.com/products/1",
  *   shape: ProductShape,
  *   model: {
- *     name: "",
- *     price: 0,
- *     vendor: { id: "", name: "" }
+ *     name: {},
+ *     price: {},
+ *     vendor: { id: {}, name: {} }
  *   }
- * });
- *
- * // retrieval using the shape's own model as template
- *
- * const full = await store.lookup({
- *   entry: "http://example.com/products/1",
- *   shape: ProductShape,
- *   model: model(ProductShape)
  * });
  *
  * // collection retrieval with filtering, ordering, and pagination
  *
- * const catalog = await store.lookup({
+ * const catalogue = await store.lookup({
  *   entry: "http://example.com/products/",
- *   shape: ProductShape,
+ *   shape: CatalogueShape,
  *   model: {
- *     products: [{
- *       id: "",
- *       name: "",
- *       price: 0,
+ *     products: {
+ *       id: {},
+ *       name: {},
+ *       price: {},
  *       ">=price": 50,        // price ≥ 50
  *       "~name": "widget",    // name contains "widget"
  *       "^price": 1,          // sort by price ascending
  *       "@": 0,               // offset
  *       "#": 25               // limit
- *     }]
+ *     }
  *   }
  * });
  * ```
@@ -130,12 +123,18 @@
  * **Creating and Updating Resources**
  *
  * ```typescript
- * await store.create({ entry: "http://example.com/products/42", shape: ProductShape, state: {
- *   id: "http://example.com/products/42",
- *   name: "Widget",
- *   price: 29.99,
- *   vendor: "http://example.com/vendors/acme"
- * } });
+ * // creation within the collection holding the new resource, its identifier minted by the store unless stated
+ *
+ * const product = await store.create({
+ *   entry: "http://example.com/products/",
+ *   shape: CatalogueShape,
+ *   model: { products: {} },
+ *   state: {
+ *     name: "Widget",
+ *     price: 29.99,
+ *     vendor: "http://example.com/vendors/acme"
+ *   }
+ * });
  *
  * await store.update({ entry: "http://example.com/products/42", shape: ProductShape, state: {
  *   id: "http://example.com/products/42",
@@ -182,7 +181,7 @@
  *
  * ```typescript
  * await store.execute(async store => {
- *   await store.create({ entry: product.id, shape: ProductShape, state: product });
+ *   await store.create({ entry: catalogue, shape: CatalogueShape, model: { products: {} }, state: product });
  *   await store.update({ entry: inventory.id, shape: InventoryShape, state: inventory });
  * });
  * ```
@@ -200,33 +199,29 @@
 
 import type { validate } from "@metreeca/blue";
 import type { ResourceShape } from "@metreeca/blue/resource";
-import type { Delivery } from "@metreeca/blue/value";
+import type { Draft, Match, Model, Slice } from "@metreeca/blue/value";
 import type { Lazy, Optional } from "@metreeca/core";
 import type { Some } from "@metreeca/core/arrays";
 import type { Awaitable } from "@metreeca/core/async";
 import type { Tag } from "@metreeca/core/language";
 import type { TraceError } from "@metreeca/core/trace";
 import type { Problem } from "@metreeca/http/success";
-import { Template } from "@metreeca/qest/model";
+import { type Projection, Template } from "@metreeca/qest/model";
 import { type Reference, Resource } from "@metreeca/qest/state";
-
 import type { createManagingStore } from "./stores/managing.js";
 
 
 /**
  * Model-driven resource store.
  *
- * Extends {@link StoreClient} with management facilities — mutation events, transactional execution, and lifecycle —
- * to form the store surface produced by factories like
- * {@link createManagingStore}. The data surface is factored into a standalone
- * {@link StoreClient} so it can be implemented and passed around on its own (for example, the inner client handed to
- * {@link Store.execute execute} carries no `execute` of its own), while consumers of a store reach both
+ * Extends {@link StoreClient} with management facilities (mutation events, transactional execution, and lifecycle)
+ * to form the store surface produced by factories like {@link createManagingStore}. The data surface is factored into
+ * a standalone {@link StoreClient} so it can be implemented and passed around on its own (for example, the inner client
+ * handed to {@link Store.execute execute} carries no `execute` of its own), while consumers of a store reach both
  * surfaces through the same object.
  *
- * Data methods on a store — {@link StoreClient.lookup lookup}, {@link StoreClient.create create},
- * {@link StoreClient.update update}, {@link StoreClient.delete delete}, {@link StoreClient.insert insert}, and
- * {@link StoreClient.remove remove} — are individually atomic even when executed outside
- * {@link Store.execute execute}, regardless of the number of server round-trips they may internally require.
+ * Every data method on a store is individually atomic, even when called outside {@link Store.execute execute} and
+ * regardless of the number of server round-trips it may require.
  *
  * > [!IMPORTANT]
  * > Implementations provide best-effort transaction isolation, targeting snapshot isolation where the backend
@@ -245,10 +240,10 @@ export interface Store extends StoreClient {
 	 * Observe mutation events.
 	 *
 	 * Each call mints an independent registration; multiple registrations of the same observer coexist and
-	 * fire independently — the observer is invoked once per matching registration per mutation batch. The
+	 * fire independently, the observer being invoked once per matching registration per mutation batch. The
 	 * returned handle detaches **only** that registration; calling it more than once is a no-op and other
 	 * registrations of the same observer are unaffected. Detachment is the only supported way to stop
-	 * receiving events — repeated `observe` calls do not replace any prior registration.
+	 * receiving events: repeated `observe` calls do not replace any prior registration.
 	 *
 	 * `resources` is the filter for the registration:
 	 *
@@ -272,7 +267,7 @@ export interface Store extends StoreClient {
 	 *
 	 * @returns A function that detaches **this** registration
 	 *
-	 * @throws `Error` if the store has been {@link Store.close closed}
+	 * @throws {@link !Error Error} if the store has been {@link Store.close closed}
 	 */
 	observe(observer: StoreObserver, resources?: Some<Reference>): () => void;
 
@@ -281,9 +276,9 @@ export interface Store extends StoreClient {
 	 *
 	 * All operations performed during the task are executed atomically. If the task completes successfully, all
 	 * mutations are committed and {@link Store.observe registered observers} receive a single mutation event
-	 * containing all affected resources. If the task throws or rejects — including logic errors (`RangeError`,
-	 * {@link TraceError}) raised by inner {@link StoreClient} calls — no mutations are executed, no events are
-	 * notified, and the error is propagated to the caller as a promise rejection.
+	 * containing all affected resources. If the task throws or rejects, including on logic errors
+	 * ({@link !RangeError RangeError}, {@link TraceError}) raised by inner {@link StoreClient} calls, no mutations are
+	 * executed, no events are notified, and the error is propagated to the caller as a promise rejection.
 	 *
 	 * The task is handed its own {@link StoreClient} for the transaction. Operations performed through it belong to
 	 * the transaction and commit together, kept separate from any other `execute` running at the same time.
@@ -309,10 +304,10 @@ export interface Store extends StoreClient {
 	 * @param task - Async or sync function performing store operations within the transaction
 	 *
 	 * @returns A promise resolving to the value returned by `task`; rejects with any error raised or
-	 * propagated by `task`, including a `RangeError`/{@link TraceError} from inner Store validation or a
+	 * propagated by `task`, including a {@link !RangeError RangeError} or {@link TraceError} from inner validation or a
 	 * {@link Problem} from a transactional, network, storage, or other processing failure
 	 *
-	 * @throws `Error` if the store has been {@link Store.close closed}
+	 * @throws {@link !Error Error} if the store has been {@link Store.close closed}
 	 */
 	execute<V>(task: (store: StoreClient) => Awaitable<V>): Promise<V>;
 
@@ -338,99 +333,58 @@ export interface Store extends StoreClient {
 export interface StoreClient {
 
 	/**
-	 * Retrieve a resource.
+	 * Look up a resource.
 	 *
-	 * The result is shaped by the `model` {@link Template}: plain identifier properties are resolved from the shape's
-	 * {@link @metreeca/blue/value!Delivery | Delivery}\<T\> type, while computed bindings are derived from the
-	 * template value.
+	 * Retrieves the single resource identified by `entry`, narrowed to the members the `model` {@link Template} names
+	 * and expanded through the linked resources it reaches. Values are typed after the `shape`: the template states
+	 * which members are wanted, not what they are.
+	 *
+	 * Multi-valued members are retrieved as collections. Filtering, ordering and pagination constraints are stated
+	 * under the member name, next to its retrieval keys. A {@link Projection} stated there instead of a template
+	 * returns rows of computed values, keyed by the names of its bindings. A collection with no matching item is
+	 * omitted from the result, like any other member without a value.
 	 *
 	 * > [!NOTE]
-	 * > `shape` and `model` are kept distinct so that a single `shape` can serve many retrieval templates —
-	 * > for example, a server wiring one `shape` at startup and accepting any admissible `model` decoded
-	 * > from the client request on each call. Callers wanting a template addressing every slot the shape
-	 * > declares MUST author it explicitly.
+	 * > `shape` and `model` are kept distinct so that a single `shape` can serve many retrieval templates: for
+	 * > example, a server wiring one `shape` at startup and accepting any admissible `model` decoded from the client
+	 * > request on each call. Callers wanting a template addressing every member the shape declares MUST author it
+	 * > explicitly.
 	 *
 	 * > [!CAUTION]
 	 * > By default, `model` templates support the full query language, including aggregate transforms and nested
-	 * > expansion. When exposing retrieval to untrusted clients, restrict query complexity as required by setting
-	 * > `plain` to `true`, `depth` to `0` or a positive value, and/or `limit` to a maximum result set size.
+	 * > expansion. When exposing retrieval to untrusted clients, restrict query complexity as required by setting the
+	 * > {@link StoreScope | scope} `plain` to `true`, `depth` to `0` or a positive value, and/or `limit` to a maximum
+	 * > result set size.
 	 *
 	 * @typeParam S - The shape driving the retrieval
-	 * @typeParam T - The retrieval template type
+	 * @typeParam T - The retrieval template, naming only members the shape carries
 	 *
-	 * @param request - Retrieval specifications
-	 * @param opts - Retrieval options, restricting the query language admitted in `model` and negotiating the
-	 * language of localised content
+	 * @param request - The resource to retrieve, the shape describing it and the template narrowing it
+	 * @param scope - The {@link StoreScope | retrieval scope}, bounding `model` and setting the locale priority
 	 *
-	 * @returns A promise resolving to an immutable copy of the resource data matching the specified model,
-	 * or to `undefined` if the resource is not present in the store; rejects with a `RangeError` if `entry`
-	 * is not an absolute IRI, a {@link TraceError} if `model` doesn't {@link validate} against the shape,
+	 * @returns A promise resolving to an immutable copy of the resource data narrowed to the members `model` names,
+	 * or to `undefined` if the resource is not present in the store; rejects with a {@link !RangeError RangeError} if
+	 * `entry` is not an absolute IRI, a {@link TraceError} if `model` doesn't {@link validate} against the shape,
 	 * or a {@link Problem} on network, storage, or other processing errors
 	 *
-	 * @throws `Error` if the store has been {@link Store.close closed}
+	 * @throws {@link !Error Error} if the store has been {@link Store.close closed}
 	 */
-	lookup<S extends Lazy<ResourceShape>, T extends Template>(request: {
-
-		/**
-		 * Absolute identifier of the resource to be retrieved.
-		 */
-		readonly entry: Reference;
-
-		/**
-		 * Resource shape the retrieval is validated against, possibly deferred to break definition cycles.
-		 */
-		readonly shape: S;
-
-		/**
-		 * Retrieval template defining the data envelope of the result.
-		 */
-		readonly model: T;
-
-	}, opts?: {
-
-		/**
-		 * {@link Tag} priority list driving language negotiation for localised content.
-		 *
-		 * Entries are matched in order of preference against the language tags available for each localised value.
-		 *
-		 * @defaultValue `["und"]`
-		 */
-		locale?: readonly Tag[]
-
-		/**
-		 * Whether to reject `model` templates carrying aggregate transforms (`count`, `sum`, `min`, `max`, `avg`),
-		 * admitting retrieval but not computation.
-		 *
-		 * @defaultValue `false`, admitting the full query language
-		 */
-		plain?: boolean
-
-		/**
-		 * Maximum nesting admitted for `model` expansion and query probe paths, each nested resource or path segment
-		 * counting against the budget; `0` rejects any nested template while still admitting IRI references.
-		 *
-		 * @defaultValue Unbounded
-		 */
-		depth?: number
-
-		/**
-		 * Maximum page size admitted for the `#` pagination constraint in `model` selections.
-		 *
-		 * A positive value caps the result set: a `#` exceeding it or set to `0` (unbounded) is rejected, and a
-		 * selection with no `#` is held to it. `0` leaves result sets unbounded.
-		 *
-		 * @defaultValue `0`
-		 */
-		limit?: number
-
-	}): Promise<Optional<Delivery<S, T>>>;
-
+	lookup<S extends Lazy<ResourceShape>, T extends Model<S, T>>(request: StoreLookup<S, T>, scope?: StoreScope): Promise<Optional<Match<S, T>>>;
 
 	/**
 	 * Create a resource.
 	 *
-	 * Stores the resource's own data if the resource doesn't already exist. Specific reference kinds are handled
-	 * as follows:
+	 * Adds a resource to the collection the resource identified by `entry` holds under the single multi-valued
+	 * property `model` names, provided no resource already exists under the identifier of the new one; its own data is
+	 * stored as described by the shape the collecting property ranges over.
+	 *
+	 * The new resource is identified by the `id` its `state` carries, which must be nested under `entry`. Where `id`
+	 * is left out, the store mints one under `entry`, following the identifier {@link ResourceShape.pattern | pattern}
+	 * the collected shape declares, if any: each `{name}` slot is filled with the like-named member of `state`, which
+	 * must be a single path segment, and any other slot with an opaque segment. A remote store may leave the choice to
+	 * the service holding the collection.
+	 *
+	 * Specific reference kinds are handled as follows:
 	 *
 	 * - {@link ResourceShape | embedded references} — cascades recursively with the same semantics
 	 * - {@link @metreeca/blue/resource!PropertyConstraints.captive | captive references} — accepted only as bare
@@ -438,35 +392,23 @@ export interface StoreClient {
 	 * - {@link @metreeca/blue/resource!PropertyConstraints.foreign | foreign references} — skipped, as their
 	 * data is owned by the defining resource
 	 *
-	 * @param request - Creation specifications
+	 * @typeParam S - The shape driving the creation, describing the collecting resource
+	 * @typeParam T - The collection slice, naming the collecting property
 	 *
-	 * @returns A promise resolving to the `entry` {@link Reference} of the created resource, or to `undefined`
-	 * if the resource already exists; rejects with a `RangeError` if `entry` is not an absolute IRI or if
-	 * `state` carries an `id` differing from `entry`, a {@link TraceError} if `state` doesn't {@link validate}
+	 * @param request - The resource collecting the new one, the shape describing it, the slice naming the collecting
+	 * property and the initial state of the new resource
+	 *
+	 * @returns A promise resolving to the {@link Reference} identifying the created resource, or to `undefined`
+	 * if a resource already exists under that identifier; rejects with a {@link !RangeError RangeError} if `entry` is
+	 * not an absolute IRI, if `state` carries an `id` not nested under `entry` or if a member filling an identifier
+	 * slot is not a single path segment, a {@link TraceError} if `model` or `state` doesn't {@link validate}
 	 * against the shape, or a {@link Problem} on network, storage, or other processing errors
 	 *
-	 * @throws `Error` if the store has been {@link Store.close closed}
+	 * @throws {@link !Error Error} if the store has been {@link Store.close closed}
 	 *
-	 * @see {@link StoreClient.insert insert} for unconditional insertion
+	 * @see {@link StoreClient.insert insert} for unconditional insertion under a known identifier
 	 */
-	create(request: {
-
-		/**
-		 * Absolute identifier of the resource to be created.
-		 */
-		readonly entry: Reference;
-
-		/**
-		 * Resource shape `state` is validated against, possibly deferred to break definition cycles.
-		 */
-		readonly shape: Lazy<ResourceShape>;
-
-		/**
-		 * Initial state of the new resource; its `id`, if stated, must match `entry`.
-		 */
-		readonly state: Resource
-
-	}): Promise<Optional<Reference>>;
+	create<S extends Lazy<ResourceShape>, T extends Slice<S, T>>(request: StoreCreate<S, T>): Promise<Optional<Reference>>;
 
 	/**
 	 * Update a resource.
@@ -480,35 +422,20 @@ export interface StoreClient {
 	 * - {@link @metreeca/blue/resource!PropertyConstraints.foreign | foreign references} — skipped, as their
 	 * data is owned by the defining resource
 	 *
-	 * @param request - Update specifications
+	 * @typeParam S - The shape driving the update, describing the state
+	 *
+	 * @param request - The resource to update, the shape validating it and its replacement state
 	 *
 	 * @returns A promise resolving to the `entry` {@link Reference} of the updated resource, or to `undefined`
-	 * if the resource doesn't exist; rejects with a `RangeError` if `entry` is not an absolute IRI or if
-	 * `state` carries an `id` differing from `entry`, a {@link TraceError} if `state` doesn't {@link validate}
+	 * if the resource doesn't exist; rejects with a {@link !RangeError RangeError} if `entry` is not an absolute IRI
+	 * or if `state` carries an `id` differing from `entry`, a {@link TraceError} if `state` doesn't {@link validate}
 	 * against the shape, or a {@link Problem} on network, storage, or other processing errors
 	 *
-	 * @throws `Error` if the store has been {@link Store.close closed}
+	 * @throws {@link !Error Error} if the store has been {@link Store.close closed}
 	 *
 	 * @see {@link StoreClient.insert insert} for unconditional insertion
 	 */
-	update(request: {
-
-		/**
-		 * Absolute identifier of the resource to be updated.
-		 */
-		readonly entry: Reference;
-
-		/**
-		 * Resource shape `state` is validated against, possibly deferred to break definition cycles.
-		 */
-		readonly shape: Lazy<ResourceShape>;
-
-		/**
-		 * Complete replacement state for the resource; its `id`, if stated, must match `entry`.
-		 */
-		readonly state: Resource
-
-	}): Promise<Optional<Reference>>;
+	update<S extends Lazy<ResourceShape>>(request: StoreUpdate<S>): Promise<Optional<Reference>>;
 
 	/**
 	 * Delete a resource.
@@ -520,30 +447,19 @@ export interface StoreClient {
 	 * - {@link @metreeca/blue/resource!PropertyConstraints.captive | captive references} — cascade-deleted with
 	 * the same semantics
 	 *
-	 * @param request - Deletion specifications
+	 * @typeParam S - The shape driving the deletion, identifying the data cascaded with the resource
+	 *
+	 * @param request - The resource to delete and the shape identifying the data cascade-deleted with it
 	 *
 	 * @returns A promise resolving to the `entry` {@link Reference} of the deleted resource, or to `undefined`
-	 * if the resource doesn't exist; rejects with a `RangeError` if `entry` is not an absolute IRI, or a
-	 * {@link Problem} on network, storage, or other processing errors
+	 * if the resource doesn't exist; rejects with a {@link !RangeError RangeError} if `entry` is not an absolute IRI,
+	 * or a {@link Problem} on network, storage, or other processing errors
 	 *
-	 * @throws `Error` if the store has been {@link Store.close closed}
+	 * @throws {@link !Error Error} if the store has been {@link Store.close closed}
 	 *
 	 * @see {@link StoreClient.remove remove} for unconditional removal
 	 */
-	delete(request: {
-
-		/**
-		 * Absolute identifier of the resource to be deleted.
-		 */
-		readonly entry: Reference;
-
-		/**
-		 * Resource shape identifying the embedded and captive data cascade-deleted with the resource, possibly
-		 * deferred to break definition cycles.
-		 */
-		readonly shape: Lazy<ResourceShape>;
-
-	}): Promise<Optional<Reference>>;
+	delete<S extends Lazy<ResourceShape>>(request: StoreDelete<S>): Promise<Optional<Reference>>;
 
 
 	/**
@@ -558,36 +474,21 @@ export interface StoreClient {
 	 * - {@link @metreeca/blue/resource!PropertyConstraints.foreign | foreign references} — skipped, as their
 	 * data is owned by the defining resource
 	 *
-	 * @param request - Insertion specifications
+	 * @typeParam S - The shape driving the insertion, describing the state
+	 *
+	 * @param request - The resource to insert, the shape validating it and its state
 	 *
 	 * @returns A promise resolving to the `entry` {@link Reference} of the inserted resource; rejects with a
-	 * `RangeError` if `entry` is not an absolute IRI or if `state` carries an `id` differing from `entry`, a
-	 * {@link TraceError} if `state` doesn't {@link validate} against the shape, or a {@link Problem} on
+	 * {@link !RangeError RangeError} if `entry` is not an absolute IRI or if `state` carries an `id` differing from
+	 * `entry`, a {@link TraceError} if `state` doesn't {@link validate} against the shape, or a {@link Problem} on
 	 * network, storage, or other processing errors
 	 *
-	 * @throws `Error` if the store has been {@link Store.close closed}
+	 * @throws {@link !Error Error} if the store has been {@link Store.close closed}
 	 *
 	 * @see {@link StoreClient.create create} for conditional creation
 	 * @see {@link StoreClient.update update} for conditional replacement
 	 */
-	insert(request: {
-
-		/**
-		 * Absolute identifier of the resource to be inserted or replaced.
-		 */
-		readonly entry: Reference;
-
-		/**
-		 * Resource shape `state` is validated against, possibly deferred to break definition cycles.
-		 */
-		readonly shape: Lazy<ResourceShape>;
-
-		/**
-		 * Complete state for the resource; its `id`, if stated, must match `entry`.
-		 */
-		readonly state: Resource
-
-	}): Promise<Reference>;
+	insert<S extends Lazy<ResourceShape>>(request: StoreUpdate<S>): Promise<Reference>;
 
 	/**
 	 * Remove a resource.
@@ -599,30 +500,65 @@ export interface StoreClient {
 	 * - {@link @metreeca/blue/resource!PropertyConstraints.captive | captive references} — cascade-removed with
 	 * the same semantics
 	 *
-	 * @param request - Removal specifications
+	 * @typeParam S - The shape driving the removal, identifying the data cascaded with the resource
+	 *
+	 * @param request - The resource to remove and the shape identifying the data cascade-removed with it
 	 *
 	 * @returns A promise resolving to the `entry` {@link Reference} of the removed resource; rejects with a
-	 * `RangeError` if `entry` is not an absolute IRI, or a {@link Problem} on network, storage, or other
-	 * processing errors
+	 * {@link !RangeError RangeError} if `entry` is not an absolute IRI, or a {@link Problem} on network, storage, or
+	 * other processing errors
 	 *
-	 * @throws `Error` if the store has been {@link Store.close closed}
+	 * @throws {@link !Error Error} if the store has been {@link Store.close closed}
 	 *
 	 * @see {@link StoreClient.delete delete} for conditional removal
 	 */
-	remove(request: {
+	remove<S extends Lazy<ResourceShape>>(request: StoreDelete<S>): Promise<Reference>;
 
-		/**
-		 * Absolute identifier of the resource to be removed.
-		 */
-		readonly entry: Reference;
+}
 
-		/**
-		 * Resource shape identifying the embedded and captive data cascade-removed with the resource, possibly
-		 * deferred to break definition cycles.
-		 */
-		readonly shape: Lazy<ResourceShape>;
+/**
+ * Store retrieval scope.
+ *
+ * Bounds the aggregates, nesting depth and page size a {@link StoreClient.lookup lookup} admits in its `model`, and
+ * sets the locale priority for its localised content. Every member is optional: left out, a retrieval admits any
+ * `model` the shape validates and negotiates against the undetermined `und` tag alone.
+ */
+export type StoreScope = {
 
-	}): Promise<Reference>;
+	/**
+	 * {@link Tag} priority list driving language negotiation for localised content.
+	 *
+	 * Entries are matched in order of preference against the language tags available for each localised value.
+	 *
+	 * @defaultValue `["und"]`
+	 */
+	locale?: readonly Tag[]
+
+	/**
+	 * Whether to reject `model` templates carrying aggregate transforms (`count`, `sum`, `min`, `max`, `avg`),
+	 * admitting retrieval but not computation.
+	 *
+	 * @defaultValue `false`, admitting the full query language
+	 */
+	plain?: boolean
+
+	/**
+	 * Maximum nesting admitted for `model` expansion and query probe paths, each nested resource or path segment
+	 * counting against the budget; `0` rejects any nested template while still admitting IRI references.
+	 *
+	 * @defaultValue Unbounded
+	 */
+	depth?: number
+
+	/**
+	 * Maximum page size admitted for the `#` pagination constraint on `model` collections.
+	 *
+	 * A positive value caps the result set: a `#` exceeding it or set to `0` (unbounded) is rejected, and a
+	 * collection with no `#` is held to it. `0` leaves result sets unbounded.
+	 *
+	 * @defaultValue `0`
+	 */
+	limit?: number
 
 }
 
@@ -649,5 +585,123 @@ export interface StoreObserver {
 	 *     (`true` for upserted, `false` for removed)
 	 */
 	(mutations: { readonly [entry: Reference]: boolean }): Awaitable<void>;
+
+}
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * Store lookup request.
+ *
+ * Names the resource to retrieve with {@link StoreClient.lookup lookup}, the shape describing it and the template
+ * narrowing the result.
+ *
+ * @typeParam S - The shape driving the retrieval
+ * @typeParam T - The retrieval template, naming only members the shape carries
+ */
+export type StoreLookup<S extends Lazy<ResourceShape>, T extends Model<S, T>> = {
+
+	/**
+	 * Absolute identifier of the resource to be retrieved.
+	 */
+	readonly entry: Reference;
+
+	/**
+	 * Resource shape the retrieval is validated against, possibly deferred to break definition cycles.
+	 */
+	readonly shape: S;
+
+	/**
+	 * Retrieval template defining the data envelope of the result, naming only members `shape` carries, each in
+	 * a form its range admits. Multi-valued members may also state filtering, ordering and pagination constraints,
+	 * or a projection in place of a template.
+	 */
+	readonly model: T;
+
+}
+
+/**
+ * Store creation request.
+ *
+ * Names the resource collecting a new one with {@link StoreClient.create create}, the property holding the
+ * collection and the initial state of the new resource.
+ *
+ * @typeParam S - The shape driving the creation, describing the collecting resource
+ * @typeParam T - The collection slice, naming the collecting property
+ */
+export type StoreCreate<S extends Lazy<ResourceShape>, T extends Slice<S, T>> = {
+
+	/**
+	 * Absolute identifier of the resource collecting the new one.
+	 */
+	readonly entry: Reference;
+
+	/**
+	 * Resource shape the creation is validated against, describing the collecting resource, possibly deferred to
+	 * break definition cycles.
+	 */
+	readonly shape: S;
+
+	/**
+	 * Collection slice naming the single multi-valued property `shape` carries that collects the new resource.
+	 */
+	readonly model: T;
+
+	/**
+	 * Initial state of the new resource; an explicit `id` must be nested under `entry`.
+	 */
+	readonly state: Draft<S, T>
+
+}
+
+/**
+ * Store update request.
+ *
+ * Names the resource to store with {@link StoreClient.update update} or {@link StoreClient.insert insert}, the shape
+ * describing it and the complete state replacing its current data.
+ *
+ * @typeParam S - The shape driving the persistence, describing the state
+ */
+export type StoreUpdate<S extends Lazy<ResourceShape>> = {
+
+	/**
+	 * Absolute identifier of the resource to be persisted.
+	 */
+	readonly entry: Reference;
+
+	/**
+	 * Resource shape `state` is validated against, possibly deferred to break definition cycles.
+	 */
+	readonly shape: S;
+
+	/**
+	 * Complete state for the resource, as `shape` describes it, replacing any existing data; its `id`, if stated,
+	 * must match `entry`.
+	 */
+	readonly state: Draft<S>
+
+}
+
+/**
+ * Store deletion request.
+ *
+ * Names the resource to discard with {@link StoreClient.delete delete} or {@link StoreClient.remove remove} and the
+ * shape identifying the data discarded with it.
+ *
+ * @typeParam S - The shape driving the deletion, identifying the data cascaded with the resource
+ */
+export type StoreDelete<S extends Lazy<ResourceShape>> = {
+
+	/**
+	 * Absolute identifier of the resource to be discarded.
+	 */
+	readonly entry: Reference;
+
+	/**
+	 * Resource shape identifying the embedded and captive data discarded with the resource, possibly deferred to
+	 * break definition cycles.
+	 */
+	readonly shape: S;
 
 }

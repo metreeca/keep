@@ -24,17 +24,12 @@
  * @module retrieve/expression
  */
 
-import { boolean } from "@metreeca/blue/boolean";
-import { decimal } from "@metreeca/blue/number";
-import { reference } from "@metreeca/blue/reference";
-import { id, multiple, optional, required, resource } from "@metreeca/blue/resource";
-import { date, string, url } from "@metreeca/blue/string";
 import { ascending, by } from "@metreeca/core/order";
 import type { Criteria } from "@metreeca/qest/model";
 import { beforeAll, describe, expect, it } from "vitest";
 import { lookup, type TestFactory } from "../index.core.js";
 import { collections } from "../toys.core.js";
-import { Categories, Products, toys, Vendor, Vendors } from "../toys.js";
+import { Categories, Products, toys, Vendors } from "../toys.js";
 import { catalogue, collection, members } from "./index.js";
 
 
@@ -48,7 +43,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 	const VendorCatalogue = "https://data.example.net/vendors/";
 
 
-	describe("lookup expression", () => {
+	describe("expression", () => {
 
 		beforeAll(factory(async ({ populate }) => { await populate(); }).hook);
 
@@ -65,10 +60,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						id: id(),
-						vendor: required(resource({ name: required(string()) }))
-					}), {
+					model: catalogue({ id: {}, vendor: { name: {} } }, {
 						">=vendor.founded": "2000"
 					})
 				}));
@@ -88,10 +80,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						id: id(),
-						vendor: required(reference(Vendor))
-					}), {
+					model: catalogue({ id: {}, vendor: {} }, {
 						"?vendor.id": [vendorFixture.id]
 					})
 				}));
@@ -106,9 +95,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						id: id()
-					}), {
+					model: catalogue({ id: {} }, {
 						"?vendor.type": [toys.Vendor]
 					})
 				}));
@@ -122,10 +109,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						id: id(),
-						vendor: required(resource({ name: required(string()) }))
-					}), {
+					model: catalogue({ id: {}, vendor: { name: {} } }, {
 						"^vendor.name": 1
 					})
 				}));
@@ -151,10 +135,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							id: id(),
-							launched: optional(date())
-						}), {
+						model: catalogue({ id: {}, launched: {} }, {
 							">=year:launched": 2024
 						})
 					}));
@@ -172,10 +153,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							id: id(),
-							sku: required(string())
-						}), {
+						model: catalogue({ id: {}, sku: {} }, {
 							">=length:sku": 6
 						})
 					}));
@@ -190,10 +168,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							id: id(),
-							launched: optional(date())
-						}), {
+						model: catalogue({ id: {}, launched: {} }, {
 							"^year:launched": 1
 						})
 					}));
@@ -215,10 +190,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							id: id(),
-							change: optional(decimal())
-						}), {
+						model: catalogue({ id: {}, change: {} }, {
 							">=floor:abs:change": 2
 						})
 					}));
@@ -247,9 +219,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							id: id()
-						}), {
+						model: catalogue({ id: {} }, {
 							">=round:avg:price": roundedAvg
 						})
 					}));
@@ -275,7 +245,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({ id: id() }), {
+						model: catalogue({ id: {} }, {
 							">=sum:length:documents": bound
 						})
 					}));
@@ -297,9 +267,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							id: id()
-						}), {
+						model: catalogue({ id: {} }, {
 							">=count:": 1
 						})
 					}));
@@ -319,7 +287,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 						shape: Products,
 						model: catalogue({
 							id: {},
-							documents: collection(url(), {
+							documents: collection({}, {
 								">=length:": 30
 							})
 						})
@@ -350,7 +318,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({ id: id() }), {
+					model: catalogue({ id: {} }, {
 						"?id": [target]
 					})
 				}));
@@ -365,10 +333,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							id: id(),
-							price: required(decimal())
-						}), {
+						model: catalogue({ id: {}, price: {} }, {
 							">=price": 30
 						})
 					}));
@@ -388,10 +353,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({
-							id: id(),
-							vendor: required(resource({ name: required(string()) }))
-						}), {
+						model: catalogue({ id: {}, vendor: { name: {} } }, {
 							">=vendor.founded": "2000"
 						})
 					}));
@@ -406,7 +368,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({ id: id() }), {
+						model: catalogue({ id: {} }, {
 							">=count:": 1
 						})
 					}));
@@ -420,10 +382,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						id: id(),
-						sku: required(string())
-					}), {
+					model: catalogue({ id: {}, sku: {} }, {
 						"^length:sku": 1
 					})
 				}));
@@ -439,10 +398,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						id: id(),
-						vendor: required(resource({ name: required(string()) }))
-					}), {
+					model: catalogue({ id: {}, vendor: { name: {} } }, {
 						"^length:vendor.name": 1
 					})
 				}));
@@ -462,7 +418,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({ id: id() }), {
+						model: catalogue({ id: {} }, {
 							">=round:avg:price": 0
 						})
 					}));
@@ -479,10 +435,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						id: id(),
-						sku: required(string())
-					}), {
+					model: catalogue({ id: {}, sku: {} }, {
 						"^abs:length:sku": 1
 					})
 				}));
@@ -501,10 +454,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 				const result = members(await store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({
-						id: id(),
-						vendor: required(resource({ name: required(string()) }))
-					}), {
+					model: catalogue({ id: {}, vendor: { name: {} } }, {
 						"^abs:length:vendor.name": 1
 					})
 				}));
@@ -534,7 +484,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 				await expect(store.lookup({
 					entry: Catalogue,
 					shape: Products,
-					model: catalogue(resource({ id: id() }), selection)
+					model: catalogue({ id: {} }, selection)
 				})).rejects.toThrow();
 
 			})());
@@ -594,7 +544,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: CategoryCatalogue,
 						shape: Categories,
-						model: catalogue(resource({ id: id() }), { ">=min:featured": true })
+						model: catalogue({ id: {} }, { ">=min:featured": true })
 					}));
 
 					expect(expected.length).toBeGreaterThan(0);
@@ -607,7 +557,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: CategoryCatalogue,
 						shape: Categories,
-						model: catalogue(resource({ id: id(), featured: required(boolean) }), { "^min:featured": 1 })
+						model: catalogue({ id: {}, featured: {} }, { "^min:featured": 1 })
 					})) ?? [];
 
 					const flags = result.map(c => c.featured);
@@ -623,7 +573,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: CategoryCatalogue,
 						shape: Categories,
-						model: catalogue(resource({ id: id() }), { "?min:featured": [true] })
+						model: catalogue({ id: {} }, { "?min:featured": [true] })
 					}));
 
 					expect(result?.map(c => c.id).sort()).toEqual(expected);
@@ -635,10 +585,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: CategoryCatalogue,
 						shape: Categories,
-						model: catalogue(resource({
-							id: id(),
-							featured: required(boolean)
-						}), { "+min:featured": [true] })
+						model: catalogue({ id: {}, featured: {} }, { "+min:featured": [true] })
 					})) ?? [];
 
 					const flags = result.map(c => c.featured);
@@ -662,7 +609,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({ id: id() }), { ">=min:launched": "2024-01-01" })
+						model: catalogue({ id: {} }, { ">=min:launched": "2024-01-01" })
 					}));
 
 					expect(expected.length).toBeGreaterThan(0);
@@ -675,7 +622,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({ id: id(), launched: optional(date()) }), { "^min:launched": 1 })
+						model: catalogue({ id: {}, launched: {} }, { "^min:launched": 1 })
 					})) ?? [];
 
 					const dates = result.map(p => p.launched).filter((d): d is string => d !== undefined);
@@ -695,7 +642,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({ id: id() }), { "?min:launched": [target] })
+						model: catalogue({ id: {} }, { "?min:launched": [target] })
 					}));
 
 					expect(result?.map(p => p.id).sort()).toEqual(expected);
@@ -713,7 +660,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({ id: id() }), { ">=lower:condition": "refurbished" })
+						model: catalogue({ id: {} }, { ">=lower:condition": "refurbished" })
 					}));
 
 					expect(expected.length).toBeGreaterThan(0);
@@ -726,7 +673,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({ id: id(), sku: required(string()) }), { "^upper:sku": 1 })
+						model: catalogue({ id: {}, sku: {} }, { "^upper:sku": 1 })
 					})) ?? [];
 
 					const skus = result.map(p => p.sku.toUpperCase());
@@ -742,7 +689,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({ id: id() }), { "?lower:condition": ["new"] })
+						model: catalogue({ id: {} }, { "?lower:condition": ["new"] })
 					}));
 
 					expect(result?.map(p => p.id).sort()).toEqual(expected);
@@ -757,7 +704,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({ id: id() }), { "~upper:sku": "AF" })
+						model: catalogue({ id: {} }, { "~upper:sku": "AF" })
 					}));
 
 					expect(expected.length).toBeGreaterThan(0);
@@ -784,7 +731,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: VendorCatalogue,
 						shape: Vendors,
-						model: catalogue(resource({ id: id() }), { ">=abs:score": 4 })
+						model: catalogue({ id: {} }, { ">=abs:score": 4 })
 					}));
 
 					expect(expected.length).toBeGreaterThan(0);
@@ -803,7 +750,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: VendorCatalogue,
 						shape: Vendors,
-						model: catalogue(resource({ id: id() }), { "?abs:score": [Math.abs(numeric)] })
+						model: catalogue({ id: {} }, { "?abs:score": [Math.abs(numeric)] })
 					}));
 
 					expect(result?.map(v => v.id).sort()).toEqual(expected);
@@ -821,7 +768,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: VendorCatalogue,
 						shape: Vendors,
-						model: catalogue(resource({ id: id() }), { "^min:score": 1 })
+						model: catalogue({ id: {} }, { "^min:score": 1 })
 					})) ?? [];
 
 					expect(result.map(v => v.id)).toEqual(expected);
@@ -835,7 +782,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: VendorCatalogue,
 						shape: Vendors,
-						model: catalogue(resource({ id: id() }), { "^max:certified": 1 })
+						model: catalogue({ id: {} }, { "^max:certified": 1 })
 					})) ?? [];
 
 					expect(result.map(v => v.id)).toEqual(expected);
@@ -850,7 +797,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: VendorCatalogue,
 						shape: Vendors,
-						model: catalogue(resource({ id: id() }), { ">min:score": 3 })
+						model: catalogue({ id: {} }, { ">min:score": 3 })
 					}));
 
 					expect(expected.length).toBeGreaterThan(0);
@@ -873,7 +820,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: VendorCatalogue,
 						shape: Vendors,
-						model: catalogue(resource({ id: id() }), { "?min:score": [numeric, grade] })
+						model: catalogue({ id: {} }, { "?min:score": [numeric, grade] })
 					}));
 
 					expect(result?.map(v => v.id).sort()).toEqual(expected);
@@ -891,7 +838,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: VendorCatalogue,
 						shape: Vendors,
-						model: catalogue(resource({ id: id() }), { "!min:score": [grade] })
+						model: catalogue({ id: {} }, { "!min:score": [grade] })
 					}));
 
 					expect(result?.map(v => v.id).sort()).toEqual(expected);
@@ -921,7 +868,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({ id: id() }), { ">=abs:vendor.score": 4 })
+						model: catalogue({ id: {} }, { ">=abs:vendor.score": 4 })
 					}));
 
 					expect(expected.length).toBeGreaterThan(0);
@@ -934,7 +881,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({ id: id() }), { "^min:vendor.certified": 1 })
+						model: catalogue({ id: {} }, { "^min:vendor.certified": 1 })
 					})) ?? [];
 
 					const tiers = result.map(r => {
@@ -963,7 +910,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({ id: id() }), { "?year:launched": [2024] })
+						model: catalogue({ id: {} }, { "?year:launched": [2024] })
 					}));
 
 					expect(expected.length).toBeGreaterThan(0);
@@ -976,7 +923,7 @@ export function testRetrieveExpression(factory: TestFactory): void {
 					const result = members(await store.lookup({
 						entry: Catalogue,
 						shape: Products,
-						model: catalogue(resource({ id: id() }), { "+count:categories": [1] })
+						model: catalogue({ id: {} }, { "+count:categories": [1] })
 					})) ?? [];
 
 					expect(result.length).toBe(products.length);

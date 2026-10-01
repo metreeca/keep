@@ -19,7 +19,16 @@ import type { Value } from "@metreeca/qest/state";
 import type { Term } from "@metreeca/trio";
 import type { Tuple, Variable } from "@metreeca/wire-sparql";
 
-export function column(variable: Variable, tuples: readonly Tuple[]): readonly Term[] { // !!! to lookupn / review
+/**
+ * The terms a solution variable binds across a tuple set, in tuple order, skipping the tuples leaving it
+ * unbound.
+ *
+ * @param variable The solution variable to read
+ * @param tuples The solution tuples to read it from
+ *
+ * @returns The bound terms, one per tuple binding `variable`
+ */
+export function column(variable: Variable, tuples: readonly Tuple[]): readonly Term[] {
 	return tuples.flatMap(tuple => tuple[variable] ?? []);
 }
 

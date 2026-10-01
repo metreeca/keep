@@ -22,13 +22,8 @@
       "ResourceShape": "https://metreeca.github.io/blue/interfaces/resource.ResourceShape.html"
     },
     "@metreeca/blue/value": {
-      "model": "https://metreeca.github.io/blue/functions/value.model.html",
       "getShapeModel": "https://metreeca.github.io/blue/functions/value.getShapeModel.html",
       "Delivery": "https://metreeca.github.io/blue/types/value.Delivery.html"
-    },
-    "@metreeca/keep": {
-      "Mould": "#",
-      "Items": "#"
     },
     "@metreeca/core": {
       "*": "https://metreeca.github.io/core/",

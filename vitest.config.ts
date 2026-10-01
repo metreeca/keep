@@ -14,28 +14,19 @@
  * limitations under the License.
  */
 
-import { existsSync, readdirSync } from "fs";
-import { join } from "path";
 import { defineConfig } from "vitest/config";
 
-const packages = join(__dirname, "packages");
-
-const groups = readdirSync(packages, { withFileTypes: true })
-	.filter(entry => entry.isDirectory())
-	.map(entry => join(packages, entry.name));
-
-/**
- * Locates a workspace package root across the grouped `packages/<group>/<package>` layout.
- *
- * @param pkg - The package directory name (for example, `keep` or `keep-sparql`)
- *
- * @returns The absolute package root path, or `null` if no group contains the package
- */
-function root(pkg: string): string | null {
-	return groups.map(group => join(group, pkg)).find(existsSync) ?? null;
-}
-
 export default defineConfig({
+
+	/**
+	 * Resolves workspace package imports to the TypeScript source their exports declare, as `tsconfig.json` does
+	 * through `customConditions`, so tests run build-free against the working tree rather than against `dist`.
+	 */
+	ssr: {
+		resolve: {
+			conditions: ["@metreeca/source"]
+		}
+	},
 
 	test: {
 
@@ -53,59 +44,6 @@ export default defineConfig({
 			tsconfig: "tsconfig.json"
 		}
 
-	},
-
-	plugins: [{
-
-		name: "keep-resolver",
-		enforce: "pre",
-
-		/**
-		 * Resolves `@metreeca/keep*` workspace imports to TypeScript source for build-free testing.
-		 *
-		 * - `@metreeca/keep-pkg` → `packages/<group>/keep-pkg/src/index.ts`
-		 * - `@metreeca/keep-pkg/module` → `packages/<group>/keep-pkg/src/module.ts` or
-		 *   `packages/<group>/keep-pkg/src/module/index.ts`
-		 *
-		 * @param id - The module specifier to resolve
-		 *
-		 * @returns The resolved file path, or `null` if the specifier does not match
-		 */
-		resolveId(id: string) {
-
-			const bare = id.match(/^@metreeca\/(keep[^/]*)$/);
-
-			if ( bare ) { // bare package import
-
-				const dir = root(bare[1]);
-
-				return dir && join(dir, "src", "index.ts");
-
-			} else { // subpath import
-
-				const module = id.match(/^@metreeca\/(keep[^/]*)\/(.+)$/);
-
-				if ( module ) {
-
-					const dir = root(module[1]);
-
-					const named = dir && join(dir, "src", `${module[2]}.ts`);
-					const index = dir && join(dir, "src", module[2], "index.ts");
-
-					return named && existsSync(named) ? named
-						: index && existsSync(index) ? index
-							: null;
-
-				} else {
-
-					return null;
-
-				}
-
-			}
-
-		}
-
-	}]
+	}
 
 });

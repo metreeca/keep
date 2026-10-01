@@ -51,7 +51,7 @@ Apply to every test file, regardless of operation family.
 
 # Data Structure
 
-Primary structural axis shared by persist and lookup suites. Applies to both `Resource` (state) and `Template`
+Primary structural axis shared by persist and detail suites. Applies to both `Resource` (state) and `Template`
 (retrieval) hierarchies, which mirror each other one-to-one except at **union properties**, where state and template
 encodings diverge (see below). Test files group tests under nested `describe` blocks along this axis, with
 **orthogonal axes** (cardinality, absence semantics, link semantics, captive lifecycle) layered on top.
@@ -64,6 +64,10 @@ omitted; when an empty nested resource appears as an element of a multi-valued s
 dropped. An empty tag entry (`{ en: [] }`) is ignored the same way, but only on a property whose per-tag shape is an
 array per tag: a property fixing a single string per tag holds the entry malformed and MUST reject it, the empty map
 being the form a localised value carrying no content is stated in whatever the per-tag shape.
+
+These emptiness rules govern **state** values. A template admits no absent marker: an entry set to `undefined` is
+rejected, a key left out is the only way to not ask for a slot, and `{}` is the atomic placeholder (§5.3), a request
+for the property's own value rather than an omission.
 
 - **root resources**
 	- **special fields** — `id`, `type`
@@ -90,24 +94,26 @@ being the form a localised value carrying no content is stated in whatever the p
 		  keeping variants disjoint (a modelling requirement), so ambiguity is unreachable with the suite's shapes.
 		  Single-valued slots hold the bare payload (primitive or embedded object); multi-valued slots hold mixed-variant
 		  arrays of bare payloads; empty embedded payload `{}` ignored as per embedded resources
-		- **template side** (retrieval) — a union-typed property is addressable only through the *keyed*
-		  form, which holds `Placeholder` values (not nested `Union`s), so per-branch recursion goes through a nested
-		  `Template`:
+		- **template side** (retrieval) — a union-typed property is addressed either directly by a single placeholder
+		  or through the *keyed* form (§5.5), which holds `Placeholder` values (not nested `Union`s), so per-branch
+		  recursion goes through a nested `Template`:
 			- **keyed form** — an object whose keys are **opaque** non-negative integer strings carrying no positional or
 			  nominal meaning; each value is an alternative `Placeholder`, and the branches it retrieves are fixed by matching
-			  that placeholder against the property's variants **by kind**, its value immaterial (a literal by processing
-			  kind, a reference by reference kind, a template by structure), NOT by the key. An alternative MAY match several
-			  variants, retrieving each, but MUST match **at least one** — one matching no variant is unsatisfiable and
-			  rejected. A literal or reference alternative does not tell same-kind variants apart and so requests them all; a
-			  template's structure discriminates the resource variants it fits; a variant left unmatched contributes no value
-			- **bare placeholder** — over a union-typed property it is mismatched and rejected (§5.4), whichever single branch
-			  it may resemble; a bare `Placeholder` is valid only when the property is not union-typed
+			  that placeholder against the property's variants **by form** (§5.3), NOT by the key: the atomic `{}` matches
+			  every variant it can stand for, a template the nested-resource variants its properties are valid on, a locale
+			  the localised variant. An alternative MAY match several variants, retrieving each, but MUST match **at least
+			  one** — one matching no variant is unsatisfiable and rejected. The atomic does not tell variants apart and so
+			  requests them all; a template's structure discriminates the resource variants it fits; a variant left
+			  unmatched contributes no value. Alternatives reaching the same variant are folded into one request for it, a
+			  structured alternative prevailing over the atomic
+			- **direct placeholder** — a single placeholder standing for every variant it matches, as a one-alternative
+			  keyed form would; the keyed form is needed only where variants are retrieved to different depths
 
 ## Orthogonal Axes
 
 - **cardinality** — required / optional / `cardinality(min, max)` bounds enforcement at the shape layer
 - **absence semantics** — `undefined`, `{}`, `[]`, `{ und: [] }` MUST be treated as property absence at every applicable
-  leaf of the primary axis; persist tests assert removal from storage, lookup tests assert omission from results
+  leaf of the primary axis; persist tests assert removal from storage, detail tests assert omission from results
 - **link semantics** — forward / reverse predicate pairs (both write real triples) vs foreign references (read-only
   derived view; no writes)
 - **captive lifecycle** — captive references (orthogonal to link semantics; applies to scalar and array reference slots
@@ -123,7 +129,7 @@ Applies to mutation suites: `create`, `insert`, `update`, `remove`, `delete`.
   multi-valued union (`Vendor.contacts`), exercising each admitting slot against both a **primitive variant** (for
   example, plain-string `address`, `email` or phone-string `contacts` entry) and an **embedded variant**
   (`PostalAddress`), and including variant switches where the operation admits them. The persisted value's storage
-  branch is fixed by matching it against the declared variants and MUST single out exactly one (§5.4); `create` MUST
+  branch is fixed by matching it against the declared variants and MUST single out exactly one (§3.2); `create` MUST
   also cover the **literal-variant unions** `Vendor.score` (decimal / grade) and `Vendor.certified` (boolean / decimal /
   grade / year), where the branch is chosen purely by value-domain membership, plus rejection of an **unsatisfiable**
   state value matching no variant. An ambiguous state value (matching several variants) is unreachable with the suite's
@@ -145,55 +151,59 @@ Applies to mutation suites: `create`, `insert`, `update`, `remove`, `delete`.
 
 # Retrieve
 
-Applies to query suites driven by the template model (`Placeholder` / `Union` / `Projection` / `Selection`). Each lookup
-file exercises one primary machinery layered on the shared data-structure axis:
+Applies to query suites driven by the retrieval model (`Template` / `Placeholder` / `Union` / `Projection` / `Query` /
+`Criteria`). Every suite drives `store.lookup` (`Retrieve*` tags), each file exercising one primary machinery layered
+on the shared data-structure axis; collection items are retrieved under the multi-valued property naming them on the
+collecting resource (for example, `members` on a catalogue), with criteria stated alongside the retrieval keys:
 
-- `lookup/template.ts` — recursive template retrieval starting from a top-level resource (§5.1–5.4)
-- `lookup/query.ts` — multi-valued / collection-retrieval arms against a directly-retrieved resource (§5.5)
-- `lookup/selection.ts` — filtering, ordering, slicing and focus operators (§5.7)
-- `lookup/projection.ts` — projection of computed values and grouping (§5.6, §5.8.2.1)
-- `lookup/expression.ts` — the `pipe:path` expression spectrum targeted by selection and projection keys (§5.8)
-- `lookup/localised.ts` — coalesced and structural localised access under language negotiation (§5.3, §6)
+- `retrieve/contract.ts` — the resource as a whole: entry validation, missing resources, special fields, immutability
+- `retrieve/template.ts` — recursive template retrieval starting from a top-level resource (§5.1, §5.3–5.5)
+- `retrieve/collection.ts` — multi-valued / collection slots retrieved as part of a resource, plus the collection
+  contract as a whole: empty collections omitted, missing collecting resources (§4, §5.6)
+- `retrieve/criteria.ts` — filtering, ordering, slicing and focus criteria (§5.7)
+- `retrieve/projection.ts` — projection of computed values and grouping (§5.2, §5.8.2.1)
+- `retrieve/expression.ts` — the `pipe:path` expression spectrum targeted by criteria and projection keys (§5.8)
+- `retrieve/localised.ts` — coalesced and structural localised access under language negotiation (§5.3, §5.4, §6)
 
 ## Template
 
 Recursive `Template` retrieval from a top-level resource IRI, driving the full primary axis — scalar, array, localised,
 union, embedded, foreign references — via nested `Template` expansion.
 
-- **Union templates**: a union-typed property is addressable only through the *keyed* form (opaque `${number}` keys,
-  §5.4), the branches fixed by matching each alternative placeholder against the variants **by kind** (its value
-  immaterial), not by the key; tests MUST exercise it on both an optional single union (`Vendor.address`) and a
-  multi-valued union (`Vendor.contacts`), covering per-branch recursion through nested `Template`s, branch matching and
-  skipping, key opacity (an embedded branch singled out by structure under an arbitrary key), the **literal-variant
-  unions** `Vendor.score` / `Vendor.certified` retrieved by kind (a single string alternative matching **both** the
-  grade and year same-kind variants of `Vendor.certified`), acceptance of a kind-matching alternative whose value lies
-  outside the variant domain, rejection of mixed key spaces and of an **unsatisfiable** alternative (whose kind matches
-  no variant), and rejection of a bare `Placeholder` over a union-typed property
+- **Union templates**: a union-typed property is addressed directly by a single placeholder or through the *keyed*
+  form (opaque `${number}` keys, §5.5), the branches fixed by matching each alternative placeholder against the
+  variants **by form** (§5.3), not by the key; tests MUST exercise it on both an optional single union
+  (`Vendor.address`) and a multi-valued union (`Vendor.contacts`), covering per-branch recursion through nested
+  `Template`s, branch matching, key opacity (an embedded branch singled out by structure under an arbitrary key), the
+  **literal-variant unions** `Vendor.score` / `Vendor.certified` retrieved through the atomic (which matches **every**
+  literal variant, grade and year alike), rejection of mixed key spaces and of an **unsatisfiable** alternative (one
+  matching no variant, such as a template over a union declaring no nested-resource variant)
 - **Nested reference retrieval**: every reference slot MUST be retrievable both as id-only (via `reference` shape)
   and as an expanded nested resource (via `resource` shape), covering scalar, multi-valued, and self-referential
   references, plus multi-level nesting
 - **Absence semantics**: retrieval MUST omit the property from results when the underlying slot is absent, at every leaf
   alike (scalar, array, localised, union) — absent slots are never surfaced as empty `[]`/`{}` structures
-- **Locales shorthands**: tests exercising localised text MUST cover canonical map form, plain string and string-array
-  shorthands, verifying retrieval returns values in the requested shape
+- **Localised retrieval**: tests exercising localised text MUST cover both the atomic (the coalesced label, a plain
+  string or string array per the property's per-tag cardinality) and the locale (the tag-keyed `Dictionary` filtered by
+  its tag ranges), verifying retrieval returns values in the requested shape (§5.3, §5.4)
 - **Reverse predicates**: retrieval through a `reverse` predicate MUST yield the inverse triples written by the forward
   slot
 - **Foreign references**: retrieval through a `foreign` reference MUST yield the triples owned by the target property
   without triggering any write
 
-## Selection
+## Criteria
 
-`Selection` constraints (filtering, ordering, slicing) and the `Expression` model that drives them. Template machinery (
+`Criteria` constraints (filtering, ordering, slicing) and the `Expression` model that drives them. Template machinery (
 primary axis, nested references, union forms) is covered by the `Template` suite and is not re-asserted here.
 
-- **Selection constraints**: tests MUST cover each operator, both **in isolation** and **combined** (for example,
+- **Criteria**: tests MUST cover each operator, both **in isolation** and **combined** (for example,
   filtering and ordering applied together to the same query):
 	- filtering — `<`, `>`, `<=`, `>=` (comparison), `~` (substring search), `?` (disjunctive match), `!`
 	  (conjunctive match)
 	- ordering — `^` (sort ordering, signed number or `"asc"`/`"desc"` with 1-based precedence), `+` (focus ordering,
 	  prioritises matching values over regular sort)
 	- slicing — `@` (offset), `#` (limit)
-- **Expressions**: every `Expression` occurrence in a selection key MUST be exercised across the full `pipe:path`
+- **Expressions**: every `Expression` occurrence in a criterion key MUST be exercised across the full `pipe:path`
   spectrum — a wide range of mixes of pipe and path cardinalities, plus the content dimensions layered on each:
 	- **path length** — empty (root / aggregate), singleton step, multi-step nested path
 	- **path steps** — plain property steps and special steps (`id`, `type`)
@@ -209,8 +219,8 @@ primary axis, nested references, union forms) is covered by the `Template` suite
 ## Projection
 
 Projection of computed values via `Projection` bindings, yielding a flat row schema. Template machinery and
-`Selection` operators are covered by their own suites; this suite focuses on projection-specific forms and their
-interaction with selection applied to projected rows.
+`Criteria` operators are covered by their own suites; this suite focuses on projection-specific forms and their
+interaction with criteria applied to projected rows.
 
 - **Bindings**: a projection is told by its `=`-bearing binding keys, so every projection key MUST be an explicit
   `name=expression` binding (qest removed the plain-identifier `name=name` shorthand); binding-name uniqueness is
@@ -218,15 +228,15 @@ interaction with selection applied to projected rows.
   retrieves its entry by template descent, covered by the `Template` suite, and tests MUST assert it is not mistaken for
   a projection binding
 - **Projected values**: tests MUST cover each projected-value form — literal-typed, reference-typed, embedded-template,
-  and union-typed expressions; a union-typed binding MUST use the *keyed* form (opaque `${number}` keys, branches fixed
-  by matching each alternative by kind or structure, its value immaterial), and a plain `Placeholder` over one MUST be
-  rejected (§5.4)
-- **Single-valued only**: a projected value is NEVER an array — a multi-valued singleton-tuple binding value MUST be
-  rejected. A structural `Locales` map is admitted (§5.6): it occupies a single dictionary cell, counting as one value
-  and never fanning out a row, so it is a valid projection value, not a rejected one
-- **Selection interaction**: filtering, ordering and slicing MUST be exercised against projected rows, verifying the
+  and union-typed expressions; a union-typed binding is addressed directly by a single placeholder or through the
+  *keyed* form (opaque `${number}` keys, branches fixed by matching each alternative by form), which alone admits a
+  locale alternative for a branch resolving to localised text (§5.5)
+- **Single-valued only**: a projected value is NEVER an array: each binding yields one cell per row, a multi-valued
+  binding fanning out into rows (§5.2). A structural `Locale` map is admitted (§5.2, §5.4): it occupies a single
+  dictionary cell, counting as one value and never fanning out a row
+- **Criteria interaction**: filtering, ordering and slicing MUST be exercised against projected rows, verifying the
   operators apply to the projected schema rather than to the underlying resources
-- **Expressions**: the full `pipe:path` spectrum (see `Selection` § Expressions) applies to every `Expression`
+- **Expressions**: the full `pipe:path` spectrum (see `Criteria` § Expressions) applies to every `Expression`
   occurrence in a projection binding
 
 # Manage

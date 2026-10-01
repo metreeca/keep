@@ -42,12 +42,17 @@
     "yaml"
   ],
   "externalSymbolLinkMappings": {
+    "global": {
+      "Error": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error",
+      "RangeError": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RangeError"
+    },
+    "typescript": {
+      "Error": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error",
+      "RangeError": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RangeError"
+    },
     "@metreeca/blue": {
       "validate": "https://metreeca.github.io/blue/functions/index.validate.html",
       "resource": "https://metreeca.github.io/blue/functions/resource.resource.html"
-    },
-    "@metreeca/blue/value": {
-      "model": "https://metreeca.github.io/blue/functions/value.model.html"
     },
     "@metreeca/blue/union": {
       "getShapeBranches": "https://metreeca.github.io/blue/functions/union.getShapeBranches.html"
@@ -66,6 +71,9 @@
     },
     "@metreeca/core/async": {
       "Awaitable": "https://metreeca.github.io/core/types/async.Awaitable.html"
+    },
+    "@metreeca/core/values": {
+      "DeepPartial": "https://metreeca.github.io/core/types/values.DeepPartial.html"
     },
     "@metreeca/http": {
       "createFetch": "https://metreeca.github.io/http/functions/index.createFetch.html",

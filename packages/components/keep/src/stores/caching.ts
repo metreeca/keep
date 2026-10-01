@@ -25,14 +25,11 @@
  * @module
  */
 
-import type { ResourceShape } from "@metreeca/blue/resource";
-import type { Delivery } from "@metreeca/blue/value";
-import { isArray, isObject, type Lazy, type Optional } from "@metreeca/core";
+import { isArray, isObject, type Optional } from "@metreeca/core";
 import type { Tag } from "@metreeca/core/language";
 import { immutable } from "@metreeca/core/values";
 import type { Reference } from "@metreeca/qest/state";
-import type { Template } from "@metreeca/qest/model";
-import type { Store } from "../index.js";
+import type { Store, StoreScope } from "../index.js";
 
 
 /**
@@ -52,15 +49,15 @@ import type { Store } from "../index.js";
  * > returned payload.
  *
  * > [!IMPORTANT]
- * > `opts.locale` is part of the cache key because it selects which localised content a retrieval returns. Unlike
- * > the model, the locale priority list is order-significant — `["en", "it"]` and `["it", "en"]` key separately —
- * > since order encodes language-negotiation preference. An omitted or empty locale list collapses to a single key,
- * > distinct from any explicit list.
+ * > The {@link StoreScope | retrieval scope} `locale` is part of the cache key because it selects which localised
+ * > content a retrieval returns. Unlike the model, the locale priority list is order-significant (`["en", "it"]` and
+ * > `["it", "en"]` key separately), since order encodes language-negotiation preference. An omitted or empty locale
+ * > list collapses to a single key, distinct from any explicit list.
  *
  * > [!IMPORTANT]
- * > `opts.limit` is part of the cache key because it caps each selection's `#` and so changes the returned payload,
- * > with an omitted or `0` limit collapsing to a single unbounded key. `opts.plain`/`opts.depth` are excluded: they
- * > only accept or reject a model, never altering a successful payload.
+ * > The scope `limit` is part of the cache key because it caps each collection's `#` and so changes the returned
+ * > payload, with an omitted or `0` limit collapsing to a single unbounded key. The scope `plain` and `depth` are
+ * > excluded: they only accept or reject a model, never altering a successful payload.
  *
  * The cache offers three observable guarantees:
  *
@@ -152,7 +149,7 @@ export function createCachingStore(store: Store, {
 
 	// Tracks entries with at least one in-flight wrapper-initiated write. Reads of these entries bypass the
 	// cache entirely — they still query the delegate, but their result is not stored. This closes the window
-	// between a lookup resolving with a pre-commit value and the reactive observer firing on commit, during
+	// between a lookup call resolving with a pre-commit value and the reactive observer firing on commit, during
 	// which the cache would otherwise hold a stale-but-fresh-looking record.
 
 	const writing = new Map<Reference, number>();
@@ -179,9 +176,9 @@ export function createCachingStore(store: Store, {
 		},
 
 
-		create({ entry, shape, state }) {
+		create({ entry, shape, model, state }) {
 
-			return write(entry, () => store.create({ entry, shape, state }));
+			return write(entry, () => store.create({ entry, shape, model, state }));
 
 		},
 
@@ -247,21 +244,24 @@ export function createCachingStore(store: Store, {
 	 *   fetch resolving to an absent resource or rejecting evicts its record only if an intervening invalidation
 	 *   has not already replaced it.
 	 *
-	 * @param entry - Resource identifier; paired with the canonicalised model and varying opts to form the cache key
-	 * @param model - Retrieval template, canonicalised so that equivalent templates in different orderings share a key
-	 * @param vary  - Retrieval opts whose values vary the returned payload, folded into the key: `locale`
+	 * @typeParam V - The retrieved payload, opaque to the cache
+	 *
+	 * @param entry - Resource identifier; paired with the canonicalised model and varying scope members to form the
+	 *     cache key
+	 * @param model - Retrieval model, canonicalised so that equivalent models in different orderings share a key
+	 * @param vary  - Retrieval scope members whose values vary the returned payload, folded into the key: `locale`
 	 *   order-significantly (an omitted or empty list collapsing to a single key) and `limit` because it caps each
-	 *   selection's `#` pagination bound (an omitted or `0` unbounded value collapsing to a single key)
+	 *   collection's `#` pagination bound (an omitted or `0` unbounded value collapsing to a single key)
 	 * @param miss  - Fetcher invoked on cache miss, on TTL expiration, or while the entry has an in-flight write
 	 *
 	 * @returns The memoised, freshly-fetched, or bypass-fetched promise
 	 */
-	function memoise<S extends Lazy<ResourceShape>, T extends Template>(
+	function memoise<V>(
 		entry: Reference,
-		model: T,
+		model: unknown,
 		vary: { readonly locale?: readonly Tag[]; readonly limit?: number } = {},
-		miss: () => Promise<Optional<Delivery<S, T>>>
-	): Promise<Optional<Delivery<S, T>>> {
+		miss: () => Promise<Optional<V>>
+	): Promise<Optional<V>> {
 
 		// Bypass the cache while a write to this entry is in flight: still query the delegate so the caller
 		// gets a value, but do not store the result — it is liable to be the pre-commit snapshot that the
@@ -273,28 +273,28 @@ export function createCachingStore(store: Store, {
 
 		} else {
 
-			// Cache key layout: `<entry>\x00<canonical-model>\x00<locale>\x00<limit>`. `canonical` walks the model
-			// bottom-up, sorting object keys and (already-canonical) array elements, so templates differing only in
-			// ordering share a key. The locale segment is serialised verbatim (order preserved, since the priority
+			// Cache key layout: `<entry>\x00<canonical-model>\x00<locale>\x00<limit>`. `canonical` walks the
+			// model bottom-up, sorting object keys and (already-canonical) array elements, so models differing only
+			// in ordering share a key. The locale segment is serialised verbatim (order preserved, since the priority
 			// list is order-significant) with omitted and empty lists collapsing to `[]`. The limit segment is
-			// keyed because it caps each selection's `#` and so changes the payload, with omitted and `0` (both
+			// keyed because it caps each collection's `#` and so changes the payload, with omitted and `0` (both
 			// unbounded) collapsing to `0`. `\x00` is safe as a separator — IRIs cannot contain it and JSON always
 			// escapes it inside string payloads.
 
-			const key = `${entry}\x00${canonical(model)}\x00${JSON.stringify(vary.locale ?? [])}\x00${vary.limit ?? 0}`;
+			const key = [entry, canonical(model), JSON.stringify(vary.locale ?? []), vary.limit ?? 0].join("\x00");
 
 			const cached = cache.get(key);
 
 			if ( cached && !expired(cached.created) ) {
 
 				// hit: re-insert to move the entry to the tail of the Map's iteration order (the LRU position),
-				// and return the memoised promise; the cast reflects the type-erased `Promise<unknown>` storage
-				// that lets records with different template types share one Map
+				// and return the memoised promise; ;(cast) the type-erased `Promise<unknown>` storage lets records
+				// with different payload types share one Map
 
 				cache.delete(key);
 				cache.set(key, cached);
 
-				return cached.value as Promise<Optional<Delivery<S, T>>>;
+				return cached.value as Promise<Optional<V>>;
 
 			} else {
 
@@ -307,7 +307,7 @@ export function createCachingStore(store: Store, {
 					cache.delete(key);
 				}
 
-				const value: Promise<Optional<LookedUp<S, T>>> = miss().then(resource => {
+				const value: Promise<Optional<V>> = miss().then(resource => {
 
 					if ( resource === undefined ) {
 						evict();

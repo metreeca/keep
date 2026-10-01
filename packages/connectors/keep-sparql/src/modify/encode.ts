@@ -63,9 +63,9 @@ import { forward, reverse, valuesToTerms } from "../_/_encode.js";
 /**
  * Emits a single batched SPARQL Update covering every supplied request.
  *
- * Each request is dispatched by the presence of its `state`: a present `state` produces a
- * cleanup-and-insert statement, an omitted `state` a cascade delete. The per-request statements are
- * joined into one update applied in submission order.
+ * Each request is dispatched by what it carries: a `link` produces an insert of the membership edge
+ * alone, a present `state` a cleanup-and-insert statement, an omitted `state` a cascade delete. The
+ * per-request statements are joined into one update applied in submission order.
  *
  * @param scope The variable allocator shared across every request's cleanup walk, keyed on
  * {@link Branch} identity
@@ -78,12 +78,23 @@ export function encode(
 	batch: readonly (Deferred<Modify> & { readonly flake: Flake })[]
 ): SPARQL {
 
-	return update(...batch.map(({ request: { entry, state }, flake }) =>
-		state === undefined
-			? remove(entry, flake)
-			: insert(entry, flake, state)
+	return update(...batch.map(({ request: { entry, state, link }, flake }) =>
+		link !== undefined ? attach(entry, link)
+			: state === undefined ? remove(entry, flake)
+				: insert(entry, flake, state)
 	));
 
+
+	function attach(entry: Reference, { property, item }: { readonly property: Property; readonly item: Reference }): SPARQL {
+
+		// the membership edge alone, in both directions the property declares: the entry's own state is left as it is
+
+		return create(fragment(
+			forward([named(entry), property, named(item)]),
+			reverse([named(entry), property, named(item)])
+		));
+
+	}
 
 	function insert(entry: Reference, flake: Flake, state: Resource): SPARQL {
 
@@ -185,7 +196,7 @@ export function encode(
 							const variants = getShapeBranches(property.range.shape);
 
 							return some(values).flatMap(value => opt(getStateBranch(value, variants),
-								variant => triples(property, value, variant),
+								variant => facts(property, value, variant),
 								[]
 							));
 
@@ -198,7 +209,7 @@ export function encode(
 					})
 				);
 
-				function triples(property: Property, values: Values, shape: Shape): readonly SPARQL[] {
+				function facts(property: Property, values: Values, shape: Shape): readonly SPARQL[] {
 					switch ( shape.kind ) {
 
 						case "boolean":
@@ -248,7 +259,7 @@ export function encode(
 
 	function remove(entry: Reference, flake: Flake): SPARQL {
 
-		const branches = Object.values(flake.entries ?? {}).flat();
+		const branches = Object.values(flake.entries ?? {});
 
 		const root = scope.resolve();
 

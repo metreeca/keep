@@ -16,12 +16,26 @@
 
 import { validate } from "@metreeca/blue";
 import { getShapeId, type ResourceShape } from "@metreeca/blue/resource";
-import { eager, type Instance } from "@metreeca/blue/value";
-import { error, isString, type Lazy, map } from "@metreeca/core";
+import { eager, type State } from "@metreeca/blue/value";
+import { error, isString, type Lazy, map, type Optional } from "@metreeca/core";
+import { getIRIParent } from "@metreeca/core/resource";
 import { immutable } from "@metreeca/core/values";
 import { TraceError } from "@metreeca/core/trace";
+import type { StoreClient } from "@metreeca/keep";
 import { isReference, type Reference, type Resource } from "@metreeca/qest/state";
-import { base, Category, Image, Product, toys, Vendor, Video } from "./toys.js";
+import {
+	base,
+	Categories,
+	Category,
+	Image,
+	Product,
+	Products,
+	Resources,
+	toys,
+	Vendor,
+	Vendors,
+	Video
+} from "./toys.js";
 import json from "./toys.json" with { type: "json" };
 
 
@@ -35,11 +49,11 @@ import json from "./toys.json" with { type: "json" };
  */
 export const collections: {
 
-	readonly categories: readonly Instance<typeof Category>[];
-	readonly vendors: readonly Instance<typeof Vendor>[];
-	readonly products: readonly Instance<typeof Product>[];
-	readonly images: readonly Instance<typeof Image>[];
-	readonly videos: readonly Instance<typeof Video>[];
+	readonly categories: readonly State<typeof Category>[];
+	readonly vendors: readonly State<typeof Vendor>[];
+	readonly products: readonly State<typeof Product>[];
+	readonly images: readonly State<typeof Image>[];
+	readonly videos: readonly State<typeof Video>[];
 
 } = (() => {
 
@@ -68,11 +82,85 @@ export const collections: {
 		});
 	}
 
-	function verify<T extends Lazy<ResourceShape>>(resources: readonly unknown[], shape: T): readonly Instance<T>[] {
+	function verify<T extends Lazy<ResourceShape>>(resources: readonly unknown[], shape: T): readonly State<T>[] {
 		return resources.map(resource => validate(resource, { shape, depth: 0 })({
-			value: v => v as Instance<T>,
+			// ;(cast) blue types the validated value by its own Instance, which the local mirror matches at every concrete
+			// shape but which the compiler cannot relate to it over a generic one
+
+			value: v => v as unknown as State<T>,
 			trace: t => error(new TraceError("failed validation", t ?? []))
 		}));
+	}
+
+})();
+
+
+/**
+ * Catalogue resources holding the sample collections as members.
+ *
+ * Each catalogue lists every resource of its type by identifier, and the resources catalogue every resource of any
+ * type, so that a store seeded with the sample dataset and these catalogues answers a catalogue retrieval through
+ * stored membership. Resolved lazily on first access, as {@link collections} are.
+ */
+export const catalogues: {
+
+	readonly resources: State<typeof Resources>;
+	readonly categories: State<typeof Categories>;
+	readonly vendors: State<typeof Vendors>;
+	readonly products: State<typeof Products>;
+
+} = (() => {
+
+	let cache: undefined | typeof catalogues;
+
+	return immutable({
+
+		get resources() { return load().resources; },
+		get categories() { return load().categories; },
+		get vendors() { return load().vendors; },
+		get products() { return load().products; }
+
+	});
+
+
+	function load() {
+		return cache ??= immutable({
+
+			resources: catalogue(Resources, `${base}resources/`, "Resources", [
+				...collections.categories,
+				...collections.vendors,
+				...collections.products,
+				...collections.images,
+				...collections.videos
+			]),
+
+			categories: catalogue(Categories, `${base}categories/`, "Categories", collections.categories),
+			vendors: catalogue(Vendors, `${base}vendors/`, "Vendors", collections.vendors),
+			products: catalogue(Products, `${base}products/`, "Products", collections.products)
+
+		});
+	}
+
+	function catalogue<S extends Lazy<ResourceShape>>(
+		shape: S,
+		id: Reference,
+		label: string,
+		members: ReadonlyArray<{ readonly id: Reference }>
+	): State<S> {
+		return validate({
+
+			id,
+			type: toys.Collection,
+			label: { en: label },
+			created: "2026-01-01T00:00:00.000Z",
+
+			members: members.map(member => member.id)
+
+		}, { shape, depth: 0 })({
+			// ;(cast) as for the sample collections: blue types the validated value by its own inference
+			value: v => v as unknown as State<S>,
+			trace: t => error(new TraceError("failed validation", t ?? []))
+		});
 	}
 
 })();
@@ -241,8 +329,8 @@ export function clone<R extends Resource>(sample: R, shape: Lazy<ResourceShape>)
 export function testProduct(
 	sku: string,
 	name: string,
-	overrides?: Partial<Instance<typeof Product>>
-): Instance<typeof Product> {
+	overrides?: Partial<State<typeof Product>>
+): State<typeof Product> {
 	return {
 
 		id: `${base}products/${sku}`,
@@ -266,4 +354,64 @@ export function testProduct(
 		...overrides
 
 	};
+}
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * Widens a state to what the store admits at runtime.
+ *
+ * The typed draft a write takes leaves out the absence forms (`undefined`, `[]`, `{}`, `{ und: [] }`) a test states to
+ * assert their removal, and the malformed states a test expects rejected; both are handed to the store as they stand.
+ *
+ * @param state - The state a test states
+ *
+ * @returns The same state, admitted by every write
+ */
+export function loose(state: Resource): never {
+	return state as never; // ;(cast) the suite exercises the runtime contract beyond what the draft type admits
+}
+
+/**
+ * Resolves the catalogue collecting the resources a toy shape describes.
+ *
+ * @param shape - The shape of the collected resources
+ *
+ * @returns The catalogue holding every resource of `shape` under its `members` property
+ *
+ * @throws Error When no catalogue collects the resources of `shape`
+ */
+export function catalogueOf(shape: Lazy<ResourceShape>): Lazy<ResourceShape> {
+	return shape === Product ? Products
+		: shape === Vendor ? Vendors
+			: shape === Category ? Categories
+				: error(new Error(`no catalogue collects shape <${getShapeId(shape)}>`));
+}
+
+/**
+ * Creates a resource through the catalogue collecting it.
+ *
+ * Anchors the creation to the parent of `entry`, as the store contract requires of a creation, stating `entry` as the
+ * identifier of the new resource unless the state names one itself, so that a test keeps naming the resource it
+ * creates and asserting on it.
+ *
+ * @param store - The store to create the resource in
+ * @param request - The identifier of the new resource, the shape describing it and its initial state
+ *
+ * @returns The promise the store's creation resolves to
+ */
+export function created(store: StoreClient, { entry, shape, state }: {
+
+	readonly entry: Reference;
+	readonly shape: Lazy<ResourceShape>;
+	readonly state: Resource;
+
+}): Promise<Optional<Reference>> {
+	return store.create({
+		entry: getIRIParent(entry) ?? error(new Error(`unexpected root entry <${entry}>`)),
+		shape: catalogueOf(shape),
+		model: { members: {} } as never, // ;(cast) the catalogue is resolved at runtime, so its slice can't be held to it
+		state: loose({ id: entry, ...state })
+	});
 }
