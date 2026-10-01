@@ -514,19 +514,43 @@ describe("createRESTStore", () => {
 
 		});
 
-		it("should return a cross-origin Location verbatim", async () => {
+		describe("out-of-scope Location", () => {
 
-			const foreign = "http://cdn.example.net/products/42";
-			const fetcher = mockFetcher(() => emptyResponse(201, { "Location": foreign }));
-			const store = createRESTStore({ fetch: fetcher });
+			async function rejects(location: string, entry = `${base}/products/`) {
 
-			expect(await store.create({
-				entry: `${base}/products/`,
-				shape: Catalogue,
-				model: { items: {} },
-				state: { name: "Widget" }
-			}))
-				.toBe(foreign);
+				const fetcher = mockFetcher(() => emptyResponse(201, { "Location": location }));
+				const store = createRESTStore({ fetch: fetcher });
+				const observer = vi.fn<StoreObserver>();
+
+				store.observe(observer);
+
+				await expect(store.create({
+					entry, shape: Catalogue, model: { items: {} }, state: { name: "Widget" }
+				})).rejects.toMatchObject({ detail: expect.stringMatching(/out-of-scope <Location> header/) });
+
+				expect(observer).not.toHaveBeenCalled();
+
+			}
+
+			it("should reject with Problem on a cross-origin Location", async () => {
+				await rejects("http://cdn.example.net/products/42");
+			});
+
+			it("should reject with Problem on a same-origin Location outside the entry path", async () => {
+				await rejects("/items/42");
+			});
+
+			it("should reject with Problem on a Location escaping the entry path through dot segments", async () => {
+				await rejects("../items/42");
+			});
+
+			it("should reject with Problem on a Location identifying the entry container itself", async () => {
+				await rejects("/products/");
+			});
+
+			it("should reject with Problem on a Location outside the container of a non-directory entry", async () => {
+				await rejects("/items/42", `${base}/products/1`);
+			});
 
 		});
 

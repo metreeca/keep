@@ -41,13 +41,15 @@ resource models that describe them:
 
 # Installation
 
-Install the connector for your target backend from the **Connectors** table above. All required framework packages are
-resolved automatically as transitive dependencies. Some connectors also require a backend driver, runtime or client
-library as a separate package: check the connector README for details.
+Pick the connector for your backend from the table above and install it. The connector pulls in the framework packages
+it needs, so you don't install them yourself.
+
+Some connectors also need a separate backend library, such as a driver, runtime or client. The connector README lists
+any such requirement.
 
 ```shell
-npm install @metreeca/keep-<connector>    # a connector from the table above
-npm install <backend-package>             # backend driver, runtime or client, where required by the connector
+npm install @metreeca/keep-<connector>    # connector from the table above
+npm install <backend-package>             # backend library, if the connector requires one
 ```
 
 > [!WARNING]

@@ -59,6 +59,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Track the `@metreeca/core` module rename from `structures` to `values`
 - `@metreeca/keep-rest` — `createRESTStore` takes its `fetch` transport as an option alongside `trusted`, in place of a
   leading positional argument
+- `@metreeca/keep-rest` — `Store.create` rejects with a `Problem` a `Location` header resolving outside the container
+	of the request `entry`, cross-origin IRIs included, in place of returning it verbatim
 - Upgrade to `@metreeca/core` 0.12, `@metreeca/qest` 0.11, `@metreeca/blue` 0.11, `@metreeca/http` 0.4,
 	`@metreeca/tape` 0.11, `@metreeca/trio` 0.1.2 and the `@metreeca/wire-sparql` 0.11.1 connectors
 

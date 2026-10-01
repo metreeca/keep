@@ -51,11 +51,13 @@
  * {@link Store.create create} posts only the `state` of the new resource. The `model` slice naming the collecting
  * property is validated locally but not sent, so the service identifies the collection from `entry` alone.
  *
- * {@link Store.create create} resolves the returned `Location` against the request `entry` per RFC 3986 § 5.2 and
- * returns it verbatim, including across origins. The proxy applies no same-origin or path-containment check, so
- * callers MUST trust the service's choice of child IRI. Standard merge semantics apply, so an `entry` without a
- * trailing `/` strips its last path segment before merging. An unparseable `Location` surfaces as a
- * {@link !RangeError RangeError} rather than a {@link @metreeca/http!Problem | Problem}.
+ * {@link Store.create create} resolves the returned `Location` against the request `entry` per RFC 3986 § 5.2.
+ * Standard merge semantics apply, so an `entry` without a trailing `/` strips its last path segment before merging.
+ * The resolved IRI must lie strictly below the container `entry` resolves to, that is `entry` itself when it ends
+ * with `/` and its parent otherwise: a `Location` outside that scope, whether on a foreign origin or elsewhere on the
+ * same one, rejects with a {@link @metreeca/http!Problem | Problem}, so a misbehaving service can't make the caller
+ * adopt a foreign child IRI. An unparseable `Location` surfaces as a {@link !RangeError RangeError} rather than a
+ * {@link @metreeca/http!Problem | Problem}.
  *
  * {@link Store.lookup lookup} carries its `model` as a base64url query string, so any template (filter operators
  * such as `~name` and `>=price`, nested shapes, aggregates, collection pagination) survives transport intact. An
@@ -227,7 +229,16 @@ export function createRESTStore({
 					throw immutable<Problem>({ detail: `missing <Location> header in response to POST <${entry}>` });
 				}
 
-				return resolve(entry, location);
+				const iri = resolve(entry, location);
+				const container = resolve(entry, ".");
+
+				if ( iri === container || !iri.startsWith(container) ) {
+					throw immutable<Problem>({
+						detail: `out-of-scope <Location> header <${iri}> in response to POST <${entry}>`
+					});
+				}
+
+				return iri;
 
 			}).catch(e => {
 
