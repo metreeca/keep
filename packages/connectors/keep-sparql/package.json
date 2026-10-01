@@ -46,11 +46,11 @@
     "check": "npx vitest --typecheck run"
   },
   "dependencies": {
-    "@metreeca/blue": "^0.11.0",
+    "@metreeca/blue": "^0.12.0",
     "@metreeca/core": "^0.12.0",
     "@metreeca/keep": "^0.11.0",
     "@metreeca/keep-flake": "^0.11.0",
-    "@metreeca/qest": "^0.11.0",
+    "@metreeca/qest": "^0.12.0",
     "@metreeca/tape": "^0.11.0",
     "@metreeca/trio": "^0.1.2",
     "@metreeca/wire-sparql": "^0.11.1"

@@ -5,7 +5,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unpublished](https://github.com/metreeca/keep/compare/v0.10.0...HEAD)
+## [Unpublished](https://github.com/metreeca/keep/compare/v0.11.0...HEAD)
+
+## [0.11.0](https://github.com/metreeca/keep/releases/tag/v0.11.0) - 2026-10-01
 
 ### Added
 
@@ -36,7 +38,6 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `@metreeca/keep` — `Store.execute` atomicity is best-effort, like isolation: connectors target all-or-nothing commit
 	and document whether a failing task rolls back; `@metreeca/keep-rest` applies task mutations eagerly, with no
   rollback
-
 - Align every package to the reworked `@metreeca/blue` shape API: `Flake.range` carries a `Range`, `Branch.entry` a
 	`Member`, and the `captive` and `foreign` flags are read from `PropertyConstraints` on the property rather than from a
   reference-specific constraint set
@@ -78,7 +79,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 	datatype does not fit the variant is absent rather than coerced; comparison bounds and match options are routed
 	to a union variant by `@metreeca/blue`, so a plain-string operand on a union pairing a string and a localised text
 	variant is rejected as ambiguous
-- Upgrade to `@metreeca/core` 0.12, `@metreeca/qest` 0.11, `@metreeca/blue` 0.11, `@metreeca/http` 0.4,
+- Upgrade to `@metreeca/core` 0.12, `@metreeca/qest` 0.12, `@metreeca/blue` 0.12, `@metreeca/http` 0.4,
 	`@metreeca/tape` 0.11, `@metreeca/trio` 0.1.2 and the `@metreeca/wire-sparql` 0.11.1 connectors
 
 ### Removed
