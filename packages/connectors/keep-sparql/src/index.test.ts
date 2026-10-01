@@ -29,7 +29,9 @@ import {
 import { string, type StringShape } from "@metreeca/blue/string";
 import { eager, type Shape, type State } from "@metreeca/blue/value";
 import { error, isBoolean, isNumber, isString, type Lazy, map, type Scalar } from "@metreeca/core";
+import { some, type Some } from "@metreeca/core/arrays";
 import { xsd } from "@metreeca/core/datatype";
+import type { Tag } from "@metreeca/core/language";
 import { createNamespace } from "@metreeca/core/resource";
 import { immutable } from "@metreeca/core/values";
 import { createSPARQLStore } from "@metreeca/keep-sparql";
@@ -56,8 +58,8 @@ import {
 } from "@metreeca/keep-suite/toys";
 import { type Reference, type Resource } from "@metreeca/qest/state";
 import { log } from "@metreeca/tape";
-import { blank, skolemize, type Triple, typed } from "@metreeca/trio";
-import { data, description as resource, link, property, resource as about, term, text } from "@metreeca/trio/builder";
+import { blank, skolemize, tagged, type Tagged, type Triple, typed } from "@metreeca/trio";
+import { data, description as resource, link, property, resource as about, term } from "@metreeca/trio/builder";
 import type { Repository } from "@metreeca/wire-sparql";
 import { createHTTPRepository } from "@metreeca/wire-sparql-http";
 import { createOxiRepository } from "@metreeca/wire-sparql-oxigraph";
@@ -1039,11 +1041,11 @@ function testSPARQLStore(factory: () => Repository, {
 
 	describe("sparql storage", () => {
 
-		it("should store und-tagged text as a plain literal", async () => {
+		it("should store und-tagged text as an und-tagged literal", async () => {
 
-			// synthetic mutation on a fresh, un-populated repository: a localised value tagged `und` MUST be
-			// stored as a plain xsd:string literal — never as a language-tagged `"…"@und` — since RDF treats
-			// `und` (undetermined) as an absent language.
+			// synthetic mutation on a fresh, un-populated repository: a localised value tagged `und` is stored as
+			// a language-tagged `"…"@und` literal like any other tag, never as a plain literal, which a string
+			// variant sharing the property would claim on read (§3.1)
 
 			const probe = factory();
 			const store = createSPARQLStore(probe);
@@ -1069,8 +1071,8 @@ function testSPARQLStore(factory: () => Repository, {
 
 			});
 
-			expect(await probe.ask(`ask { <${id}> <${rdfs.label}> "Plain Label" }`)).toBe(true);
-			expect(await probe.ask(`ask { <${id}> <${rdfs.label}> ?o filter(lang(?o) = "und") }`)).toBe(false);
+			expect(await probe.ask(`ask { <${id}> <${rdfs.label}> "Plain Label"@und }`)).toBe(true);
+			expect(await probe.ask(`ask { <${id}> <${rdfs.label}> "Plain Label" }`)).toBe(false);
 
 		});
 
@@ -1105,6 +1107,15 @@ function testSPARQLStore(factory: () => Repository, {
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * Encodes a language map as language-tagged literals, the `und` tag included, as the store writes them.
+ */
+function text(text: undefined | Some<{ readonly [tag: Tag]: Some<string> }>): readonly Tagged[] {
+	return some(text).flatMap(text => Object.entries(text).flatMap(([tag, content]) =>
+		some(content).map(value => tagged(value, tag))
+	));
+}
 
 /**
  * Encodes the membership edges linking a resource into the catalogues collecting its type.
@@ -1176,6 +1187,7 @@ function encodeVendor(vendor: Fragment<typeof Vendor>) {
 		property(id, toys.audited, term(vendor.audited, audited)),
 		property(id, toys.origin, isPlace(vendor.origin) ? vendor.origin : [], encodePlace),
 		property(id, toys.origin, isPlace(vendor.origin) ? [] : text(vendor.origin)),
+		property(id, toys.tagline, isString(vendor.tagline) ? data(vendor.tagline) : text(vendor.tagline)),
 		property(id, toys.address, vendor.address, encodeLocation),
 		property(id, toys.contacts, vendor.contacts, encodeLocation)
 	)));

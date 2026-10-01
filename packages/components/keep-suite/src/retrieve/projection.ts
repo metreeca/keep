@@ -807,6 +807,29 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 			}));
 
+			it("should project the string and text variants of a declared union apart (§5.5)", factory(async ({ store }) => {
+
+				// §3.1, §5.5: `Vendor.tagline` pairs a string variant with a text variant admitting `und` entries;
+				// the atomic alternative yields the plain slogans as string cells and the locale alternative the
+				// localised ones as dictionary cells, an `und`-only slogan included, never folded into a string
+
+				const result = projected(members(await store.lookup({
+					entry: VendorsCatalogue,
+					shape: Vendors,
+					model: catalogue({
+						"id=id": {},
+						"tagline=tagline": { "0": {}, "1": { "*": {} } }
+					})
+				}))) ?? [];
+
+				expect(result).toHaveLength(vendors.length);
+
+				result.forEach(r => {
+					expect(r.tagline).toEqual(lookup(vendors, { id: r.id as string })?.tagline);
+				});
+
+			}));
+
 			it("should project a union-typed binding by branch matching", factory(async ({ store }) => {
 
 				// fixture invariant: every product references an existing vendor

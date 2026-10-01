@@ -313,6 +313,10 @@
         "en": "Franconia",
         "de": "Franken"
       },
+      "tagline": {
+        "en": "Toys built to last",
+        "de": "Spielzeug für Generationen"
+      },
       "address": {
         "label": {
           "und": "Nürnberg, Germany"
@@ -353,6 +357,10 @@
       "certified": 3.8,
       "audited": true,
       "founded": "2010",
+      "origin": {
+        "und": "Manhattan"
+      },
+      "tagline": "Play more, worry less",
       "address": {
         "label": {
           "und": "PlayWorks Times Square"
@@ -377,6 +385,9 @@
       "name": "FunZone Ltd",
       "email": "hello@funzone.example.net",
       "homepage": "https://www.funzone.example.net",
+      "tagline": {
+        "und": "FunZone!"
+      },
       "created": "2025-03-15T10:42:11.543Z"
     },
     {
@@ -399,6 +410,10 @@
       "origin": {
         "en": "Tuscany",
         "it": "Toscana"
+      },
+      "tagline": {
+        "en": "Small toys, big dreams",
+        "it": "Piccoli giochi, grandi sogni"
       },
       "address": {
         "label": {
@@ -444,6 +459,7 @@
         "latitude": 35.7148,
         "longitude": 139.7967
       },
+      "tagline": "Crafted with care",
       "address": "3-7-1 Taito, Taito-ku, Tokyo 110-0016, Japan",
       "contacts": [
         "support@kidscraft.example.net",

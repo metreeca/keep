@@ -872,7 +872,7 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 			interface UnionCase {
 				readonly label: string;
 				readonly applicable: ReadonlyArray<"create" | "update" | "insert">;
-				readonly slot: "address" | "contacts" | "score" | "certified";
+				readonly slot: "address" | "contacts" | "score" | "certified" | "origin" | "tagline";
 				/**
 				 * Vendor sample picker (insert/update); ignored on create.
 				 */
@@ -1146,6 +1146,91 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 					slot: "certified",
 					pick: v => typeof v.certified === "number",
 					value: "2003"
+				},
+
+				// text and node variants (§3.1): Vendor.origin is union(dictionary, Place) with a text variant
+				// admitting `und` entries. The storage branch is fixed by wire form, a dictionary singling out the
+				// text variant, an `und`-only dictionary included
+
+				{
+					label: "a localised origin by its text branch",
+					applicable: ["create"],
+					slot: "origin",
+					value: { en: "Lapland", it: "Lapponia" },
+					code: "9919"
+				},
+				{
+					label: "an und origin by its text branch",
+					applicable: ["create"],
+					slot: "origin",
+					value: { und: "Sápmi" },
+					code: "9923"
+				},
+
+				{
+					label: op === "insert"
+						? "switch single-valued text and node union origin from text to place"
+						: "switch text and node union origin from text to place",
+					applicable: ["update", "insert"],
+					slot: "origin",
+					pick: v => v.origin !== undefined && typeof v.origin === "object" && !("latitude" in v.origin),
+					value: { label: { und: "Switched Place" }, latitude: 45.0, longitude: 9.0 }
+				},
+
+				{
+					label: op === "insert"
+						? "switch single-valued text and node union origin from place to und text"
+						: "switch text and node union origin from place to und text",
+					applicable: ["update", "insert"],
+					slot: "origin",
+					pick: v => v.origin !== undefined && typeof v.origin === "object" && "latitude" in v.origin,
+					value: { und: "Switched Region" }
+				},
+
+				// string and text variants (§3.1): Vendor.tagline is union(string, dictionary) with a text variant
+				// admitting `und` entries. The storage branch is fixed by wire form, a plain string singling out the
+				// string variant and a dictionary the text variant, an `und`-only dictionary included
+
+				{
+					label: "a plain tagline by its string branch",
+					applicable: ["create"],
+					slot: "tagline",
+					value: "Built to play",
+					code: "9916"
+				},
+				{
+					label: "a localised tagline by its text branch",
+					applicable: ["create"],
+					slot: "tagline",
+					value: { en: "Built to play", it: "Fatti per giocare" },
+					code: "9917"
+				},
+				{
+					label: "an und tagline by its text branch",
+					applicable: ["create"],
+					slot: "tagline",
+					value: { und: "Built to play" },
+					code: "9918"
+				},
+
+				{
+					label: op === "insert"
+						? "switch single-valued string and text union tagline from string to und text"
+						: "switch string and text union tagline from string to und text",
+					applicable: ["update", "insert"],
+					slot: "tagline",
+					pick: v => typeof v.tagline === "string",
+					value: { und: "Switched to und text" }
+				},
+
+				{
+					label: op === "insert"
+						? "switch single-valued string and text union tagline from text to string"
+						: "switch string and text union tagline from text to string",
+					applicable: ["update", "insert"],
+					slot: "tagline",
+					pick: v => v.tagline !== undefined && typeof v.tagline === "object",
+					value: "Switched to plain string"
 				}
 
 			];

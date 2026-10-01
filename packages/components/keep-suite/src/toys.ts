@@ -112,6 +112,7 @@ export const toys = createNamespace(`${base}toys#`, [
 	"certified",
 	"audited",
 	"origin",
+	"tagline",
 
 	// PostalAddress
 
@@ -400,6 +401,7 @@ export function Vendor() {
 		certified: optional(Certified),
 		audited: optional(union(boolean, date)),
 		origin: optional(Origin),
+		tagline: optional(Tagline),
 
 		address: optional(Address),
 		contacts: multiple(Contacts),
@@ -445,12 +447,29 @@ export function Certified() {
  * The text variant is told apart from the node variant by wire form, a dictionary matching it and no other variant
  * (§3.1). Folding leaves a string and a node branch, so the property stays union-typed for retrieval (§5.5): a template
  * reaches the region name through an atomic alternative as its coalesced label, and only a projection binding reaches it
- * structurally, through a locale alternative.
+ * structurally, through a locale alternative. The text variant admits `und` entries, for region names with no
+ * determinate language.
  */
 export function Origin() {
 	return union(
-		dictionary({ uniqueLang: true, languageIn: languages }),
+		dictionary({ uniqueLang: true, languageIn: ["und", ...languages] }),
 		Place
+	);
+}
+
+/**
+ * Tagline union for `Vendor.tagline`: a plain string or a localised text.
+ *
+ * A two-natured property, after the §4.3 modelling of content with or without a localised form: a vendor carries a
+ * single untranslated slogan or a set of translations. The string and text variants are told apart by wire form, a plain
+ * string matching the string variant and a dictionary the text variant (§3.1), and fold into one string branch on
+ * retrieval (§3.2). The text variant admits `und` entries of its own, which stay text: an undetermined slogan is never
+ * read back as a plain string.
+ */
+export function Tagline() {
+	return union(
+		string({ minLength: 1, maxLength: 100 }),
+		dictionary({ uniqueLang: true, languageIn: ["und", ...languages], minLength: 1, maxLength: 100 })
 	);
 }
 

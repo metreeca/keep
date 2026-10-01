@@ -20,9 +20,16 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the origin of the request `entry`
 - `@metreeca/keep-suite` — conformance coverage for a union carrying a localised text variant, through the new
 	`Vendor.origin` property of the toys dataset: template and projection retrieval of the text variant as a coalesced
-  label or a tag-keyed map, and rejection of a locale alternative outside a projection binding
+  label or a tag-keyed map, `und` entries included, and rejection of a locale alternative outside a projection binding
+- `@metreeca/keep-suite` — conformance coverage for a union pairing a string variant with a localised text variant
+	admitting `und` entries, through the new `Vendor.tagline` property of the toys dataset: persistence of each variant
+  and of variant switches, and retrieval keeping an `und` text apart from a plain string
 
 ### Changed
+
+- **BREAKING** `@metreeca/keep-sparql` — localised text tagged `und` is stored and matched as a `"…"@und` literal like
+	any other tag rather than as a plain literal, so a string variant sharing the property never claims it; plain
+  literals already stored for `und` text are no longer read back as localised content
 
 - Align every package to the reworked `@metreeca/blue` shape API: `Flake.range` carries a `Range`, `Branch.entry` a
 	`Member`, and the `captive` and `foreign` flags are read from `PropertyConstraints` on the property rather than from a

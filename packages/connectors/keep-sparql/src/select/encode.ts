@@ -345,16 +345,19 @@ export function encode(
 		/**
 		 * The patterns binding a localised property's coalesced label to `target` (§6.2, Appendix A.5): the
 		 * first tag of the request's language priority the property carries wins, and the values under it
-		 * come back as plain strings, so every construct downstream reads an ordinary `xsd:string`.
+		 * come back as plain strings, so every construct downstream reads an ordinary `xsd:string`. Only
+		 * language-tagged values are text: a plain string a sibling string variant stores never passes.
 		 */
 		function coalesced(edge: Edge, target: SPARQL): readonly SPARQL[] {
 
 			const { owner, property, object } = edge;
 
+			const raw = variable(object);
+
 			return [
 				link([owner, property, object]),
-				filter(eq(tagged(variable(object)), winner(edge))),
-				bind(str(variable(object)), target)
+				filter(and(ne(lang(raw), string("")), eq(lang(raw), winner(edge)))),
+				bind(str(raw), target)
 			];
 
 		}
@@ -392,13 +395,9 @@ export function encode(
 
 
 			function present(tag: Tag): SPARQL {
-				return exists(link([owner, property, probe]), filter(eq(tagged(variable(probe)), string(tag))));
+				return exists(link([owner, property, probe]), filter(eq(lang(variable(probe)), string(tag))));
 			}
 
-		}
-
-		function tagged(value: SPARQL): SPARQL { // und text is stored as a plain literal (§6)
-			return iif(eq(lang(value), string("")), string("und"), lang(value));
 		}
 
 		/**

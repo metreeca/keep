@@ -19,6 +19,7 @@ import type { Value } from "@metreeca/qest/state";
 import type { Term } from "@metreeca/trio";
 import type { Tuple, Variable } from "@metreeca/wire-sparql";
 
+
 /**
  * The terms a solution variable binds across a tuple set, in tuple order, skipping the tuples leaving it
  * unbound.
@@ -31,9 +32,6 @@ import type { Tuple, Variable } from "@metreeca/wire-sparql";
 export function column(variable: Variable, tuples: readonly Tuple[]): readonly Term[] {
 	return tuples.flatMap(tuple => tuple[variable] ?? []);
 }
-
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /**
  * Coerces a scalar solution {@link Term} back to the QEST {@link Value} it stands for (§3.4).

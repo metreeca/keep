@@ -177,9 +177,9 @@ export function decode(
 	 * Structural access (a {@link @metreeca/qest/model!Locale | Locale} placeholder, §5.4) yields the
 	 * {@link Dictionary} map of the tags matching the requested ranges by RFC 4647 basic filtering (the wildcard `*`
 	 * admits every tag). Coalesced access (the atomic `{}`, §5.3) reduces the map to the first locale-priority tag
-	 * present (§6.2). Either way the per-tag cardinality is the one the property declares. A typed literal carrying
-	 * no language tag lands under the `und` tag. A result carrying no content resolves to `undefined`, so the owning
-	 * property is omitted (§4).
+	 * present (§6.2). Either way the per-tag cardinality is the one the property declares. Only language-tagged
+	 * literals are text, the `und` tag included: a plain literal is a string value, never localised content. A result
+	 * carrying no content resolves to `undefined`, so the owning property is omitted (§4).
 	 */
 	function decodeDictionary(
 		locale: readonly Tag[],
@@ -188,13 +188,9 @@ export function decode(
 		uniqueLang: boolean
 	): string | readonly string[] | Dictionary | undefined {
 
-		const pairs = terms.flatMap((t): readonly { readonly tag: string; readonly text: string }[] => {
-
-			return t.kind === "blank" || t.kind === "named" ? []
-				: t.kind === "tagged" ? [{ tag: t.language === "" ? "und" : t.language, text: t.text }]
-					: [{ tag: "und", text: t.text }];
-
-		});
+		const pairs = terms.flatMap((t): readonly { readonly tag: string; readonly text: string }[] =>
+			t.kind === "tagged" ? [{ tag: t.language, text: t.text }] : []
+		);
 
 		// §5.4: a tag-range map asks for the property structurally, the atomic leaf `{}` for its coalesced
 		// label; the two are told apart by the drain form, `{}` no longer standing for "every tag"

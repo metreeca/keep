@@ -33,6 +33,8 @@ import {
 	createQueryFlake,
 	getFlakeProjection,
 	getFlakeVariant,
+	isConstrainedFlake,
+	isDrainedFlake,
 	isModelBranch,
 	isProbeBranch,
 	isQueryBranch,
@@ -1484,6 +1486,36 @@ describe("flake methods", () => {
 				entries: { parent: child }
 			});
 			expect(Object.keys(getFlakeProjection(node)).sort()).toEqual(["c", "p", "r"]);
+		});
+
+	});
+
+	describe("isDrainedFlake", () => {
+
+		it("surfaces a branch whose value is projected through a transform stage", async () => {
+
+			// `year:launched` binds its projection alias on the launched branch's `year` transform stage,
+			// not on the branch itself, so the branch surfaces a retrieved value only along its transform axis
+
+			const flake = createQueryFlake(Product, { "y=year:launched": {} });
+
+			expect(isDrainedFlake(at(flake, "launched"))).toBeTruthy();
+
+		});
+
+	});
+
+	describe("isConstrainedFlake", () => {
+
+		it("surfaces a branch constrained through a transform stage", async () => {
+
+			// `>=year:launched` lands its bound on the launched branch's `year` transform stage,
+			// not on the branch itself, so the branch carries a constraint only along its transform axis
+
+			const flake = createQueryFlake(Product, { ">=year:launched": 2020 });
+
+			expect(isConstrainedFlake(at(flake, "launched"))).toBeTruthy();
+
 		});
 
 	});

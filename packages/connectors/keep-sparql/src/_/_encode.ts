@@ -109,9 +109,9 @@ export function boundToVariant(value: Literal, range: Range): Shape {
 /**
  * Converts the options of a set-matching or focus constraint to individual match {@link Term | terms} (§5.7.3).
  *
- * A localised dictionary option expands to one term per text, plain under the `und` tag and language-tagged
- * otherwise. A scalar option maps to a term typed after the {@link Range | range} variant it fits, and an option array
- * maps element-wise. A `null` option is kept as the absent-value option.
+ * A localised dictionary option expands to one language-tagged term per text, the `und` tag included. A scalar option
+ * maps to a term typed after the {@link Range | range} variant it fits, and an option array maps element-wise. A
+ * `null` option is kept as the absent-value option.
  *
  * @param value The constraint options
  * @param range The range of the constrained value
@@ -126,11 +126,8 @@ export function optionsToTerms(value: Options, range: Range): readonly (null | T
 
 	if ( isObject(value) ) {
 
-		// the `und` tag is stored as a plain literal, every other tag as a language-tagged one (§6), so
-		// an und option matches by its plain value while a tagged option matches the raw tagged literal
-
 		return Object.entries(value).flatMap(([language, values]) =>
-			some(values).map(text => language === "und" ? typed(text) : tagged(text, language))
+			some(values).map(text => tagged(text, language))
 		);
 
 	} else {
@@ -200,9 +197,11 @@ export function valueToTerm(value: Value, shape: Shape): Term {
  * {@link Shape | shape} variant.
  *
  * A boolean, number, or string value becomes a literal typed after the variant; a string shape carrying the `sh:IRI`
- * datatype renders an IRI node instead, as in {@link valueToTerm}. A localised dictionary becomes one plain or
- * language-tagged term per text (§6), and a reference becomes its IRI. A nested resource becomes its declared id if
- * present (a captive resource with its own identity), else a fresh skolem IRI naming the embedded resource.
+ * datatype renders an IRI node instead, as in {@link valueToTerm}. A localised dictionary becomes one language-tagged
+ * term per text (§6), the `und` tag included and a plain string shorthand standing for its `und` text, so a string
+ * variant sharing the property never claims it on read (§3.1); a reference becomes its IRI. A nested resource becomes
+ * its declared id if present (a captive resource with its own identity), else a fresh skolem IRI naming the embedded
+ * resource.
  *
  * Values not fitting the variant are dropped. A nested resource carrying no content is dropped too, so no link to an
  * empty subject is stored.
@@ -238,12 +237,12 @@ export function valuesToTerms(values: Values, shape: Shape): readonly Term[] {
 
 				if ( isString(value) ) {
 
-					return [typed(value)];
+					return [tagged(value, "und")];
 
 				} else if ( isObject(value) ) {
 
 					return Object.entries(value).flatMap(([tag, texts]) =>
-						some(texts).filter(isString).map(text => tag === "und" ? typed(text) : tagged(text, tag))
+						some(texts).filter(isString).map(text => tagged(text, tag))
 					);
 
 				} else {

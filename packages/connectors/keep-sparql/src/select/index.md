@@ -51,8 +51,8 @@ The value of a node is fixed by what the node is:
   the raw tagged literal
 - a property **mixing** text with other variants (a path crossing a union whose variants declare it as text and as a
 	plain value, §5.8.1) is its stored value **folded** (§3.2): a tagged value passes under the winning priority tag
-	alone, as a plain string, any other value as it is; an `und` text, stored as a plain literal, is indistinguishable
-	from a plain string value and passes whatever the priority
+	alone, as a plain string, any other value as it is; an `und` text is language-tagged like any other, so it passes
+	only where `und` wins the priority and is never mistaken for a plain string value
 - any other **property** is the object of its stored edge
 - a **scalar stage** is its pipe applied to the value of the branch the pipe hangs off; a **reducing stage** (a pipe
 	carrying an aggregate, scalar wrappers included) exists only after grouping

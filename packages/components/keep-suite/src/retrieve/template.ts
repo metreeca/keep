@@ -995,6 +995,25 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 
 				}));
 
+				it("should coalesce an und region name under the default priority (§6.2)", factory(async ({ store }) => {
+
+					// §3.1, §6.2: an `und` entry is text like any other tag, matched by the text variant alongside
+					// the Place variant and coalesced under the default priority, the single tag `und`
+
+					const target = lookup(regions, v => isObject(v.origin) && "und" in v.origin);
+
+					if ( target === undefined || !isObject(target.origin) || !("und" in target.origin) ) { return; }
+
+					const result = await store.lookup({
+						entry: target.id,
+						shape: Vendor,
+						model: { origin: { "0": {}, "1": { latitude: {}, longitude: {} } } }
+					});
+
+					expect(result?.origin).toBe(target.origin.und);
+
+				}));
+
 				it("should skip the folded text branch when only the Place is requested", factory(async ({ store }) => {
 
 					// §5.5: variants left unmatched are skipped at retrieval, contributing no values
@@ -1049,6 +1068,70 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 						shape: Vendor,
 						model: { origin: { "*": {} } }
 					})).rejects.toBeInstanceOf(RangeError);
+
+				}));
+
+			});
+
+			describe("string and text variants — §3.2", () => {
+
+				// §3.1, §3.2: `Vendor.tagline` pairs a string variant with a text variant admitting `und` entries.
+				// The two are told apart by wire form on ingress and fold into one string branch on retrieval: the
+				// string variant contributes its plain value whatever the request priority, the text variant its
+				// coalesced label under that priority (§6.2), an `und` entry included
+
+				const undetermined = lookup(vendors, v => isObject(v.tagline) && Object.keys(v.tagline).join() === "und");
+
+				it("should retrieve each member's tagline under the branch its stored value singles out", factory(async ({ store }) => {
+
+					const result = await store.lookup({
+						entry: "https://data.example.net/vendors/",
+						shape: Vendors,
+						model: { members: { id: {}, tagline: {} } }
+					}, { locale: ["en"] });
+
+					expect(result?.members).toHaveLength(vendors.length);
+
+					vendors.forEach(vendor => {
+
+						const tagline = result?.members?.find(member => member.id === vendor.id)?.tagline;
+
+						expect(tagline).toEqual(isObject(vendor.tagline) ? vendor.tagline.en : vendor.tagline);
+
+					});
+
+				}));
+
+				it("should not read an und text back as a plain string under a priority omitting und (§3.1)", factory(async ({ store }) => {
+
+					// §3.1: the text variant is never matched by a plain string, so an `und` entry stays text and
+					// coalesces only under a priority naming `und`
+
+					if ( undetermined === undefined ) { return; }
+
+					const result = await store.lookup({
+						entry: undetermined.id,
+						shape: Vendor,
+						model: { tagline: {} }
+					}, { locale: ["en"] });
+
+					expect(result).not.toHaveProperty("tagline");
+
+				}));
+
+				it("should coalesce an und text under the default priority (§6.2)", factory(async ({ store }) => {
+
+					// §6.2: with no priority supplied, the whole priority defaults to the single tag `und`
+
+					if ( undetermined === undefined || !isObject(undetermined.tagline) ) { return; }
+
+					const result = await store.lookup({
+						entry: undetermined.id,
+						shape: Vendor,
+						model: { tagline: {} }
+					});
+
+					expect(result?.tagline).toBe(undetermined.tagline.und);
 
 				}));
 
