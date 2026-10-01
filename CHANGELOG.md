@@ -83,6 +83,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   rather than through whichever alternative happens to come last
 - `@metreeca/keep-sparql` — retrieve a union value held by a localised text variant, which a template lookup returned
   empty
+- `@metreeca/keep-flake` — `Flake.order` holds the numeric sort order its type declares, with the `"asc"` and `"desc"`
+	shorthands normalised to `1` and `-1`
 
 ## [0.10.0](https://github.com/metreeca/keep/releases/tag/v0.10.0) - 2026-09-09
 

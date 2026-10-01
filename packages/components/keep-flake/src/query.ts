@@ -338,15 +338,23 @@ function queryLocusOf(
 /**
  * Collects the operator-constraint slots from a locus's entries.
  *
- * Each entry whose `target` names an {@link Operators | operator} contributes that slot and its value.
+ * Each entry whose `target` names an {@link Operators | operator} contributes that slot and its value, with
+ * `"asc"`/`"desc"` sort orders normalised to their numeric `1`/`-1` form.
  */
 function queryConstraintsOf(entries: readonly Entry[]): Partial<Flake> {
 	return Object.fromEntries(
 		entries.flatMap(e => {
 			const slot = Operators[e.target];
-			return slot === undefined ? [] : [[slot, e.value] as const];
+			return slot === undefined ? [] : [[slot, slot === "order" ? orderOf(e.value) : e.value] as const];
 		})
 	);
+}
+
+/**
+ * Normalises a sort order to its numeric form, mapping the `"asc"`/`"desc"` shorthands to `1`/`-1`.
+ */
+function orderOf(value: unknown): unknown {
+	return value === "asc" ? 1 : value === "desc" ? -1 : value;
 }
 
 /**

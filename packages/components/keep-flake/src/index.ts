@@ -176,7 +176,7 @@ export type Flake = {
 
 	/**
 	 * Sort-key precedence (`^` operator). The absolute value sets the position across sort keys; the
-	 * sign sets the direction.
+	 * sign sets the direction. The `"asc"`/`"desc"` shorthands are normalised to `1`/`-1`.
 	 */
 	readonly order?: number;
 

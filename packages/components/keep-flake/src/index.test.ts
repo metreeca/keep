@@ -953,6 +953,18 @@ describe("createFlake", () => {
 
 			});
 
+			it.each([
+				["asc", 1],
+				["desc", -1],
+				[-2, -2]
+			] as const)("normalises %s order to numeric %s", async (order, expected) => {
+
+				const flake = createQueryFlake(Product, { "^price": order });
+
+				expect(at(flake, "price").order).toBe(expected);
+
+			});
+
 			it("descends through transforms for piped constraints", async () => {
 
 				const flake = createQueryFlake(Product, { ">=year:launched": 2020 });
