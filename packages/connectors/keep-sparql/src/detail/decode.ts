@@ -26,7 +26,7 @@
 import { type Property, type ResourceShape } from "@metreeca/blue/resource";
 import { getShapeBranches } from "@metreeca/blue/union";
 import { eager, type Shape } from "@metreeca/blue/value";
-import { type Identifier, isArray, isObject } from "@metreeca/core";
+import { type Identifier, isArray, isObject, opt } from "@metreeca/core";
 import { unique } from "@metreeca/core/arrays";
 import { isTagRange, matchTag, type Tag } from "@metreeca/core/language";
 import type { Scope } from "@metreeca/core/scope";
@@ -41,10 +41,17 @@ import {
 	isQueryBranch
 } from "@metreeca/keep-flake";
 import type { Broker, Deferred, Detail, Response } from "@metreeca/keep/batching";
-import type { Dictionary, Reference, Resource, Value, Values } from "@metreeca/qest/state";
+import {
+	type Dictionary,
+	type Reference,
+	type Resource,
+	type Value,
+	type Values
+} from "@metreeca/qest/state";
 import type { Term } from "@metreeca/trio";
 import type { Tuple, Variable } from "@metreeca/wire-sparql";
-import { column } from "../_/_decode.js";
+
+import { termToValue } from "../index.core.js";
 
 
 /**
@@ -133,12 +140,6 @@ export function decode(
 
 	}
 
-	/**
-	 * Reads a single-valued model property, dispatching by range kind in the encoder's order: a **union** to
-	 * {@link decodeUnion}, a **localised** `dictionary` leaf to {@link decodeDictionary}, any other **scalar**
-	 * shape to {@link decodeValue}. The property is single-valued, so the first decoded value stands; an empty
-	 * result omits the owning property (§4).
-	 */
 	function decodeProperty(
 		locale: readonly Tag[],
 		branch: Branch & { readonly entry: Property }
@@ -159,28 +160,50 @@ export function decode(
 
 			return decodeDictionary(
 				locale, drain,
-				unique(column(scope.resolve(branch), tuples), equals),
+				unique(decodeColumn(scope.resolve(branch), tuples), equals),
 				rangeShape.uniqueLang === true
 			);
 
 		} else {
 
-			return decodeValue(rangeShape, locale, getFlakeEntries(branch), drain, unique(column(scope.resolve(branch), tuples), equals))[0];
+			return decodeValue(
+				rangeShape,
+				locale,
+				getFlakeEntries(branch),
+				drain,
+				unique(decodeColumn(scope.resolve(branch), tuples), equals)
+			)[0];
 
 		}
 
 	}
 
-	/**
-	 * Decodes the localised arm: the language-tagged terms matched against a localised placeholder.
-	 *
-	 * Structural access (a {@link @metreeca/qest/model!Locale | Locale} placeholder, §5.4) yields the
-	 * {@link Dictionary} map of the tags matching the requested ranges by RFC 4647 basic filtering (the wildcard `*`
-	 * admits every tag). Coalesced access (the atomic `{}`, §5.3) reduces the map to the first locale-priority tag
-	 * present (§6.2). Either way the per-tag cardinality is the one the property declares. Only language-tagged
-	 * literals are text, the `und` tag included: a plain literal is a string value, never localised content. A result
-	 * carrying no content resolves to `undefined`, so the owning property is omitted (§4).
-	 */
+	function decodeUnion(
+		locale: readonly Tag[],
+		branch: Branch & { readonly entry: Property },
+		drain: undefined | Drain
+	): Values | Promise<Resource> | undefined {
+
+		const requested = drain?.form === "union" ? drain.variants : new Map<Shape, Drain>();
+
+		const present = [...requested.keys()].find(variant =>
+			unique(decodeColumn(scope.resolve(branch, variant), tuples), equals).length > 0
+		);
+
+		return present === undefined ? undefined
+			: present.kind === "dictionary" ? decodeDictionary(
+					locale, requested.get(present),
+					unique(decodeColumn(scope.resolve(branch, present), tuples), equals),
+					present.uniqueLang === true
+				)
+				: decodeValue(
+					present,
+					locale,
+					getFlakeVariant(branch, present), requested.get(present),
+					unique(decodeColumn(scope.resolve(branch, present), tuples), equals)
+				)[0];
+	}
+
 	function decodeDictionary(
 		locale: readonly Tag[],
 		drain: undefined | Drain,
@@ -227,39 +250,6 @@ export function decode(
 
 	}
 
-	/**
-	 * Decodes the variant arms, the read-side counterpart of the encoder's membership gate. Each requested variant
-	 * has its own arm and object column, so the column that bound fixes the value's variant with no term inspection.
-	 * The property is single-valued, so the first requested variant whose column is bound stands, a localised variant
-	 * collecting its tagged terms as {@link decodeDictionary} does. If no variant column bound, the result is empty and
-	 * the owning property is omitted (§4).
-	 */
-	function decodeUnion(
-		locale: readonly Tag[],
-		branch: Branch & { readonly entry: Property },
-		drain: undefined | Drain
-	): Values | Promise<Resource> | undefined {
-
-		const requested = drain?.form === "union" ? drain.variants : new Map<Shape, Drain>();
-
-		const present = [...requested.keys()].find(variant =>
-			unique(column(scope.resolve(branch, variant), tuples), equals).length > 0
-		);
-
-		return present === undefined ? undefined
-			: present.kind === "dictionary" ? decodeDictionary(
-					locale, requested.get(present),
-					unique(column(scope.resolve(branch, present), tuples), equals),
-					present.uniqueLang === true
-				)
-				: decodeValue(present, locale, getFlakeVariant(branch, present), requested.get(present), unique(column(scope.resolve(branch, present), tuples), equals))[0];
-	}
-
-	/**
-	 * Coerces a bound column into values of `shape`, shared by the scalar and variant readers: literal
-	 * shapes map each typed term to its JavaScript value; a `reference` yields bare {@link Reference}s, or
-	 * expands them as nested resources when the placeholder is a template; a `resource` always expands.
-	 */
 	function decodeValue(
 		shape: Shape,
 		locale: readonly Tag[],
@@ -271,16 +261,10 @@ export function decode(
 		switch ( shape.kind ) {
 
 			case "boolean":
-
-				return terms.filter(t => t.kind === "typed").map(t => t.text === "true");
-
 			case "number":
-
-				return terms.filter(t => t.kind === "typed").map(t => Number(t.text));
-
 			case "string":
 
-				return terms.filter(t => t.kind === "typed").map(t => t.text);
+				return terms.flatMap(term => opt(termToValue(term, shape), value => [value], []));
 
 			case "reference":
 
@@ -305,9 +289,6 @@ export function decode(
 		}
 
 
-		/**
-		 * The IRIs bound by the column, the named terms of a reference- or resource-ranged property.
-		 */
 		function entries(): readonly Reference[] {
 			return terms.filter(t => t.kind === "named").map(t => t.iri);
 		}
@@ -315,10 +296,10 @@ export function decode(
 	}
 
 
-	/**
-	 * Tests whether a resolved slot value carries no content (`undefined`, an empty array, or an empty
-	 * map) and must therefore be omitted from the decoded resource (§4).
-	 */
+	function decodeColumn(variable: Variable, tuples: readonly Tuple[]): readonly Term[] {
+		return tuples.flatMap(tuple => tuple[variable] ?? []);
+	}
+
 	function isEmpty(value: unknown): boolean {
 		return value === undefined
 			|| isArray(value, [])

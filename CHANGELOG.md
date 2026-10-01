@@ -68,6 +68,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   leading positional argument
 - `@metreeca/keep-rest` — `Store.create` rejects with a `Problem` a `Location` header resolving outside the container
 	of the request `entry`, cross-origin IRIs included, in place of returning it verbatim
+- `@metreeca/keep-sparql` — a stored literal is read back after the variant its property declares, so a literal whose
+	datatype does not fit the variant is absent rather than coerced; comparison bounds and match options are routed
+	to a union variant by `@metreeca/blue`, so a plain-string operand on a union pairing a string and a localised text
+	variant is rejected as ambiguous
 - Upgrade to `@metreeca/core` 0.12, `@metreeca/qest` 0.11, `@metreeca/blue` 0.11, `@metreeca/http` 0.4,
 	`@metreeca/tape` 0.11, `@metreeca/trio` 0.1.2 and the `@metreeca/wire-sparql` 0.11.1 connectors
 

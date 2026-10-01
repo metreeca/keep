@@ -45,7 +45,7 @@ Conventions for `src/**/encode.ts` modules. Existing encoders (`detect/encode.ts
 - **Defer anchor → SPARQL conversion** (the SPARQL instance of the skill's "convert to target-language text only at the
   leaf" rule): thread edge endpoints (the request entry, focus and target nodes) as raw `Variable | Term` values,
 	typically `named(entry)` or a variable name, through every helper that just forwards them. Convert to SPARQL only at
-	the leaf: [`link([source, property, target])`](../src/_/_encode.ts) renders the triple pattern and picks the stored
+	the leaf: [`link([source, property, target])`](../src/index.core.ts) renders the triple pattern and picks the stored
 	direction, and the `select` encoder's local `anchor(...)` renders a bare edge owner. Don't call `variable(...)` /
 	`term(...)` at the top of `encode(...)` if the result is then handed straight to a helper; pass the value through and
   let the leaf render it. Predicates and classes stay `named(property.forward)`, `named(rdf.type)` and the like:

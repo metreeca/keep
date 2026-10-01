@@ -50,7 +50,7 @@ import type { Broker, Deferred, Select } from "@metreeca/keep/batching";
 import type { Reference, Resource, Value } from "@metreeca/qest/state";
 import type { Term } from "@metreeca/trio";
 import type { Tuple, Variable } from "@metreeca/wire-sparql";
-import { termToValue } from "../_/_decode.js";
+import { computedToValue, termToValue } from "../index.core.js";
 
 
 /**
@@ -113,7 +113,7 @@ export function decode(
 
 		if ( isComputedFlake(node) ) {
 
-			return Promise.resolve(opt(row[scope.resolve(node)], termToValue));
+			return Promise.resolve(opt(row[scope.resolve(node)], computedToValue));
 
 		} else if ( drain?.form === "union" ) {
 
@@ -173,7 +173,7 @@ export function decode(
 
 		} else if ( variant.kind === "dictionary" ) {
 
-			return Promise.resolve(term.kind === "tagged" ? term.text : termToValue(term));
+			return Promise.resolve(termToValue(term, variant));
 
 		} else if ( variant.kind === "resource" || variant.kind === "reference" ) {
 
@@ -186,7 +186,7 @@ export function decode(
 
 		} else {
 
-			return Promise.resolve(termToValue(term));
+			return Promise.resolve(termToValue(term, variant));
 
 		}
 

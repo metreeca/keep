@@ -45,7 +45,7 @@ import type { Detail } from "@metreeca/keep/batching";
 import { named, type Named } from "@metreeca/trio";
 import { type SPARQL, type Variable } from "@metreeca/wire-sparql";
 import { all, fragment, optional, select, union, where } from "@metreeca/wire-sparql/builder";
-import { link, membership } from "../_/_encode.js";
+import { link, membership } from "../index.core.js";
 
 
 /**

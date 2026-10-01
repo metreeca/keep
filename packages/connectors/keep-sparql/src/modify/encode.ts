@@ -57,7 +57,7 @@ import {
 	variable,
 	where
 } from "@metreeca/wire-sparql/builder";
-import { forward, reverse, valuesToTerms } from "../_/_encode.js";
+import { forward, reverse, valuesToTerms } from "../index.core.js";
 
 
 /**

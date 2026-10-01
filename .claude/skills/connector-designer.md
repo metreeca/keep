@@ -82,7 +82,7 @@ Each operation folder (`detect/`, `detail/`, `select/`, `modify/` in keep-sparql
    per-request results. Carries no IR types and no emission of its own.
 
 A `decode.ts` companion lives alongside `encode.ts` where result decoding is non-trivial. Emitter and decoder helpers
-shared by several operations live in `src/_/` (`_encode.ts`, `_decode.ts`). Planner behaviour is unit-tested in
+shared by several operations live in the package-root `src/index.core.ts`. Planner behaviour is unit-tested in
 keep-flake; connector behaviour is covered by the `src/index.test.ts` conformance runs.
 
 # Design Conventions

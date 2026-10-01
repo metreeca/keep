@@ -30,9 +30,9 @@
  */
 
 import { getShapeClass, type Property } from "@metreeca/blue/resource";
-import { getShapeBranches } from "@metreeca/blue/union";
-import { sh } from "@metreeca/blue/value";
-import { isNumber, isString, opt } from "@metreeca/core";
+import { getBoundBranch, getShapeBranches } from "@metreeca/blue/union";
+import { sh, type Shape } from "@metreeca/blue/value";
+import { error, isNumber, isString, opt } from "@metreeca/core";
 import { xsd } from "@metreeca/core/datatype";
 import type { Tag } from "@metreeca/core/language";
 import type { Scope } from "@metreeca/core/scope";
@@ -106,7 +106,7 @@ import {
 	variable,
 	where
 } from "@metreeca/wire-sparql/builder";
-import { boundToVariant, expression, link, membership, optionsToTerms, textual, valueToTerm } from "../_/_encode.js";
+import { expression, link, membership, optionsToTerms, textual, valueToTerm } from "../index.core.js";
 
 
 /**
@@ -683,7 +683,8 @@ function conditions(node: Flake, value: SPARQL): readonly SPARQL[] {
 	 */
 	function comparison(relate: (x: SPARQL, y: SPARQL) => SPARQL, bound: Literal): SPARQL {
 
-		const variant = boundToVariant(bound, node.range);
+		const variant: Shape = getBoundBranch(bound, getShapeBranches(node.range.shape))
+			?? error(new RangeError(`unresolved range variant for value <${String(bound)}>`));
 
 		return variant.kind === "boolean"
 			? and(isLiteral(value), eq(datatype(value), reference(xsd.boolean)), relate(iif(value, number(1), number(0)), bound ? number(1) : number(0)))
