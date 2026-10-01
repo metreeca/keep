@@ -123,7 +123,7 @@ export function createSPARQLStore(repository: Repository): Store {
 	);
 
 
-	return createManagingStore(store(buffering), {
+	return createManagingStore({
 
 		execute: task => buffering.execute(async repository => task(store(repository))),
 		close: () => buffering.close()

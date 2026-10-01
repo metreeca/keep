@@ -242,14 +242,15 @@ interaction with criteria applied to projected rows.
 
 Applies to lifecycle and transaction suites: `execute`, `observe`, `close`.
 
-- **Atomicity is universal** (`ManageExecuteAtomicity`): a store buffers writes and commits them only once the task
-	resolves, dropping the buffer on failure, so all-or-nothing holds regardless of the backend's isolation level. The
-	batched mutation event is part of the same atomic step (one event per committed transaction, none on rollback), so
-	event delivery is asserted under atomicity rather than separately
+- **Atomicity is capability-gated** (`ManageExecuteAtomicity`): a store commits writes only once the task resolves and
+	drops them on failure, so all-or-nothing holds regardless of the backend's isolation level. The batched mutation
+	event is part of the same atomic step (one event per committed transaction, none on rollback), so event delivery is
+	asserted under atomicity rather than separately. Atomicity is best-effort: a connector applying mutations eagerly,
+	with no rollback, excludes these tests through the `target`/`ignore` filter
 - **Isolation is capability-gated** (`ManageExecuteIsolation`): governs read visibility within and across transactions
 	(own-buffered-write invisibility, initial-state reads, concurrent-transaction isolation). `SNAPSHOT` is the suggested
 	level but best-effort; a connector whose backend provides a weaker level excludes these tests through the
-	`target`/`ignore` filter, engine by engine, while keeping the universal atomicity contract
+	`target`/`ignore` filter, engine by engine, independently of atomicity
 - **Mutation-event scope** beyond the in-process observers exercised here (for example, cross-client signals on a shared
 	backend) is declared per connector and governs the standalone `ManageObserve` suite
 

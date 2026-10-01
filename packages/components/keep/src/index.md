@@ -8,7 +8,7 @@ description: >-
 
 # Design Rationale
 
-The `Store` interface extends `StoreClient` with the ability to group multiple operations into an atomic unit of work.
+The `Store` interface extends `StoreClient` with the ability to group multiple operations into a single unit of work.
 Transaction semantics follow the same cross-backend principle adopted by
 [@metreeca/qest](https://metreeca.github.io/qest/documents/model.Model_Design.html): each connector targets the
 strongest guarantees its backend supports and documents the result. The guarantees are drawn from the well-defined
@@ -20,8 +20,14 @@ counterparts across [SQL:2011](https://www.iso.org/standard/53681.html),
 
 ## Atomicity
 
-All operations within a transaction either succeed together or are rolled back as a whole. If the task function throws
-or its returned promise rejects, the transaction is rolled back and the error is propagated to the caller.
+Implementations provide **best-effort** atomicity: each connector targets all-or-nothing commit, so that the operations
+within a transaction either succeed together or are rolled back as a whole. If the task function throws or its returned
+promise rejects, the transaction is rolled back where the connector supports it, and the error is propagated to the
+caller in every case.
+
+Where the backend offers neither native transactions nor a feasible way to emulate them (see
+[Write Semantics](#write-semantics)), mutations apply eagerly and a failing task may leave earlier mutations in place.
+Whether a failing transaction rolls back is implementation-defined and **must** be documented by each backend connector.
 
 ## Non-Reentrancy
 
@@ -174,8 +180,8 @@ Read visibility within a transaction depends on the connector's implementation s
 When the backend supports atomic transactions natively, connectors route mutations directly through the backend's
 transaction primitive and commit atomically.
 
-When it does not, the `Store` interface requires connectors to **emulate** atomicity by buffering all mutation requests
-in memory during the transaction and flushing them in order at commit time. This pattern:
+When it does not, connectors should **emulate** atomicity by buffering all mutation requests in memory during the
+transaction and flushing them in order at commit time. This pattern:
 
 - Preserves strict snapshot read semantics by deferring writes until after all reads complete
 - Reduces commit overhead by grouping multiple mutations into a single round-trip
@@ -184,6 +190,11 @@ in memory during the transaction and flushing them in order at commit time. This
 Buffering shifts memory pressure to the client: callers are responsible for sizing transactions according to available
 memory. For bulk data loading, this means splitting large batches of `insert` or `remove` calls across multiple
 transactions.
+
+Buffering is infeasible where a mutation needs a result only the backend can produce mid-transaction, such as an
+identifier assigned by a remote service on `create`, or where the flush itself cannot commit as a single unit, as with
+a sequence of independent remote requests. Connectors in that position apply mutations eagerly and document that a
+failing transaction does not roll back.
 
 > [!IMPORTANT]
 > Under the buffer-and-flush pattern, backend constraint checks (uniqueness, referential integrity) only fire at flush
@@ -195,8 +206,9 @@ Backend connectors should:
 
 1. Request the strongest isolation level the backend supports, up to snapshot isolation
 2. Use the backend's native transaction primitive when available; otherwise emulate atomicity via the buffer-and-flush
-	 pattern
-3. Document the actual isolation level provided and any read-visibility restrictions imposed by the chosen strategy
+	 pattern where feasible
+3. Document the actual isolation level provided, whether a failing transaction rolls back, and any read-visibility
+	 restrictions imposed by the chosen strategy
 
 ## References
 

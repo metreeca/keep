@@ -20,7 +20,7 @@ import { id, multiple, optional, required, resource } from "@metreeca/blue/resou
 import { string } from "@metreeca/blue/string";
 import { TraceError } from "@metreeca/core/trace";
 import { describe, expect, it, vi } from "vitest";
-import type { StoreClient } from "../index.js";
+import type { Store, StoreClient } from "../index.js";
 import { createManagingStore } from "../stores/managing.js";
 import { createValidatingStore } from "./validating.js";
 
@@ -297,9 +297,19 @@ describe("createValidatingStore", () => {
 
 	describe("delegate store inside execute task", () => {
 
+		function manage(inner: StoreClient): Store {
+
+			const validating = createValidatingStore(inner);
+
+			return createManagingStore({
+				execute: task => Promise.resolve().then(() => task(validating))
+			});
+
+		}
+
 		it("should validate state on calls made through the task's store parameter", async () => {
 			const inner = stubStore();
-			const store = createManagingStore(createValidatingStore(inner));
+			const store = manage(inner);
 
 			await expect(store.execute(async s => {
 				await s.create({
@@ -315,7 +325,7 @@ describe("createValidatingStore", () => {
 
 		it("should validate entry on calls made through the task's store parameter", async () => {
 			const inner = stubStore();
-			const store = createManagingStore(createValidatingStore(inner));
+			const store = manage(inner);
 
 			await expect(store.execute(async s => {
 				await s.create({ entry: "/relative", shape: Catalogue, model: { items: {} }, state: fullState });

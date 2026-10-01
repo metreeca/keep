@@ -200,7 +200,7 @@ export function createRESTStore({
 	}
 
 
-	return createManagingStore(createValidatingStore(immutable({
+	const client = createValidatingStore(immutable({
 
 		lookup({ entry, model }, opts) {
 
@@ -343,7 +343,16 @@ export function createRESTStore({
 
 		trusted
 
-	}));
+	});
+
+
+	// REST has no transaction primitive: each call of a task goes straight to the service
+
+	return createManagingStore({
+
+		execute: task => Promise.resolve().then(() => task(client))
+
+	});
 
 
 	/**

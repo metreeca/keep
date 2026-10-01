@@ -30,6 +30,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **BREAKING** `@metreeca/keep-sparql` — localised text tagged `und` is stored and matched as a `"…"@und` literal like
 	any other tag rather than as a plain literal, so a string variant sharing the property never claims it; plain
   literals already stored for `und` text are no longer read back as localised content
+- **BREAKING** `@metreeca/keep` — `createManagingStore` takes the management options alone, with `execute` required:
+	the connector hands its `StoreClient` to each task through `execute`, and a non-transactional backend supplies one
+  applying the task directly
+- `@metreeca/keep` — `Store.execute` atomicity is best-effort, like isolation: connectors target all-or-nothing commit
+	and document whether a failing task rolls back; `@metreeca/keep-rest` applies task mutations eagerly, with no
+  rollback
 
 - Align every package to the reworked `@metreeca/blue` shape API: `Flake.range` carries a `Range`, `Branch.entry` a
 	`Member`, and the `captive` and `foreign` flags are read from `PropertyConstraints` on the property rather than from a

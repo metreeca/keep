@@ -31,10 +31,10 @@ const priceModel = { price: {} };
 /**
  * Atomicity conformance tests for {@link Store.execute}.
  *
- * Atomicity is universal: a transaction commits its writes only once the task resolves and discards them on failure,
- * so all-or-nothing holds regardless of the backend's isolation level. The batched mutation event (one event per
- * committed transaction, none on rollback) is part of the same contract and is covered under `notifications`. These
- * tests apply to every connector.
+ * These tests assert all-or-nothing commit: a transaction commits its writes only once the task resolves and discards
+ * them on failure, regardless of the backend's isolation level. The batched mutation event (one event per committed
+ * transaction, none on rollback) is part of the same contract and is covered under `notifications`. Atomicity is
+ * best-effort: a connector applying mutations eagerly, with no rollback, ignores `"ManageExecuteAtomicity"`.
  */
 export function testManageExecuteAtomicity(factory: TestFactory<Store>): void {
 
@@ -323,7 +323,7 @@ export function testManageExecuteAtomicity(factory: TestFactory<Store>): void {
  * These tests assume the suggested **SNAPSHOT** level and assert its read-visibility semantics: reads taken through
  * the client handed to the task observe the transaction's start snapshot. The transaction's own uncommitted writes
  * stay invisible until commit, and concurrent transactions do not see each other's pending writes. A connector
- * providing a weaker level ignores `"ManageExecuteIsolation"` while keeping the universal atomicity contract.
+ * providing a weaker level ignores `"ManageExecuteIsolation"`, independently of `"ManageExecuteAtomicity"`.
  */
 export function testManageExecuteIsolation(factory: TestFactory<Store>): void {
 

@@ -9,7 +9,7 @@ resource models that describe them:
 
 - **Model-Driven Storage**: data models defined with [@metreeca/blue](https://github.com/metreeca/blue) drive storage
 	and validation
-- **Declarative Operations**: CRUD operations on linked data resources without hand-written queries
+- **Declarative Operations**: CRUD operations on linked data resources without handwritten queries
 - **Pluggable Connectors**: one storage API over every supported backend, through interchangeable connector packages
 
 | Layer      | Package                                                 | Description                       |

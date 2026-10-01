@@ -35,12 +35,14 @@ import type { Store, StoreClient, StoreObserver } from "../index.js";
 
 
 /**
- * Manages mutation events, transactional execution, and lifecycle for a bare {@link StoreClient},
+ * Manages mutation events, transactional execution, and lifecycle for a connector's {@link StoreClient},
  * exposing it as a full {@link Store}.
  *
  * A connector can implement only the {@link StoreClient} data surface and still offer the full {@link Store}
- * contract. With no `management` options, the wrapper provides working defaults. Backend primitives supplied through
- * `management` back any of `execute`, `observe` or `close`, and the wrapper fills in whatever is missing.
+ * contract. The connector supplies its transaction primitive through `management.execute`, which hands the
+ * connector's {@link StoreClient} to every data call. The option is required, since only the connector knows what
+ * atomicity its backend can provide. Backend primitives supplied through `management` may also back `observe` or
+ * `close`, and the wrapper fills in whatever is missing.
  *
  * Each standalone mutation call and each {@link Store.execute execute} call delivers a single filtered event to each
  * matching {@link StoreObserver observer} once the call resolves. If the call rejects, its pending events are
@@ -52,9 +54,8 @@ import type { Store, StoreClient, StoreObserver } from "../index.js";
  * error channel.
  *
  * > [!IMPORTANT]
- * > **Transaction Isolation** — `None` by default: the built-in `execute` applies each call directly, with no write
- * > buffering and no rollback. If an `execute` option is supplied through `management`, that option determines the
- * > level, typically through a backend transaction primitive.
+ * > **Transaction Isolation** — Determined by the supplied `execute` option, typically through a backend
+ * > transaction primitive: the wrapper adds neither isolation nor atomicity of its own.
  *
  * > [!IMPORTANT]
  * > **Mutation Events** — emits in-process observer events: each standalone mutation and each
@@ -62,18 +63,18 @@ import type { Store, StoreClient, StoreObserver } from "../index.js";
  * > on resolve, and none on rejection. Mutations made by other clients reach local observers only if a
  * > backend-bridging `observe` option is supplied through `management`.
  *
- * @param store - Inner StoreClient serving the data calls
- * @param management - Subset of {@link Store} management methods backed by the connector; the wrapper fills in
- *     whatever is missing
+ * @param management - {@link Store} management methods backed by the connector: `execute` is required, and the
+ *     wrapper fills in whatever else is missing
  * @param management.execute - Transaction wrapper applied to every standalone StoreClient call and to the body of
  *     each {@link Store.execute execute} call, typically a backend transaction primitive (for example,
- *     `graph.execute` for a SPARQL connector) responsible for atomic commit and rollback. It receives a task and MUST
- *     call it with a `scope` StoreClient dedicated to that call, so per-call state, such as a freshly bound graph
+ *     `graph.execute` for a SPARQL connector) responsible for atomic commit and rollback. A backend with no
+ *     transaction primitive supplies a wrapper applying the task directly to its StoreClient, and declares on its
+ *     factory that a failing task neither rolls back nor isolates its mutations. The option MUST call each task it
+ *     receives with a `scope` StoreClient dedicated to that call, so per-call state, such as a freshly bound graph
  *     buffer, never leaks across concurrent invocations; every data call within the transaction is routed through
  *     `scope`. Calls made by a user task inside {@link Store.execute execute} do not open further transactions: they
  *     share the outer one. The option MUST convert synchronous throws from the task into promise rejections, to
- *     preserve the unified Store error channel: lookups are routed through it with no additional guard. Defaults to
- *     applying the task directly to `store`, with no isolation
+ *     preserve the unified Store error channel: lookups are routed through it with no additional guard
  * @param management.observe - Backend registration for storage-level events, such as mutations made by other clients
  *     sharing the backend. Each observer is registered both with this option and locally, and a single detach call
  *     releases both registrations. The resource filter always arrives as an array of references, or as `undefined`
@@ -81,15 +82,23 @@ import type { Store, StoreClient, StoreObserver } from "../index.js";
  *     Absent by default
  * @param management.close - Exposed as is on the returned store. Defaults to a resolved no-op
  *
- * @returns An immutable {@link Store} composing `store` with the supplied `management` opts
+ * @returns An immutable {@link Store} serving data calls through the supplied `management` opts
  */
-export function createManagingStore(store: StoreClient, {
+export function createManagingStore({
 
 	observe,
-	execute = <V>(task: (store: StoreClient) => Awaitable<V>) => Promise.resolve().then(() => task(store)),
+	execute,
+
 	close = () => Promise.resolve()
 
-}: Partial<Store> = {}): Store {
+}: {
+
+	readonly observe?: Store["observe"]
+	readonly execute: Store["execute"]
+
+	readonly close?: Store["close"]
+
+}): Store {
 
 	const observers = new Map<symbol, {
 

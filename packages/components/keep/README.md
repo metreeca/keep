@@ -159,9 +159,9 @@ await store.execute(async store => {
 });
 ```
 
-Cross-backend isolation semantics, concurrency models, and the buffer-and-flush emulation pattern are documented in the
-[Transaction Design](https://metreeca.github.io/keep/documents/_metreeca_keep.Transaction_Design.html) companion
-document.
+Cross-backend atomicity and isolation semantics, concurrency models, and the buffer-and-flush emulation pattern are
+documented in the [Transaction Design](https://metreeca.github.io/keep/documents/_metreeca_keep.Transaction_Design.html)
+companion document.
 
 # Implementing Connectors
 
@@ -192,9 +192,11 @@ function createMyStore(): Store {
 
 	};
 
-	return createManagingStore(createValidatingStore(backend, { trusted: true }), {
+	const client = createValidatingStore(backend, { trusted: true });
 
-		execute: task => { /* run task within a backend transaction */ },
+	return createManagingStore({
+
+		execute: task => { /* run task(client) within a backend transaction */ },
 		close: () => { /* release connections */ }
 
 	});
@@ -203,10 +205,10 @@ function createMyStore(): Store {
 ```
 
 Pass `trusted: true` to `createValidatingStore` when the backend is trusted to deliver shape-conforming data, so
-`lookup` responses skip the redundant validation pass. Supply `execute` to `createManagingStore` to run every standalone
-call and the entire `execute` task body within the backend's transaction primitive. The `execute` option MUST call the
-task with a store client dedicated to that transaction. Omit it for non-transactional backends: each call is then
-applied directly, with no rollback. `close` defaults to a no-op.
+`lookup` responses skip the redundant validation pass. The `execute` option of `createManagingStore` is required: it runs
+every standalone call and the entire `execute` task body within the backend's transaction primitive, and MUST call the
+task with a store client dedicated to that transaction. A non-transactional backend supplies an `execute` applying the
+task directly to the client, and documents that a failing task does not roll back. `close` defaults to a no-op.
 
 All errors reach the caller as promise rejections through the unified store error channel: `RangeError` for malformed
 entries, `TraceError` for shape validation failures, `Problem` for network, storage, or other processing failures.

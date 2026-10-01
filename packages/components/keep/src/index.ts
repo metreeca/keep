@@ -49,8 +49,8 @@
  *
  * **Transactions**
  *
- * {@link Store.execute execute} groups multiple operations into an atomic unit of work; see
- * {@link Store} for isolation semantics.
+ * {@link Store.execute execute} groups multiple operations into a single unit of work; see
+ * {@link Store} for atomicity and isolation semantics.
  *
  * **Mutation Events**
  *
@@ -224,10 +224,10 @@ import type { createManagingStore } from "./stores/managing.js";
  * regardless of the number of server round-trips it may require.
  *
  * > [!IMPORTANT]
- * > Implementations provide best-effort transaction isolation, targeting snapshot isolation where the backend
- * > supports it and degrading gracefully to the maximum level achievable by the underlying storage, down to no
- * > isolation at all. Each implementation **must** document its supported isolation level. Implementations not
- * > supporting atomic updates natively **must** emulate them by buffering and deferring mutations until commit time.
+ * > Implementations provide best-effort transaction atomicity and isolation, targeting all-or-nothing commit and
+ * > snapshot isolation where the backend supports them and degrading gracefully to the maximum level achievable by
+ * > the underlying storage, down to eagerly applied mutations with no rollback and no isolation at all. Each
+ * > implementation **must** document its supported isolation level and whether a failing transaction rolls back.
  *
  * > [!IMPORTANT]
  * > Implementations provide best-effort mutation event signalling, targeting notification for all mutations on the
@@ -274,14 +274,15 @@ export interface Store extends StoreClient {
 	/**
 	 * Execute a task within a store transaction.
 	 *
-	 * All operations performed by the task are executed atomically. If the task completes successfully, all
+	 * All operations performed by the task form a single unit of work. If the task completes successfully, all
 	 * mutations are committed and {@link Store.observe registered observers} receive a single mutation event
-	 * listing all affected resources. If the task throws or rejects, no mutations are committed and no events are
-	 * notified. This includes logic errors ({@link !RangeError RangeError}, {@link TraceError}) raised by inner
-	 * {@link StoreClient} calls. The error is propagated to the caller as a promise rejection.
+	 * listing all affected resources. If the task throws or rejects, no events are notified and, where the
+	 * implementation provides atomicity, no mutations are committed. This includes logic errors
+	 * ({@link !RangeError RangeError}, {@link TraceError}) raised by inner {@link StoreClient} calls. The error is
+	 * propagated to the caller as a promise rejection.
 	 *
 	 * The task receives its own {@link StoreClient} for the transaction. Operations performed through it belong to
-	 * the transaction and commit together, separately from any other `execute` running at the same time.
+	 * the transaction, separately from any other `execute` running at the same time.
 	 *
 	 * > [!WARNING]
 	 * > `execute` is not re-entrant. Transaction boundaries are flat: a task cannot open a nested transaction, and
@@ -293,11 +294,12 @@ export interface Store extends StoreClient {
 	 * > flushed or discarded on completion, so any later call has undefined behaviour.
 	 *
 	 * > [!WARNING]
-	 * > **Atomicity is mandatory; isolation is best-effort.** The task's mutations and their events always commit
-	 * > all-or-nothing. `SNAPSHOT` is the suggested read-isolation level; each implementation declares the level it
-	 * > actually provides. An implementation with neither native transactions nor `SNAPSHOT` isolation MUST buffer
-	 * > the mutations and events, commit them as one batch on success, and drop the buffer on failure (a synchronous
-	 * > throw or a rejected promise).
+	 * > **Atomicity and isolation are best-effort.** Implementations target all-or-nothing commit of the task's
+	 * > mutations and `SNAPSHOT` read isolation; each implementation declares what it actually provides. An
+	 * > implementation with no native transactions SHOULD emulate atomicity by buffering the mutations, committing
+	 * > them as one batch on success and dropping the buffer on failure (a synchronous throw or a rejected promise).
+	 * > Where the backend makes that infeasible, mutations apply eagerly, and a failing task may leave earlier
+	 * > mutations in place, with no event notified for them.
 	 *
 	 * @typeParam V - Return type of the task
 	 *
