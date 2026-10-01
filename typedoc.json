@@ -44,11 +44,13 @@
   "externalSymbolLinkMappings": {
     "global": {
       "Error": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error",
-      "RangeError": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RangeError"
+      "RangeError": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RangeError",
+      "fetch": "https://developer.mozilla.org/en-US/docs/Web/API/Window/fetch"
     },
     "typescript": {
       "Error": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error",
-      "RangeError": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RangeError"
+      "RangeError": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RangeError",
+      "fetch": "https://developer.mozilla.org/en-US/docs/Web/API/Window/fetch"
     },
     "@metreeca/blue": {
       "validate": "https://metreeca.github.io/blue/functions/index.validate.html",
@@ -64,7 +66,11 @@
     },
     "@metreeca/core": {
       "isNestedIRI": "https://metreeca.github.io/core/functions/resource.isNestedIRI.html",
-      "Optional": "https://metreeca.github.io/core/types/index.Optional.html"
+      "Optional": "https://metreeca.github.io/core/types/index.Optional.html",
+      "TraceError": "https://metreeca.github.io/core/classes/trace.TraceError.html"
+    },
+    "@metreeca/core/trace": {
+      "TraceError": "https://metreeca.github.io/core/classes/trace.TraceError.html"
     },
     "@metreeca/core/arrays": {
       "Some": "https://metreeca.github.io/core/types/arrays.Some.html"

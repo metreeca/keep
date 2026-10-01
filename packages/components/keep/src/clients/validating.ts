@@ -17,8 +17,8 @@
 /**
  * Validating store wrapper.
  *
- * Wraps a plain {@link StoreClient} with shape-driven validation of entries, models, and states
- * before delegating, and optional re-validation of retrieval responses.
+ * Guards a {@link StoreClient} against malformed requests, checking entries, models and states against the request
+ * shape before they reach the backend. Retrieval responses from untrusted sources can be re-validated as well.
  *
  * @module
  */
@@ -38,29 +38,29 @@ import type { Store, StoreClient, StoreScope } from "../index.js";
 /**
  * Creates a validating store backed by a delegate.
  *
- * Each method validates the relevant inputs against the supplied shape before delegating to `store`:
+ * Each method validates its inputs against the supplied shape before forwarding the request to `store`:
  *
- * - `entry` is checked for absolute-IRI form (no query string, no fragment), failures being rejected as
+ * - `entry` must be an absolute IRI with no query string and no fragment; otherwise the request is rejected with a
  *   {@link !RangeError RangeError}
- * - `model` is validated as a {@link @metreeca/blue!validate | template} for {@link StoreClient.lookup lookup}, held
- *   to the query-complexity bounds (`plain`, `depth`, `limit`) of the caller's {@link StoreScope | retrieval scope},
- *   and as a collection slice for {@link StoreClient.create create}
- * - `state.id`, when present, is checked against `entry`: nested under it, the collecting resource, for
- *   {@link StoreClient.create create}, and equal to it for {@link StoreClient.update update} and
- *   {@link StoreClient.insert insert}, a conflicting identity being rejected as {@link !RangeError RangeError}
- * - `state` is validated as a resource, always capping captive expansion at depth `0` (inline captive batches
- *   rejected): for {@link StoreClient.create create} against the shape the collecting property ranges over, and for
+ * - `model` is validated as a {@link @metreeca/blue!validate | template} for {@link StoreClient.lookup lookup},
+ *   within the query-complexity bounds (`plain`, `depth`, `limit`) of the caller's
+ *   {@link StoreScope | retrieval scope}, and as a collection slice for {@link StoreClient.create create}
+ * - `state.id`, if present, must be nested under `entry` for {@link StoreClient.create create}, and equal to `entry`
+ *   for {@link StoreClient.update update} and {@link StoreClient.insert insert}; otherwise the request is rejected
+ *   with a {@link !RangeError RangeError}
+ * - `state` is validated as a resource with captive expansion capped at depth `0`, so inline captive batches are
+ *   rejected; {@link StoreClient.create create} validates it against the shape of the collected resources, and
  *   {@link StoreClient.update update} and {@link StoreClient.insert insert} against the supplied shape
  *
- * The `trusted` opt controls whether {@link StoreClient.lookup lookup} responses are re-validated against the shape
- * narrowed by the caller's `model` before surfacing. It defaults to `false`, so connectors whose backing source isn't
- * trusted to deliver shape-conforming data (for example, a remote REST endpoint) get the safe default. Local stores
- * that compute results themselves should pass `trusted: true` to skip the redundant pass.
+ * The `trusted` option controls whether {@link StoreClient.lookup lookup} responses are re-validated against the
+ * shape, as narrowed by the caller's `model`. It defaults to `false`, the safe choice for connectors whose source may
+ * deliver non-conforming data, such as a remote REST endpoint. Local stores that compute results themselves can pass
+ * `trusted: true` to skip the redundant check.
  *
  * Validation failures surface as {@link @metreeca/core!TraceError | TraceError} or {@link !RangeError RangeError}
- * rejections per the unified {@link Store} error channel.
+ * rejections, in line with the unified {@link Store} error channel.
  *
- * @param store - Inner StoreClient to delegate to after validation
+ * @param store - Inner StoreClient receiving the validated requests
  * @param options - Optional validation options
  *
  * @returns An immutable {@link StoreClient} wrapping `store` with input validation
@@ -72,8 +72,8 @@ export function createValidatingStore(store: StoreClient, {
 }: {
 
 	/**
-	 * Whether to skip re-validation of {@link StoreClient.lookup lookup} responses against the shape narrowed by the
-	 * caller's `model`.
+	 * Whether to skip re-validation of {@link StoreClient.lookup lookup} responses against the shape, as narrowed by
+	 * the caller's `model`.
 	 *
 	 * @defaultValue `false`, treating the wrapped store as untrusted
 	 */

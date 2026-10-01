@@ -17,33 +17,28 @@
 /**
  * Batching store client.
  *
- * Builds a {@link StoreClient} that coalesces concurrent requests of the same kind into a single
- * batch, so a connector can serve many requests with one backend round-trip. A connector author
- * supplies one {@link Handler} per request type to {@link createBatchingStore}; the returned client
- * routes every call through a {@link Broker} that queues like-typed requests and hands each handler
- * the whole batch it accumulated.
+ * Lets a connector serve many concurrent store requests with few backend round-trips. Requests of the same kind are
+ * coalesced into a single batch, and the connector supplies one batch {@link Handler} per kind. The resulting
+ * {@link StoreClient} adds conditional CRUD semantics on top, so handlers apply each request unconditionally.
  *
- * Four request types partition the work, each with its own handler:
+ * Four request kinds partition the work, each with its own handler:
  *
  *  - **`detect`** — probes whether each {@link Detect} entry exists in the store
- *  - **`detail`** — materialises each {@link Detail} against its `model`; multi-valued slots reached
- *    by the model may be delegated to the `select` handler via {@link Broker.select}
- *  - **`select`** — materialises each {@link Select} collection (see `Query<Slot>` for the admitted
- *    forms); element resources reached by the query may be delegated to the `detail` handler via
- *    {@link Broker.detail}
- *  - **`modify`** — creates, updates, or deletes each {@link Modify} target
+ *  - **`detail`** — materialises each {@link Detail} resource against its `model`; multi-valued members reached
+ *    by the model may be handed to the `select` handler through {@link Broker.select}
+ *  - **`select`** — materialises each {@link Select} collection against its `query`; element resources reached
+ *    by the query may be handed to the `detail` handler through {@link Broker.detail}
+ *  - **`modify`** — creates, updates, or deletes each {@link Modify} target, or links it to a collection
  *
- * Retrieval is driven by the requested `model` and `query`, not by the stored graph: `detail` and
- * `select` hand work back and forth, `detail` spawning a `select` for each multi-valued slot its
- * model reaches and `select` spawning a `detail` for each element resource its query reaches. The
- * handover recurses through this alternation and bottoms out where the `model` or `query` stops
- * nesting, so each request descends exactly as deep as it asks for, however deep the underlying
- * graph runs.
+ * Retrieval is driven by the requested `model` and `query`, not by the stored graph. A `detail` handler issues a
+ * `select` for each multi-valued member its model reaches, and a `select` handler issues a `detail` for each element
+ * resource its query reaches. Each request thus descends exactly as deep as its `model` or `query` nests, however
+ * deep the underlying graph runs.
  *
- * Handlers run concurrently and forward nested requests to one another through the {@link Broker}, so
- * a handler must not assume any ordering between handlers, and must await every nested promise it
- * issues before settling the request that depends on it. Correctness rests on this data dependency
- * alone, not on handler scheduling.
+ * > [!IMPORTANT]
+ * > Handlers run concurrently and exchange nested requests through the {@link Broker}. A handler must not assume any
+ * > ordering between handlers, and must await every nested request it issues before settling the request that
+ * > depends on it.
  *
  * @module
  */
@@ -72,9 +67,9 @@ export type Request =
  * Result of running a {@link Request}, narrowed by request variant:
  *
  *  - a {@link Detect} resolves to a `boolean` existence flag
- *  - a {@link Detail} resolves to its materialised resource {@link @metreeca/blue/value!Delivery | Delivery}
- *  - a {@link Select} resolves to the {@link Value | values} its collection holds, the shape being carried
- *    as a value rather than as a type parameter
+ *  - a {@link Detail} resolves to the materialised resource, typed by its shape and model
+ *  - a {@link Select} resolves to the {@link Value | values} its collection holds, untyped since its shape is
+ *    carried as a value rather than as a type parameter
  *  - a {@link Modify} resolves to its mutated entry's {@link Reference}
  *
  * @typeParam R The request whose result type is selected
@@ -90,7 +85,7 @@ export type Response<R extends Request> =
 /**
  * Resource existence request.
  *
- * Carries the `entry` to probe; resolves to whether that entry exists in the store.
+ * Carries the `entry` to probe, and resolves to whether that entry exists in the store.
  */
 export type Detect = {
 
@@ -101,11 +96,11 @@ export type Detect = {
 /**
  * Resource retrieval request.
  *
- * Carries a single resource (`entry` of `shape`), the `model` against which to materialise it, and
- * the `locale` priority driving language negotiation for its localised content (§6.2). Resolves to
- * the materialised resource.
+ * Carries a single resource (`entry` of `shape`), the `model` to materialise it against, and the `locale` priority
+ * for coalescing its localised content (QEST §6.2). Resolves to the materialised resource.
  *
- * @typeParam T The resource model selecting the result shape
+ * @typeParam T The resource model selecting the members of the result
+ * @typeParam S The shape describing the resource
  */
 export type Detail<
 	T extends Template = Template,
@@ -123,11 +118,11 @@ export type Detail<
 /**
  * Collection retrieval request.
  *
- * Carries a single multi-valued property (`field` on `entry` of `shape`), the `query` describing the
- * shape of its values (one of the `Query<Slot>` arms), and the `locale` priority driving language
- * negotiation for its localised content (§6.2). Resolves to the materialised collection.
+ * Carries a single multi-valued property (`field` on `entry` of `shape`), the `query` describing its values, and the
+ * `locale` priority for coalescing its localised content (QEST §6.2). Resolves to the materialised collection: items
+ * for a template query, rows for a projection.
  *
- * @typeParam T The collection query selecting the result shape
+ * @typeParam T The collection query selecting the form of the result
  */
 export type Select<T extends Query<Slot> = Query<Slot>> = {
 
@@ -143,10 +138,10 @@ export type Select<T extends Query<Slot> = Query<Slot>> = {
 /**
  * Resource mutation request.
  *
- * Carries the `entry` to mutate (of `shape`) and the target `state` to persist: a present `state`
- * creates or updates the entry, an omitted `state` deletes it. A request carrying a `link` instead
- * asserts `item` as a member of the collection `entry` holds under `property`, leaving the entry's
- * own state as it stands. Resolves to the mutated entry's {@link Reference}.
+ * Carries the `entry` to mutate (of `shape`) and the target `state` to persist. A present `state` creates or updates
+ * the entry, and an omitted `state` deletes it. A request carrying a `link` instead adds `item` to the collection
+ * held by `entry` under `property`, leaving the rest of the entry unchanged. Resolves to the {@link Reference} of the
+ * mutated entry.
  */
 export type Modify = {
 
@@ -167,13 +162,12 @@ export type Modify = {
 /**
  * Batch handler for a single request type.
  *
- * Supplied by the connector author to {@link createBatchingStore}, one per request type. Receives the
- * whole batch the {@link Broker} has accumulated for this type, together with the broker for issuing
- * nested requests, and settles each {@link Deferred} in the batch with its result or error. The
- * returned promise must resolve only once every request the handler owns has settled, including any
- * nested requests issued through the broker.
+ * Supplied by the connector to {@link createBatchingStore}, one per request type. A handler receives every request of
+ * its type accumulated since the previous batch, together with a {@link Broker} for issuing nested requests. It
+ * settles each {@link Deferred} in the batch with its result or error. The returned promise must resolve only once
+ * every request in the batch has settled, including any nested requests issued through the broker.
  *
- * The broker never dispatches an empty batch, so the handler need not guard against one.
+ * Batches are never empty, so handlers need not guard against an empty one.
  *
  * @typeParam R The request variant handled
  */
@@ -186,10 +180,9 @@ export type Handler<R extends Request> = {
 /**
  * A queued request paired with its promise-resolution hooks.
  *
- * Each batch a {@link Handler} receives is an array of `Deferred` entries. The handler reads each
- * `request`, then calls `resolve` with its result (typed by {@link Response | Response<R>}) or
- * `reject` with an error, once the backend round-trip and any nested requests issued through the
- * {@link Broker} have settled.
+ * Each batch a {@link Handler} receives is an array of `Deferred` entries. For each entry, the handler reads the
+ * `request` and settles it, calling `resolve` with its result (typed by {@link Response | Response<R>}) or `reject`
+ * with an error.
  *
  * @typeParam R The queued request variant: a {@link Detect} probe, a {@link Detail} resource fetch,
  *     a {@link Select} collection fetch, or a {@link Modify} mutation
@@ -208,10 +201,9 @@ export type Deferred<R extends Request> = {
 /**
  * Request-submission surface over the batching {@link Handler | handlers}.
  *
- * Brokers each store request (detection, detail, selection, modification) to its handler: a call
- * enqueues the request and returns a promise that settles with the request's result. Held both by
- * outside callers, as the entry point, and by handlers, to delegate nested work to a sibling
- * handler.
+ * Routes each request (detection, detail, selection, modification) to the handler for its type. Each call queues the
+ * request for the next batch and returns a promise that settles with its result. Handlers receive a broker to hand
+ * nested work to a sibling handler.
  */
 export type Broker = {
 
@@ -233,9 +225,8 @@ export type Broker = {
 	 *
 	 * @param request The resource and model to materialise
 	 *
-	 * @returns A promise resolving to the materialised {@link @metreeca/blue/value!Delivery | Delivery} of the
-	 *     request's `model` (the resource value), settled once the owning batch and any nested promises needed to
-	 *     assemble its value have resolved
+	 * @returns A promise resolving to the resource materialised against the request's `model`, settled once the
+	 *     owning batch and any nested requests needed to assemble it have resolved
 	 */
 	detail<S extends Lazy<ResourceShape>, T extends Template>(request: Detail<T, S>): Promise<Match<S, T>>;
 
@@ -248,7 +239,7 @@ export type Broker = {
 	 * @param request The property and query to materialise
 	 *
 	 * @returns A promise resolving to the values the collection holds as the request's `query` narrows them,
-	 *     items for a template and rows for a projection, settled once the owning batch and any nested promises
+	 *     items for a template and rows for a projection, settled once the owning batch and any nested requests
 	 *     needed to assemble them have resolved
 	 */
 	select<T extends Query<Slot>>(request: Select<T>): Promise<readonly Value[]>;
@@ -256,13 +247,12 @@ export type Broker = {
 	/**
 	 * Enqueue a {@link Modify} request.
 	 *
-	 * Mutates unconditionally, with no existence precondition: a present `state` upserts the entry,
-	 * creating it when absent; an omitted `state` deletes it leniently, resolving as a no-op when
-	 * absent.
+	 * Mutates unconditionally, with no existence precondition. A present `state` upserts the entry, creating it if
+	 * absent. An omitted `state` deletes the entry, and is a no-op if the entry is absent.
 	 *
-	 * @param request The entry and target state to persist
+	 * @param request The entry and target state to persist, or the collection link to add
 	 *
-	 * @returns A promise resolving to the mutated entry's {@link Reference}, settled once the owning
+	 * @returns A promise resolving to the {@link Reference} of the mutated entry, settled once the owning
 	 * batch has completed
 	 */
 	modify(request: Modify): Promise<Reference>;
@@ -275,21 +265,18 @@ export type Broker = {
 /**
  * Creates a batching store client backed by a set of request handlers.
  *
- * Routes every {@link StoreClient} call through a {@link Broker} that coalesces concurrent requests
- * into batches and dispatches each batch through the matching `handlers` entry. Adds conditional CRUD
- * semantics on top of the handlers: existence is probed through the `detect` handler before a create,
- * update, or delete is delegated to `modify`, sparing each handler that bookkeeping.
+ * Coalesces concurrent {@link StoreClient} calls into batches, each served by the matching `handlers` entry. The
+ * client adds conditional CRUD semantics on top of the handlers: `create`, `update` and `delete` probe for existence
+ * through the `detect` handler before handing the mutation to `modify`. `create` mints the identifier of the new
+ * resource, if its state names none, and links it to the collecting resource.
  *
- * The `modify` handler is additionally wrapped so the batching layer, not the storage handler,
- * enforces the §4.1 state-`id` constraint: a request whose `state` carries an `id` other than its
- * `entry` is rejected on its own before dispatch, and a backend failure is settled as a rejection
- * across the surviving batch rather than surfaced as a handler throw. The wrapped handler thus always
- * receives a non-empty batch of pre-validated requests to apply unconditionally.
+ * The `modify` handler receives only requests whose `state` carries no `id` other than their `entry`. A request
+ * failing this check is rejected on its own, and the rest of the batch still applies. If the `modify` handler throws,
+ * the error rejects every request in its batch.
  *
- * @param handlers The batch handlers, one per request type, dispatching detect, detail, select, and
- *     modify requests
+ * @param handlers The batch handlers, one per request type
  *
- * @returns An immutable {@link StoreClient} that batches its requests through the broker
+ * @returns An immutable {@link StoreClient} serving its requests in batches through `handlers`
  *
  * @throws {@link !RangeError RangeError} If an update or insert `state` carries an `id` that differs from its `entry`,
  *     or if a create `state` member filling an identifier slot is not a single path segment
@@ -311,7 +298,7 @@ export function createBatchingStore(handlers: {
 
 			const items = batch.filter(({ request: { entry, state }, reject }) => {
 
-				// reject each request whose state id contradicts its entry (§4.1) on its own, so the
+				// reject each request whose state id contradicts its entry on its own, so the
 				// rest of the batch still applies and the check stays out of storage-specific handlers
 
 				const matching = state?.id === undefined || state.id === entry;
@@ -394,7 +381,7 @@ export function createBatchingStore(handlers: {
 
 		async update({ entry, shape, state }) {
 
-			// the entry identifies the target: a state carrying a different id contradicts it (§4.1)
+			// the entry identifies the target: a state carrying a different id contradicts it
 
 			const { id }: Resource = state;
 

@@ -147,10 +147,6 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 
 				}));
 
-				// the reference-placeholder cases the previous notation carried — any string satisfying the
-				// IRI-reference production accepted as a placeholder, anything else rejected — have no subject:
-				// a placeholder carries no value of its own, so a reference is asked for through the atomic `{}`
-
 			});
 
 			describe("references (expanded)", () => {
@@ -575,8 +571,7 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 			// its properties are valid on. An alternative MAY match several variants, retrieving each,
 			// but MUST match at least one — one matching no variant is unsatisfiable and rejected. The
 			// atomic does not tell variants apart and so requests them all; a template's structure
-			// discriminates the resource variants it fits. Union no longer admits a localised branch
-			// (qest redefinition), so the former "localised variant" test has been removed.
+			// discriminates the resource variants it fits.
 
 			describe("via union shape", () => {
 
@@ -918,13 +913,6 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 
 				}));
 
-				// the branch-skipping case the previous notation carried singled a branch out by the kind of its
-				// placeholder value; the atomic `{}` reaches every variant coming back as a value (§5.3), so a
-				// branch is no longer skipped by the placeholder
-
-				// the out-of-domain case the previous notation carried stated a placeholder value outside the
-				// variant domain; a placeholder carries no value of its own any more (§5.3)
-
 				it("should reject an alternative matching no variant (§5.5)", factory(async ({ store }) => {
 
 					// §5.3, §5.5: score is union(decimal, grade string); a template alternative matches only
@@ -996,10 +984,6 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 				}));
 
 			});
-			// The per-leaf elision cases the previous notation carried have no subject under the reworked
-			// model: `{}` is the atomic placeholder, a request for the property's own value, so no template
-			// fragment states an omission any more and a key left out is the only way to not ask for a slot.
-
 
 		});
 

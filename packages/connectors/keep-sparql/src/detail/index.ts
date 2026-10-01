@@ -15,34 +15,19 @@
  */
 
 /**
- * Resources-pass driver.
+ * Detail-pass driver.
  *
- * Owns one SELECT round per drain iteration covering every queued
- * {@link Detail}. The cycle is:
+ * Materialises every queued {@link Detail} request in a batch with a single `select` query against the repository.
+ * Single-valued properties are read from that query, while multi-valued properties are forwarded to the select pass
+ * through the {@link Broker}, the only channel between passes. The handler returns without waiting for the
+ * forwarded requests, so the select pass can run them within the same batching round.
  *
- *   **plan** → **encode** → `client.select` → **decode**
- *
- *  - {@link _flake_!createFlake | createFlake} builds the per-request detail plan
- *    ({@link Flake} IR) from `(shape, model)`;
- *  - {@link encode} folds every plan into one batched SELECT whose WHERE is a union of
- *    arms, coordinated with the decoder through the shared {@link Scope};
- *  - `client.select` runs the unified query;
- *  - {@link decode} walks each request's plan alongside the returned tuples, decoding
- *    single-valued slots inline and forwarding set-valued slots to the collections
- *    pass through {@link select}.
- *
- * Multi-valued slots are forwarded to the collections pass through the supplied
- * {@link Broker}, the only cross-pass communication channel admitted by this module.
- * Decoding chains the deferred's resolution through the returned promise so the handler
- * can return promptly and let the drain advance to the collections pass within the same
- * iteration.
- *
- * @module
+ * @module index
  */
 
 import { eager } from "@metreeca/blue/value";
-import { createScope, type Scope } from "@metreeca/core/scope";
-import { createFlake, type Flake, isModelBranch } from "@metreeca/keep-flake";
+import { createScope } from "@metreeca/core/scope";
+import { createFlake, isModelBranch } from "@metreeca/keep-flake";
 import type { Broker, Deferred, Detail } from "@metreeca/keep/batching";
 import { type RepositoryClient, variable as toVariable } from "@metreeca/wire-sparql";
 import { decode } from "./decode.js";
@@ -50,21 +35,17 @@ import { encode } from "./encode.js";
 
 
 /**
- * Per-batch body for the detail handler.
+ * Resolves a batch of detail requests with one `select` query.
  *
- * Three phases run in sequence: **plan** every request via
- * {@link _flake_!createFlake | createFlake}; **fetch** by
- * folding plans into one batched SELECT through {@link encode}; **deliver** by
- * {@link decode | decoding} each request against the returned tuples and settling the
- * deferred. Variable allocation across the batched
- * SELECT is shared via a single {@link createScope | Scope} passed into {@link encode}, so
- * the decoder recovers each request's per-slot columns by resolving the same branch nodes.
+ * Each request is planned with {@link createFlake}, and every plan is folded into one query. Requests reading no
+ * single-valued property contribute nothing to the query, and no query runs if none does. Such requests still
+ * resolve: `id` and `type` come from the entry and the shape, and multi-valued properties come from the select pass.
  *
- * Items whose flake carries no top-level descent branch are filtered out of the fetch
- * phase (their arms would be empty), and the fetch is skipped entirely when no item
- * contributes anything. They still flow through the deliver phase, where {@link decode}
- * yields `id` / `type` entries inline from the focus and shape and routes set-valued
- * slots through the collections pass.
+ * @param batch The queued detail requests to resolve
+ * @param client The repository the query runs against
+ * @param broker The channel forwarding multi-valued properties to the select pass
+ *
+ * @returns A promise settling once the query results have been handed to the decoder
  */
 export async function detail(
 	batch: readonly Deferred<Detail>[],

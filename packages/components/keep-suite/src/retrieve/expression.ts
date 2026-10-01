@@ -17,9 +17,9 @@
 /**
  * Expression conformance: the `pipe:path` spectrum (§5.8) targeted by selection and projection keys.
  *
- * Centralises the property-path and transform-pipe machinery once — path special steps (`id`/`type`), multi-step
- * paths, scalar/aggregate/composition pipes, the empty-path and component-mix matrix — so the selection and
- * projection suites only spot-check that an expression works in their respective positions.
+ * Covers property paths and transform pipes in one place: special path steps (`id`/`type`), multi-step paths,
+ * scalar, aggregate and composed pipes, and the matrix of empty and non-empty components. The criteria and projection
+ * suites only spot-check that an expression works in their respective positions.
  *
  * @module retrieve/expression
  */

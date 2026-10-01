@@ -19,8 +19,8 @@ import { multiple, required, resource, type ResourceShape } from "@metreeca/blue
 import { string } from "@metreeca/blue/string";
 import type { Match } from "@metreeca/blue/value";
 import type { Lazy } from "@metreeca/core";
-import type { Reference } from "@metreeca/qest/state";
 import type { Template } from "@metreeca/qest/model";
+import type { Reference } from "@metreeca/qest/state";
 import { describe, expect, it, vi } from "vitest";
 import type { Store, StoreClient, StoreObserver } from "../index.js";
 import { createCachingStore } from "./caching.js";

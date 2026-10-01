@@ -17,13 +17,13 @@
 /**
  * Localised retrieval conformance: coalesced access (single-string and string-array) under language negotiation.
  *
- * Covers the {@link https://www.rfc-editor.org/ QEST} §6 split between **structural** access (tag-preserving,
- * exercised by the template suite) and **coalesced** access (a localised property reduced to a plain string, or
- * an array of plain strings for an array-per-tag property, under language negotiation). Negotiation is driven by the
- * `locale` priority list passed to
- * `store.lookup` (defaulting to `["und"]` when omitted, §6.2): a property whose map carries the priority's first
- * present tag coalesces to that value, and one carrying none of the priority tags coalesces to `undefined`. With no
- * `locale` the whole priority is the single tag `und`, so an und-less property such as `Product.name` coalesces away.
+ * Covers the {@link https://github.com/metreeca/qest QEST} §6 split between **structural** access (tag-preserving,
+ * exercised by the template suite) and **coalesced** access (a localised property reduced to a plain string, or an
+ * array of plain strings for an array-per-tag property, under language negotiation).
+ *
+ * Negotiation is driven by the `locale` priority list passed to `store.lookup`, defaulting to `["und"]` when omitted
+ * (§6.2). A property coalesces to the value of the first priority tag its dictionary carries, and to `undefined` if it
+ * carries none of them. With no `locale`, an und-less property such as `Product.name` is therefore omitted.
  *
  * @module retrieve/localised
  */
@@ -70,7 +70,7 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 
 	// a localised property is delivered at the arity its own shape states, so a coalesced request on an
 	// array-per-tag property hands back the winning tag's set; the shape-driven typing does not tell the two
-	// access forms apart, the template no longer stating which was asked for
+	// access forms apart, since the template does not state which was asked for
 
 	const coalesced = (value: unknown): readonly string[] => (value ?? []) as readonly string[]; // ;(cast)
 	const setOf = (value: Locals | undefined, priority: readonly string[]): readonly string[] => {
@@ -351,7 +351,11 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 				const und = (members(await store.lookup({ entry: ProductCatalogue, shape: Products, model })) ?? [])
 					.flatMap(r => r.cap === undefined ? [] : [r.cap]);
 
-				const en = (members(await store.lookup({ entry: ProductCatalogue, shape: Products, model }, { locale: ["en"] })) ?? [])
+				const en = (members(await store.lookup({
+					entry: ProductCatalogue,
+					shape: Products,
+					model
+				}, { locale: ["en"] })) ?? [])
 					.flatMap(r => r.cap === undefined ? [] : [r.cap]);
 
 				expect(sorted(und.map(String))).toEqual([plain]);
@@ -873,10 +877,6 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 				}, { locale: EN })).rejects.toThrow();
 
 			})());
-
-			// the per-tag arity cases the previous notation carried — `[""]` admissible only over an array-per-tag
-			// property and `""` only over a single-string one — have no subject: a coalesced request is the atomic
-			// `{}` whatever the property, the arity coming from the shape rather than from the placeholder (§5.4)
 
 			const extendedRanges: ReadonlyArray<readonly [string, string]> = [
 				["a trailing-wildcard subtag", "de-*"],

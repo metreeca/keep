@@ -71,8 +71,7 @@ export function collection(element: unknown, selection?: Criteria): object {
 /**
  * Merges a collection's criteria into the node retrieving it.
  *
- * Retrieval keys and constraint keys share one key space (§5.6), so the two halves a query once held in a
- * tuple's two slots are stated together in one object.
+ * Retrieval keys and constraint keys share one key space (§5.6), so a query states both in one object.
  */
 function merge(element: unknown, selection: undefined | Criteria): object {
 	return { ...(isObject(element) ? element : {}), ...selection };
@@ -96,7 +95,7 @@ export function members<R extends { readonly members?: unknown }>(result: R | un
  * settles neither their names nor their types. Rows are therefore read as the cell-keyed records they are, each cell
  * carrying a state value.
  *
- * @param result The catalogue collection to read, as returned by {@link members}
+ * @param result - The catalogue collection to read, as returned by {@link members}
  *
  * @returns The projected rows, each keyed by the binding names the projection stated
  */
@@ -121,11 +120,11 @@ export type Row = {
 /**
  * Reads a projected cell as the number its binding computes.
  *
- * A binding states an expression rather than a member, so the shape settles neither the cell's name nor its type and
- * the row carries it as a bare state value; a case asserting arithmetic over a numeric binding states what it
- * computed here.
+ * A binding states an expression rather than a member, so the shape settles neither the cell's name nor its type.
+ * The row carries the cell as a bare state value, and a test asserting arithmetic over a numeric binding reads it
+ * through this helper.
  *
- * @param cell The cell to read
+ * @param cell - The cell to read
  *
  * @returns The number `cell` carries
  */

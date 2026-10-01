@@ -17,10 +17,9 @@
 /**
  * Caching store wrapper.
  *
- * Provides {@link createCachingStore}, which wraps a {@link Store} with an in-memory cache
- * supporting LRU and TTL-based eviction, in-flight request sharing, an in-flight write bypass that prevents
- * pre-commit values from being cached, and coherent invalidation driven by both the wrapper's own write
- * operations and the delegate's mutation events.
+ * Speeds up read-heavy workloads by serving repeated retrievals from an in-memory cache. The cache stays bounded
+ * by size and age, shares concurrent identical retrievals, and stays coherent with writes made through the store, by
+ * other clients, or signalled by the backend.
  *
  * @module
  */
@@ -29,35 +28,32 @@ import { isArray, isObject, type Optional } from "@metreeca/core";
 import type { Tag } from "@metreeca/core/language";
 import { immutable } from "@metreeca/core/values";
 import type { Reference } from "@metreeca/qest/state";
-import type { Store, StoreScope } from "../index.js";
+import type { Store } from "../index.js";
 
 
 /**
  * Creates a caching store backed by a delegate.
  *
- * Serves repeated retrievals from an in-memory cache, sparing the delegate a round-trip whenever a prior retrieval
- * can be reused; this cuts latency and backend load for read-heavy workloads, while writes and eviction keep cached
+ * Serves repeated retrievals from an in-memory cache, sparing the delegate a round-trip whenever a prior result can
+ * be reused. This cuts latency and backend load for read-heavy workloads, while writes and eviction keep cached
  * results coherent and bounded.
  *
- * Retrievals are memoised under an `(entry, model, locale, limit)` key, where the model is canonicalised bottom-up so
- * templates differing only in property or element order (including arrays of objects) share a cache entry, widening
- * the set of requests a single cached result can serve.
+ * Results are cached by `entry`, `model`, and the `locale` and `limit` of the {@link Store.lookup lookup} retrieval scope.
+ * Templates differing only in member or element order share a cached result.
  *
  * > [!IMPORTANT]
- * > `shape` is deliberately excluded from the cache key: the retrieval result must be a pure function of
- * > `(entry, model, locale, limit)`, with `shape` supplying only structural metadata that does not affect the
- * > returned payload.
+ * > `shape` is not part of the cache key. A retrieval result MUST depend only on `entry`, `model`, `locale` and
+ * > `limit`, with `shape` supplying structural metadata that does not affect the returned payload.
  *
  * > [!IMPORTANT]
- * > The {@link StoreScope | retrieval scope} `locale` is part of the cache key because it selects which localised
- * > content a retrieval returns. Unlike the model, the locale priority list is order-significant (`["en", "it"]` and
- * > `["it", "en"]` key separately), since order encodes language-negotiation preference. An omitted or empty locale
- * > list collapses to a single key, distinct from any explicit list.
+ * > The scope `locale` is part of the cache key, because it selects which localised content a retrieval returns.
+ * > Unlike the model, the locale priority list is order-significant: `["en", "it"]` and `["it", "en"]` are cached
+ * > separately. An omitted and an empty locale list share a single cached result, distinct from any explicit list.
  *
  * > [!IMPORTANT]
- * > The scope `limit` is part of the cache key because it caps each collection's `#` and so changes the returned
- * > payload, with an omitted or `0` limit collapsing to a single unbounded key. The scope `plain` and `depth` are
- * > excluded: they only accept or reject a model, never altering a successful payload.
+ * > The scope `limit` is part of the cache key, because it caps the page size of each collection and so changes the
+ * > returned payload. An omitted and a `0` limit share a single cached result. The scope `plain` and `depth` are not
+ * > part of the key: they only accept or reject a model, and never alter a successful payload.
  *
  * The cache offers three observable guarantees:
  *
@@ -121,9 +117,9 @@ export function createCachingStore(store: Store, {
 	/**
 	 * Predicate deciding which cached records an invalidation event discards.
 	 *
-	 * Invoked by both invalidation paths — pre-commit writes on the wrapper and reactive mutation events from the
-	 * delegate — with the mutated resource's identifier and the identifier carried on each cached record. Return
-	 * true to evict the record.
+	 * Invoked for writes made through the wrapper and for mutation events signalled by the delegate. It receives the
+	 * identifier of the mutated resource and the identifier of each cached record, and returns `true` if the record
+	 * is to be evicted.
 	 *
 	 * @param entry - Identifier of the mutated resource
 	 * @param cache - Identifier associated with a cached record
@@ -148,7 +144,7 @@ export function createCachingStore(store: Store, {
 	}>();
 
 	// Tracks entries with at least one in-flight wrapper-initiated write. Reads of these entries bypass the
-	// cache entirely — they still query the delegate, but their result is not stored. This closes the window
+	// cache entirely: they still query the delegate, but their result is not stored. This closes the window
 	// between a lookup call resolving with a pre-commit value and the reactive observer firing on commit, during
 	// which the cache would otherwise hold a stale-but-fresh-looking record.
 
@@ -264,7 +260,7 @@ export function createCachingStore(store: Store, {
 	): Promise<Optional<V>> {
 
 		// Bypass the cache while a write to this entry is in flight: still query the delegate so the caller
-		// gets a value, but do not store the result — it is liable to be the pre-commit snapshot that the
+		// gets a value, but do not store the result: it is liable to be the pre-commit snapshot that the
 		// reactive observer would invalidate moments later
 
 		if ( writing.has(entry) ) {
@@ -278,7 +274,7 @@ export function createCachingStore(store: Store, {
 			// in ordering share a key. The locale segment is serialised verbatim (order preserved, since the priority
 			// list is order-significant) with omitted and empty lists collapsing to `[]`. The limit segment is
 			// keyed because it caps each collection's `#` and so changes the payload, with omitted and `0` (both
-			// unbounded) collapsing to `0`. `\x00` is safe as a separator — IRIs cannot contain it and JSON always
+			// unbounded) collapsing to `0`. `\x00` is safe as a separator: IRIs cannot contain it and JSON always
 			// escapes it inside string payloads.
 
 			const key = [entry, canonical(model), JSON.stringify(vary.locale ?? []), vary.limit ?? 0].join("\x00");
@@ -354,7 +350,7 @@ export function createCachingStore(store: Store, {
 	/**
 	 * Serialises a value to a canonical JSON-like string.
 	 *
-	 * Children are canonicalised first, then sorted by their already-canonical string form — so arrays of
+	 * Children are canonicalised first, then sorted by their already-canonical string form, so arrays of
 	 * objects are ordered by structural content rather than by the `"[object Object]"` placeholder that
 	 * `Array.prototype.sort` would otherwise impose. The output collapses values differing only in property
 	 * or element order to the same string.
@@ -453,7 +449,7 @@ export function createCachingStore(store: Store, {
 	 * Runs two sweeps: first, when `ttl > 0`, drops every record older than `ttl` milliseconds; second, when
 	 * `size > 0` and the cache is overfull, drops the head slice of the Map (least-recently-used first) in
 	 * a single batch sized to the exact overflow. Invoked after every miss so expired siblings and overfill
-	 * are cleaned up incrementally — the cache has no background sweeper.
+	 * are cleaned up incrementally, as the cache has no background sweeper.
 	 */
 	function purge(): void {
 
@@ -468,7 +464,7 @@ export function createCachingStore(store: Store, {
 		}
 
 		// LRU sweep: when over the size bound, take the head slice of Map keys (insertion order = LRU first)
-		// and drop them — `cache.size - size` is the exact overflow, so no loop condition needs re-checking
+		// and drop them: `cache.size - size` is the exact overflow, so no loop condition needs re-checking
 
 		if ( size > 0 && cache.size > size ) {
 

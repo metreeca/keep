@@ -4,10 +4,10 @@
 
 Core model-driven storage API for the [@metreeca/keep](https://github.com/metreeca/keep) linked data storage framework.
 
-Defines the backend-agnostic `StoreClient` and `Store` interfaces for persisting and retrieving linked data resources as
-shape-validated states and query projections. Resource shapes are defined using
-[@metreeca/blue](https://github.com/metreeca/blue); resource states and retrieval templates follow the data and query
-models defined by [@metreeca/qest](https://github.com/metreeca/qest). Actual storage is delegated to backend
+Provides one backend-agnostic API for persisting and retrieving linked data resources, validated against their models
+and retrieved through client-defined templates and queries. Resource models are defined with
+[@metreeca/blue](https://github.com/metreeca/blue), and resource states and retrieval templates follow the data and
+query models of [@metreeca/qest](https://github.com/metreeca/qest). Actual storage is delegated to backend
 [connector packages](https://github.com/metreeca/keep#installation).
 
 # Installation
@@ -44,10 +44,10 @@ npm install @metreeca/keep
 [managing]: https://metreeca.github.io/keep/modules/_metreeca_keep.managing.html
 
 All store methods accept an `entry` that MUST be an absolute IRI without query string or fragment: non-conforming
-entries reject with `RangeError`. `create` takes as `entry` the resource holding the collection, and as `model` the
-multi-valued property holding it; an `id` stated in a `create` state MUST be nested under `entry`. `model` and `state`
-are validated against the supplied shape; validation failures reject with a `TraceError`. Network, storage, and other
-processing errors reject with a structured `Problem`.
+entries reject with `RangeError`. `create` takes as `entry` the resource holding the collection, and as `model` a slice
+naming the multi-valued property that holds it. An `id` stated in a `create` state MUST be nested under `entry`.
+`model` and `state` are validated against the supplied shape, and validation failures reject with a `TraceError`.
+Network, storage, and other processing errors reject with a structured `Problem`.
 
 ## Retrieving Resources
 
@@ -203,11 +203,12 @@ function createMyStore(): Store {
 ```
 
 Pass `trusted: true` to `createValidatingStore` when the backend is trusted to deliver shape-conforming data, so
-`lookup` responses skip the redundant outbound validation pass. Supply `execute` to `createManagingStore` to route
-every standalone call and the entire `execute` task body through the backend's transaction primitive; omit it for
-non-transactional backends and the wrapper degrades to per-call atomicity. `close` defaults to a no-op.
+`lookup` responses skip the redundant validation pass. Supply `execute` to `createManagingStore` to run every standalone
+call and the entire `execute` task body within the backend's transaction primitive. The `execute` option MUST call the
+task with a store client dedicated to that transaction. Omit it for non-transactional backends: each call is then
+applied directly, with no rollback. `close` defaults to a no-op.
 
-All errors reach the caller as promise rejections through the unified Store error channel — `RangeError` for malformed
+All errors reach the caller as promise rejections through the unified store error channel: `RangeError` for malformed
 entries, `TraceError` for shape validation failures, `Problem` for network, storage, or other processing failures.
 Connectors MUST preserve this contract: convert backend-specific exceptions into `Problem` rejections and let validation
 rejections propagate untouched.
@@ -218,8 +219,8 @@ companion document.
 
 ## Testing
 
-Use [@metreeca/keep-suite](https://github.com/metreeca/keep/tree/main/packages/keep-suite) to run the full conformance
-suite against your connector:
+Use [@metreeca/keep-suite](https://github.com/metreeca/keep/tree/main/packages/components/keep-suite) to run the full
+conformance suite against your connector:
 
 ```typescript
 import { testStore } from "@metreeca/keep-suite";
@@ -227,11 +228,11 @@ import { describe } from "vitest";
 
 describe("my-store", () => testStore({
 
-	build: () => createMyStore(), // create a store with schema but no data
+	open: () => createMyStore(), // open a store with schema but no data
 
-	contains: id => { /* true if the resource has any stored data */ },
-	includes: (resource, shape) => { /* true if every fact described by `resource` is present */ },
-	excludes: (resource, shape) => { /* true if every fact described by `resource` is absent */ },
+	contains: entry => { /* true if the resource has any stored data */ },
+	includes: (probe, shape) => { /* true if every fact described by `probe` is present */ },
+	excludes: (probe, shape) => { /* true if every fact described by `probe` is absent */ },
 
 	populate: () => { /* clear and reload the sample dataset */ },
 	generate: (sample, shape) => { /* insert an isolated copy of `sample` with a unique id */ },
@@ -241,7 +242,8 @@ describe("my-store", () => testStore({
 }));
 ```
 
-Filter to a subset of sub-suites with the `match` option (for example, `["Retrieve", "PersistCreate"]`); see the
+Narrow the run to a subset of sub-suites or tests with the `target` and `ignore` options (for example,
+`target: ["Retrieve", "PersistCreate"]`); see the
 [API reference](https://metreeca.github.io/keep/modules/_metreeca_keep-suite.html) for the full list.
 
 # Support

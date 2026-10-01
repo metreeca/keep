@@ -56,9 +56,8 @@ function write(store: StoreClient, op: "create" | "update" | "insert", { entry, 
 /**
  * Asserts that none of the given embedded items remain under a captor in the store.
  *
- * Probes each item scoped to its captor — `includes({ id, [slot]: [item] }, shape)` — so the `id` pins the match to
- * the one captor and a content-only collision with an identical embedded resource under a different captor cannot mask
- * a real removal. Asserts every probe comes back falsy. Used to confirm embedded children and cascaded references are
+ * Probes each item scoped to its captor (`includes({ id, [slot]: [item] }, shape)`), so an identical embedded resource
+ * under a different captor cannot mask a real removal. Confirms that embedded children and cascaded references are
  * gone.
  */
 async function expectAbsent(
@@ -81,7 +80,7 @@ async function expectAbsent(
  *
  * The three operations share storage semantics for forward and reverse triple writes, embedded resource handling
  * and union variant encoding, but differ on the return-value contract (new vs existing resource handling),
- * absence-semantics applicability (`create` is exempt — full intended state at creation time has nothing to retract)
+ * absence-semantics applicability (`create` is exempt, since a full state at creation time has nothing to retract)
  * and op-specific link-semantics scenarios. Branching on `op` is confined to the `contract` block and to scenario
  * registration filters that gate inapplicable cases per op.
  */
@@ -147,7 +146,11 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 
 					const state = testProduct("MISSING-001", "Non-Existent Product", { price: 49.99, stock: 0 });
 
-					expect(await store.update({ entry: state.id, shape: Product, state: loose(state) })).toBeUndefined();
+					expect(await store.update({
+						entry: state.id,
+						shape: Product,
+						state: loose(state)
+					})).toBeUndefined();
 
 				}));
 
@@ -860,25 +863,32 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
 			};
 
 			/**
-			 * Per-op union test row. The `mutation` strategy decides whether the test sets the union
-			 * slot to a new value, sets a non-slot entry while leaving the union slot untouched (insert
-			 * upsert preservation), or both. The `expected` entry captures any persist-time normalisation
+			 * Per-op union test row.
+			 *
+			 * The `value` entry decides whether the test sets the union slot to a new value, clears it, or leaves it
+			 * untouched (insert upsert preservation). The `expected` entry captures any persist-time normalisation
 			 * (for example, empty-element drop) applied to the slot value.
 			 */
 			interface UnionCase {
 				readonly label: string;
 				readonly applicable: ReadonlyArray<"create" | "update" | "insert">;
 				readonly slot: "address" | "contacts" | "score" | "certified";
-				/** Vendor sample picker (insert/update); ignored on create */
+				/**
+				 * Vendor sample picker (insert/update); ignored on create.
+				 */
 				readonly pick?: (v: Resource) => boolean;
-				/** Identifier seed for create's standalone state */
+				/**
+				 * Identifier seed for create's standalone state.
+				 */
 				readonly code?: string;
 				/**
 				 * Slot value to persist; `"preserve"` means leave the existing slot alone (insert upsert),
 				 * `undefined` means explicitly clear the slot.
 				 */
 				readonly value: Resource[string] | "preserve";
-				/** Persist-time normalised slot value used in the `includes` probe (defaults to `value`) */
+				/**
+				 * Persist-time normalised slot value used in the `includes` probe (defaults to `value`).
+				 */
 				readonly expected?: Resource[string];
 			}
 
@@ -1490,8 +1500,8 @@ export function testPersistWrite(op: "create" | "update" | "insert", factory: Te
  * Shared body for the `delete` and `remove` persist conformance suites.
  *
  * The two operations share storage semantics (full-resource drop with reverse and captive cascades) and differ only
- * in the return-value contract: `delete` reports whether a resource existed (id / undefined), while `remove` is
- * idempotent (id always). Branching on `op` is therefore confined to the `contract` describe block.
+ * in the return-value contract: `delete` returns the identifier only if the resource existed, while `remove` is
+ * idempotent and always returns it. Branching on `op` is therefore confined to the `contract` describe block.
  */
 export function testPersistClear(op: "delete" | "remove", factory: TestFactory): void {
 

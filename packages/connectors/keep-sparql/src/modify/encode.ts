@@ -15,17 +15,17 @@
  */
 
 /**
- * Mutations SPARQL Update emitter.
+ * Modify-pass SPARQL update encoder.
  *
- * Folds a batch of {@link Modify} requests into one SPARQL 1.1 Update. A request carrying a `state`
- * is emitted as a `DELETE WHERE; INSERT DATA` pair that clears the entry's owned triples and
- * re-inserts the supplied state; a request with an omitted `state` is emitted as a cascade
- * `DELETE WHERE` that removes the entry together with its embedded and captive descendants. Every
- * statement is joined into a single update applied in submission order.
+ * Folds a batch of {@link Modify} requests into one SPARQL 1.1 update applied in submission order:
  *
- * All structural decisions are driven by the request's {@link Flake | plan}: forward and reverse
- * predicates are both written, foreign references are left untouched as read-only views, and
- * embedded resources recurse while plain references are written in place.
+ *  - a request carrying a `link` inserts the membership edge alone, leaving the entry's own state untouched;
+ *  - a request carrying a `state` clears the entry's owned triples and inserts the supplied state;
+ *  - a request with no `state` deletes the entry together with its embedded and captive descendants.
+ *
+ * The request's {@link Flake | plan} drives every structural decision. Forward and reverse predicates are both
+ * written, foreign properties are left untouched, and embedded resources are written recursively while references
+ * are written as links.
  *
  * @see {@link https://www.w3.org/TR/sparql11-update/ SPARQL 1.1 Update}
  *
@@ -61,17 +61,13 @@ import { forward, reverse, valuesToTerms } from "../_/_encode.js";
 
 
 /**
- * Emits a single batched SPARQL Update covering every supplied request.
- *
- * Each request is dispatched by what it carries: a `link` produces an insert of the membership edge
- * alone, a present `state` a cleanup-and-insert statement, an omitted `state` a cascade delete. The
- * per-request statements are joined into one update applied in submission order.
+ * Encodes a single SPARQL update covering every request in the batch.
  *
  * @param scope The variable allocator shared across every request's cleanup walk, keyed on
  * {@link Branch} identity
  * @param batch The batched root entries paired with their {@link Flake | mutation plans}
  *
- * @returns The unified SPARQL Update query
+ * @returns The batched SPARQL update
  */
 export function encode(
 	scope: Scope<Variable>,
@@ -85,7 +81,10 @@ export function encode(
 	));
 
 
-	function attach(entry: Reference, { property, item }: { readonly property: Property; readonly item: Reference }): SPARQL {
+	function attach(entry: Reference, { property, item }: {
+		readonly property: Property;
+		readonly item: Reference
+	}): SPARQL {
 
 		// the membership edge alone, in both directions the property declares: the entry's own state is left as it is
 
@@ -181,7 +180,7 @@ export function encode(
 
 			function record(entry: Named, shape: ResourceShape, state: Resource): SPARQL {
 
-				// denormalise the class lineage as `rdf:type` triples — own `class` plus inherited `classes` —
+				// denormalise the class lineage as `rdf:type` triples (own `class` plus inherited `classes`),
 				// so an exact-match query on any supertype reaches the instance (class-lineage retrieval)
 
 				return fragment(
@@ -264,7 +263,7 @@ export function encode(
 		const root = scope.resolve();
 
 		// wildcard patterns matching every triple incident on `?root` (outgoing then incoming),
-		// resolved once so the same variables bind in both the DELETE template and the WHERE match
+		// resolved once so the same variables bind in both the `delete` template and the `where` match
 
 		const wildcard = [
 			pattern([root, scope.resolve(), scope.resolve()]),
@@ -328,7 +327,7 @@ export function encode(
 
 
 	/**
-	 * Reports whether a shape owns the `rdf:type` triples of the resources it describes.
+	 * Checks whether a shape owns the `rdf:type` triples of the resources it describes.
 	 *
 	 * A `type` member activates only on a shape declaring its own target class, so a common supershape may factor the
 	 * member without contributing a type: the class-less shapes inheriting it carry no type of their own and their

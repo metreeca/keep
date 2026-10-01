@@ -15,7 +15,7 @@
  */
 
 /**
- * Lookup contract conformance: what `store.lookup` hands back as a whole, independently of the template, collection,
+ * Lookup contract conformance: what `store.lookup` returns as a whole, independently of the template, collection,
  * criteria, projection, expression and localised machinery the sibling `retrieve/*` suites exercise.
  *
  * Covers entry validation, the `undefined` resolution for a missing resource, special-field retrieval and the
@@ -57,11 +57,6 @@ export function testRetrieveContract(factory: TestFactory): void {
 		};
 
 		const cases: ReadonlyArray<readonly [string, ContractCase]> = [
-
-			// the model-typing cases the previous notation carried — a typed leaf stating the wrong type, a
-			// query tuple over a single-valued property, an over-length collection tuple — have no subject
-			// under the reworked model: every leaf is the atomic `{}` and a collection carries its criteria
-			// on the entry naming it, so none of those forms is statable
 
 			["reject with RangeError for a relative IRI", {
 				entry: "relative/path",

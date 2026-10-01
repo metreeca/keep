@@ -812,7 +812,11 @@ describe("createFlake", () => {
 				const flake = createQueryFlake(Product, { "y=year:launched": {} });
 
 				expect(at(flake, "launched").drain?.alias).toBeUndefined();
-				expect(at(flake, "launched").transforms?.["year"]?.drain).toEqual({ alias: "y", form: "atomic", query: {} });
+				expect(at(flake, "launched").transforms?.["year"]?.drain).toEqual({
+					alias: "y",
+					form: "atomic",
+					query: {}
+				});
 
 			});
 
@@ -834,7 +838,11 @@ describe("createFlake", () => {
 
 				expect(at(flake, "name").drain).toEqual({ alias: "n", form: "atomic", query: {} });
 				expect(at(flake, "vendor", "name").drain).toEqual({ alias: "v", form: "atomic", query: {} });
-				expect(at(flake, "launched").transforms?.["year"]?.drain).toEqual({ alias: "y", form: "atomic", query: {} });
+				expect(at(flake, "launched").transforms?.["year"]?.drain).toEqual({
+					alias: "y",
+					form: "atomic",
+					query: {}
+				});
 
 			});
 
@@ -891,7 +899,7 @@ describe("createFlake", () => {
 				const subject = at(flake, "media", "subject");
 
 				expect(getShapeBranches(subject.range.shape)).toHaveLength(2);        // disjunction [Product,
-			                                                                           // Category]
+				// Category]
 				expect(subject.drain?.alias).toBe("s");
 
 				expect(variant(subject, 0)["name"]?.drain).toEqual({ form: "atomic", query: {} });     // Product arm
@@ -1258,7 +1266,11 @@ describe("createFlake", () => {
 		// of the per-variant declarations (§5.8.1)
 
 		const Owner = resource({ name: optional(string()), code: optional(string()) });
-		const Label = resource({ name: optional(string()), code: optional(string()), owner: optional(reference(Owner)) });
+		const Label = resource({
+			name: optional(string()),
+			code: optional(string()),
+			owner: optional(reference(Owner))
+		});
 		const Count = resource({ name: optional(integer()), owner: optional(reference(Owner)) });
 
 		const Holder = resource({ item: optional(union(Label, Count)) });
@@ -1301,7 +1313,10 @@ describe("createFlake", () => {
 
 		it("folds a projected path and a binding's nested template naming it to one branch in query mode", async () => {
 
-			const name = props(at(createQueryFlake(Product, { "v=vendor": { name: {} }, "n=vendor.name": {} }), "vendor")).name;
+			const name = props(at(createQueryFlake(Product, {
+				"v=vendor": { name: {} },
+				"n=vendor.name": {}
+			}), "vendor")).name;
 
 			expect(name.drain?.alias).toBe("n");
 
@@ -1656,7 +1671,10 @@ describe("union methods", () => {
 
 			it("is told apart from the criteria riding on it", async () => {
 
-				expect(getUnionBranches(union(text, link), { "0": { name: {} }, "#": 10 })).toEqual([[link, { name: {} }]]);
+				expect(getUnionBranches(union(text, link), {
+					"0": { name: {} },
+					"#": 10
+				})).toEqual([[link, { name: {} }]]);
 
 			});
 
@@ -1674,7 +1692,10 @@ describe("union methods", () => {
 
 		it("maps each variant to the alternative reaching it", async () => {
 
-			expect(getUnionPlaceholders(union(text, link), { "0": {}, "1": { name: {} } })).toEqual(new Map<unknown, unknown>([
+			expect(getUnionPlaceholders(union(text, link), {
+				"0": {},
+				"1": { name: {} }
+			})).toEqual(new Map<unknown, unknown>([
 				[text, {}],
 				[link, { name: {} }]
 			]));
@@ -1695,7 +1716,10 @@ describe("union methods", () => {
 
 			it("fold a template over the atomic, whatever their order", async () => {
 
-				expect(getUnionPlaceholders(union(text, link), { "0": { name: {} }, "1": {} })).toEqual(new Map<unknown, unknown>([
+				expect(getUnionPlaceholders(union(text, link), {
+					"0": { name: {} },
+					"1": {}
+				})).toEqual(new Map<unknown, unknown>([
 					[link, { name: {} }],
 					[text, {}]
 				]));
@@ -1704,7 +1728,10 @@ describe("union methods", () => {
 
 			it("fold a locale over the atomic", async () => {
 
-				expect(getUnionPlaceholders(union(text, label), { "0": { "*": {} }, "1": {} })).toEqual(new Map<unknown, unknown>([
+				expect(getUnionPlaceholders(union(text, label), {
+					"0": { "*": {} },
+					"1": {}
+				})).toEqual(new Map<unknown, unknown>([
 					[label, { "*": {} }],
 					[text, {}]
 				]));

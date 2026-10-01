@@ -17,15 +17,14 @@
 /**
  * Select-pass query encoder.
  *
- * Folds every queued {@link Select} into one batched SPARQL SELECT, contributing each request as a
- * UNION arm off a shared outer query. Per-request variable allocation flows through the supplied
- * {@link Scope}, so the {@link decode | decoder} recovers the same solution slots when settling each
- * request against the returned round's tuples.
+ * Folds every queued {@link Select} into one SPARQL `select` query, contributing each request as an arm. A single
+ * request runs as its bare arm, while several are joined by a `union` under an outer query keeping each request's
+ * rows contiguous. Variables are allocated through the {@link Scope} shared with the decoder, so both sides agree on
+ * every column.
  *
- * Each arm is emitted clause by clause from the request's {@link Flake | query plan}, every clause a
- * recursive descent over the nodes the query reads: the projection head, the graph patterns, the row
- * filters, the group filters, the ordering and the window. The variable protocol the decoder relies on
- * is stated in `select/index.md`.
+ * Each arm is built from the request's {@link Flake | query plan}, covering only the nodes the query reads: the
+ * projection head, the graph patterns, the row filters, the group filters, the ordering and the window. The
+ * contract shared with the decoder is stated in `select/index.md`.
  *
  * @module
  */
@@ -124,12 +123,12 @@ type Edge = {
 
 
 /**
- * Folds every queued select request into one batched SPARQL SELECT.
+ * Encodes one batched `select` query covering every request.
  *
  * @param scope The variable scope shared with the decoder, allocating per-request solution slots
  * @param batch The queued select requests to encode, each paired with its {@link Flake | query plan} and deferred
  *
- * @returns The batched SELECT query covering every request in `batch`
+ * @returns The batched `select` query covering every request in `batch`
  */
 export function encode(
 	scope: Scope<Variable>,
@@ -153,7 +152,9 @@ export function encode(
 	 * One request's arm: the member edge, the patterns the query reads, and the clauses projecting,
 	 * filtering, grouping, ordering and slicing the members.
 	 */
-	function arm({ request: { entry, field, locale }, flake }: Deferred<Select> & { readonly flake: Flake }, index: number): SPARQL {
+	function arm({ request: { entry, field, locale }, flake }: Deferred<Select> & {
+		readonly flake: Flake
+	}, index: number): SPARQL {
 
 		const root = scope.resolve(flake);
 		const edge: Edge = { owner: named(entry), property: field, object: root };
@@ -348,53 +349,53 @@ export function encode(
 		 */
 		function coalesced(edge: Edge, target: SPARQL): readonly SPARQL[] {
 
-				const { owner, property, object } = edge;
+			const { owner, property, object } = edge;
 
-				return [
-					link([owner, property, object]),
-					filter(eq(tagged(variable(object)), winner(edge))),
-					bind(str(variable(object)), target)
-				];
+			return [
+				link([owner, property, object]),
+				filter(eq(tagged(variable(object)), winner(edge))),
+				bind(str(variable(object)), target)
+			];
 
+		}
+
+		/**
+		 * The patterns binding a property mixing text with other variants to `target` folded (§3.2): a tagged
+		 * value passes under the winning tag of the request's language priority alone, as a plain string; any
+		 * other stored value, a plain string or a node among them, passes as it is.
+		 */
+		function folded(edge: Edge, target: SPARQL): readonly SPARQL[] {
+
+			const { owner, property, object } = edge;
+
+			const raw = variable(object);
+			const tag = coalesce(lang(raw), string("")); // a node carries no tag
+
+			return [
+				link([owner, property, object]),
+				filter(or(eq(tag, string("")), eq(tag, winner(edge)))),
+				bind(iif(eq(tag, string("")), raw, str(raw)), target)
+			];
+
+		}
+
+		/**
+		 * The tag the request's language priority settles a property's text on: the first priority tag the
+		 * owner carries a value under, or none.
+		 */
+		function winner({ owner, property }: Edge): SPARQL {
+
+			const tags = locale.length > 0 ? locale : ["und"];
+			const probe = scope.resolve();
+
+			return tags.reduceRight<SPARQL>((rest, tag) => iif(present(tag), string(tag), rest), string(""));
+
+
+			function present(tag: Tag): SPARQL {
+				return exists(link([owner, property, probe]), filter(eq(tagged(variable(probe)), string(tag))));
 			}
 
-			/**
-			 * The patterns binding a property mixing text with other variants to `target` folded (§3.2): a tagged
-			 * value passes under the winning tag of the request's language priority alone, as a plain string; any
-			 * other stored value, a plain string or a node among them, passes as it is.
-			 */
-			function folded(edge: Edge, target: SPARQL): readonly SPARQL[] {
-
-				const { owner, property, object } = edge;
-
-				const raw = variable(object);
-				const tag = coalesce(lang(raw), string("")); // a node carries no tag
-
-				return [
-					link([owner, property, object]),
-					filter(or(eq(tag, string("")), eq(tag, winner(edge)))),
-					bind(iif(eq(tag, string("")), raw, str(raw)), target)
-				];
-
-			}
-
-			/**
-			 * The tag the request's language priority settles a property's text on: the first priority tag the
-			 * owner carries a value under, or none.
-			 */
-			function winner({ owner, property }: Edge): SPARQL {
-
-				const tags = locale.length > 0 ? locale : ["und"];
-				const probe = scope.resolve();
-
-				return tags.reduceRight<SPARQL>((rest, tag) => iif(present(tag), string(tag), rest), string(""));
-
-
-				function present(tag: Tag): SPARQL {
-					return exists(link([owner, property, probe]), filter(eq(tagged(variable(probe)), string(tag))));
-				}
-
-			}
+		}
 
 		function tagged(value: SPARQL): SPARQL { // und text is stored as a plain literal (§6)
 			return iif(eq(lang(value), string("")), string("und"), lang(value));
@@ -432,13 +433,21 @@ export function encode(
 
 				return opt(node.all, options => {
 
-					const { anchor, path } = node.path.reduce<{ at: Flake; anchor: Variable; path: readonly SPARQL[] }>(({ at, anchor, path }, name) => {
+					const { anchor, path } = node.path.reduce<{
+						at: Flake;
+						anchor: Variable;
+						path: readonly SPARQL[]
+					}>(({ at, anchor, path }, name) => {
 
 						const branch = (at.entries ?? {})[name];
 						const target = scope.resolve();
 
 						return branch.entry.kind === "id" ? { at: branch, anchor, path }
-							: branch.entry.kind === "type" ? { at: branch, anchor: target, path: [...path, pattern([anchor, named(rdf.type), target])] }
+							: branch.entry.kind === "type" ? {
+									at: branch,
+									anchor: target,
+									path: [...path, pattern([anchor, named(rdf.type), target])]
+								}
 								: { at: branch, anchor: target, path: [...path, link([anchor, branch.entry, target])] };
 
 					}, { at: flake, anchor: root, path: [] });

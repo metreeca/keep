@@ -84,7 +84,12 @@ describe("createRESTStore", () => {
 
 		const callers: Array<readonly [string, (store: StoreClient, entry: string) => Promise<unknown>]> = [
 			["detail", (store, entry) => store.lookup({ entry, shape, model: { id: {}, name: {} } })],
-			["create", (store, entry) => store.create({ entry, shape: Catalogue, model: { items: {} }, state: { name: "X" } })],
+			["create", (store, entry) => store.create({
+				entry,
+				shape: Catalogue,
+				model: { items: {} },
+				state: { name: "X" }
+			})],
 			["update", (store, entry) => store.update({ entry, shape, state: { name: "X" } })],
 			["delete", (store, entry) => store.delete({ entry, shape })],
 			["insert", (store, entry) => store.insert({ entry, shape, state: { name: "X" } })],
@@ -142,7 +147,11 @@ describe("createRESTStore", () => {
 			const fetcher = mockFetcher(() => jsonResponse({ items: [item] }));
 			const store = createRESTStore({ fetch: fetcher });
 
-			const result = await store.lookup({ entry: catalogue, shape: Catalogue, model: { items: { id: {}, name: {} } } });
+			const result = await store.lookup({
+				entry: catalogue,
+				shape: Catalogue,
+				model: { items: { id: {}, name: {} } }
+			});
 
 			expect(result).toEqual({ items: [item] });
 
@@ -242,7 +251,11 @@ describe("createRESTStore", () => {
 			const fetcher = mockFetcher(() => jsonResponse({ id: "/products/1", name: "Widget" }));
 			const store = createRESTStore({ fetch: fetcher });
 
-			const result = await store.lookup({ entry: `${base}/catalog/products/1`, shape, model: { id: {}, name: {} } });
+			const result = await store.lookup({
+				entry: `${base}/catalog/products/1`,
+				shape,
+				model: { id: {}, name: {} }
+			});
 
 			expect(result).toEqual({ id: `${base}/products/1`, name: "Widget" });
 
@@ -365,7 +378,12 @@ describe("createRESTStore", () => {
 			const fetcher = mockFetcher(() => emptyResponse(201, { "Location": `${base}/products/42` }));
 			const store = createRESTStore({ fetch: fetcher });
 
-			await store.create({ entry: `${base}/products/`, shape: Catalogue, model: { items: {} }, state: { name: "Widget" } });
+			await store.create({
+				entry: `${base}/products/`,
+				shape: Catalogue,
+				model: { items: {} },
+				state: { name: "Widget" }
+			});
 
 			const [url, init] = fetcher.mock.calls[0];
 
@@ -380,7 +398,12 @@ describe("createRESTStore", () => {
 			const fetcher = mockFetcher(() => emptyResponse(201, { "Location": `${base}/products/42` }));
 			const store = createRESTStore({ fetch: fetcher });
 
-			expect(await store.create({ entry: `${base}/products/`, shape: Catalogue, model: { items: {} }, state: { name: "Widget" } }))
+			expect(await store.create({
+				entry: `${base}/products/`,
+				shape: Catalogue,
+				model: { items: {} },
+				state: { name: "Widget" }
+			}))
 				.toBe(`${base}/products/42`);
 
 		});
@@ -390,7 +413,12 @@ describe("createRESTStore", () => {
 			const fetcher = mockFetcher(() => emptyResponse(409));
 			const store = createRESTStore({ fetch: fetcher });
 
-			expect(await store.create({ entry: `${base}/products/`, shape: Catalogue, model: { items: {} }, state: { name: "Widget" } }))
+			expect(await store.create({
+				entry: `${base}/products/`,
+				shape: Catalogue,
+				model: { items: {} },
+				state: { name: "Widget" }
+			}))
 				.toBeUndefined();
 
 		});
@@ -400,7 +428,12 @@ describe("createRESTStore", () => {
 			const fetcher = mockFetcher(() => emptyResponse(500));
 			const store = createRESTStore({ fetch: fetcher });
 
-			await expect(store.create({ entry: `${base}/products/`, shape: Catalogue, model: { items: {} }, state: { name: "Widget" } }))
+			await expect(store.create({
+				entry: `${base}/products/`,
+				shape: Catalogue,
+				model: { items: {} },
+				state: { name: "Widget" }
+			}))
 				.rejects.toMatchObject({ status: 500 });
 
 		});
@@ -422,7 +455,8 @@ describe("createRESTStore", () => {
 			const store = createRESTStore({ fetch: fetcher });
 
 			await expect(store.create({
-				entry: `${base}/products/`, shape: Catalogue, model: { items: {} }, state: { name: 42 } as never // wrong type
+				entry: `${base}/products/`, shape: Catalogue, model: { items: {} }, state: { name: 42 } as never // wrong
+																												 // type
 			})).rejects.toBeInstanceOf(TraceError);
 
 			expect(fetcher).not.toHaveBeenCalled();
@@ -436,7 +470,12 @@ describe("createRESTStore", () => {
 			const observer = vi.fn<StoreObserver>();
 
 			store.observe(observer);
-			await store.create({ entry: `${base}/products/`, shape: Catalogue, model: { items: {} }, state: { name: "Widget" } });
+			await store.create({
+				entry: `${base}/products/`,
+				shape: Catalogue,
+				model: { items: {} },
+				state: { name: "Widget" }
+			});
 
 			expect(observer).toHaveBeenCalledWith({ [`${base}/products/42`]: true });
 
@@ -449,7 +488,12 @@ describe("createRESTStore", () => {
 			const observer = vi.fn<StoreObserver>();
 
 			store.observe(observer);
-			await store.create({ entry: `${base}/products/`, shape: Catalogue, model: { items: {} }, state: { name: "Widget" } });
+			await store.create({
+				entry: `${base}/products/`,
+				shape: Catalogue,
+				model: { items: {} },
+				state: { name: "Widget" }
+			});
 
 			expect(observer).toHaveBeenCalledWith({ [`${base}/products/42`]: true });
 
@@ -460,7 +504,12 @@ describe("createRESTStore", () => {
 			const fetcher = mockFetcher(() => emptyResponse(201, { "Location": "42" }));
 			const store = createRESTStore({ fetch: fetcher });
 
-			expect(await store.create({ entry: `${base}/products/1`, shape: Catalogue, model: { items: {} }, state: { name: "Widget" } }))
+			expect(await store.create({
+				entry: `${base}/products/1`,
+				shape: Catalogue,
+				model: { items: {} },
+				state: { name: "Widget" }
+			}))
 				.toBe(`${base}/products/42`);
 
 		});
@@ -471,7 +520,12 @@ describe("createRESTStore", () => {
 			const fetcher = mockFetcher(() => emptyResponse(201, { "Location": foreign }));
 			const store = createRESTStore({ fetch: fetcher });
 
-			expect(await store.create({ entry: `${base}/products/`, shape: Catalogue, model: { items: {} }, state: { name: "Widget" } }))
+			expect(await store.create({
+				entry: `${base}/products/`,
+				shape: Catalogue,
+				model: { items: {} },
+				state: { name: "Widget" }
+			}))
 				.toBe(foreign);
 
 		});

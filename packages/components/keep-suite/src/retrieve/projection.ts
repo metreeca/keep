@@ -16,8 +16,8 @@
 
 import { isObject } from "@metreeca/core";
 import { ascending, by, compound, descending } from "@metreeca/core/order";
-import type { Resource } from "@metreeca/qest/state";
 import type { Criteria, Projection } from "@metreeca/qest/model";
+import type { Resource } from "@metreeca/qest/state";
 import { beforeAll, describe, expect, it } from "vitest";
 import { lookup, type TestFactory } from "../index.core.js";
 import { collections } from "../toys.core.js";
@@ -890,20 +890,6 @@ export function testRetrieveProjection(factory: TestFactory): void {
 				expect(subjects.some(s => isObject(s) && "title" in s)).toBe(true);  // video → Category subject
 
 			}));
-
-			// the plain-placeholder rejection the previous notation carried has no subject: the atomic `{}` is
-			// admissible over a union-typed binding, reaching every variant coming back as a value (§5.3)
-
-			// Union no longer admits a localised branch (qest redefinition), so the former
-			// localised-union-variant projection test has been removed.
-
-			// The default `{ "": Placeholder }` form has been removed under the redesign
-			// (a Criteria now attaches as the second tuple slot `[Placeholder, Criteria]`), so no
-			// default-form projection test belongs here.
-
-			// the multi-valued-cell rejection the previous notation carried read the arity off the placeholder;
-			// a template states no cardinality any more, so the check belongs to the shape and is no longer
-			// stated here
 
 		});
 

@@ -21,7 +21,7 @@ import { resolve } from "@metreeca/core/resource";
 import { immutable } from "@metreeca/core/values";
 import type { Query, Slot, Template } from "@metreeca/qest/model";
 import type { Reference, Resource, Value } from "@metreeca/qest/state";
-import type { Broker, Deferred, Detect, Handler, Detail, Modify, Request, Select } from "./batching.js";
+import type { Broker, Deferred, Detail, Detect, Handler, Modify, Request, Select } from "./batching.js";
 
 
 /**
@@ -36,14 +36,13 @@ const SegmentFormat = /^[^\s/?#]+$/;
 /**
  * Creates a batching request {@link Broker}.
  *
- * Backs {@link createBatchingStore}: returns a broker that queues each submitted request by type and
- * drives the queues to completion against the supplied handlers. The first submission kicks a drain
- * loop that runs all four handlers concurrently, round by round, until every queue is quiescent;
- * requests issued mid-round, whether forwarded by a handler or freshly submitted, are served on a
- * later round, so handlers must not assume any ordering between handlers.
+ * Backs {@link createBatchingStore}: the broker queues each submitted request by type and serves the queues in rounds
+ * against the supplied handlers, running all four concurrently, until every queue is empty. Requests issued
+ * mid-round, whether forwarded by a handler or freshly submitted, are served in a later round, so handlers must not
+ * assume any ordering between handlers.
  *
- * Handler errors poison the run: every still-pending {@link Deferred} is rejected with the
- * originating error, so callers see a deterministic failure rather than a hang.
+ * A handler throw fails the whole run: every pending {@link Deferred} is rejected with the originating error, so
+ * callers see a deterministic failure rather than a hang.
  *
  * @param handlers The batch handlers, one per request type. Each settles every {@link Deferred} in
  *     its batch and may issue nested {@link Broker.detail} / {@link Broker.select} calls while
@@ -209,10 +208,10 @@ export function createBroker(handlers: {
 /**
  * Mints the identifier of a resource created under a collection.
  *
- * Yields an identifier nested under `entry` that matches the identifier {@link ResourceShape.pattern | pattern}
- * the shape declares, where it does: each `{name}` slot of the pattern is read off the like-named member of `state`
- * where the state carries one, and filled with an opaque segment otherwise, as is a trailing `/*` slot; a
- * root-relative pattern is resolved against `entry`. A shape declaring no pattern yields an opaque segment under
+ * Returns an identifier nested under `entry`, matching the identifier {@link ResourceShape.pattern | pattern} declared
+ * by the shape, if any. Each `{name}` slot is filled with the like-named member of `state`, or with an opaque segment
+ * if the state has no such member. A trailing `/*` slot is always filled with an opaque segment. A root-relative
+ * pattern is resolved against `entry`. If the shape declares no pattern, the identifier is an opaque segment under
  * `entry`.
  *
  * @param entry The absolute identifier of the resource collecting the new one
@@ -221,7 +220,7 @@ export function createBroker(handlers: {
  *
  * @returns The absolute identifier of the new resource
  *
- * @throws {@link !RangeError RangeError} If a member a slot is read off is not a single non-empty path segment
+ * @throws {@link !RangeError RangeError} If a member filling a slot is not a single non-empty path segment
  */
 export function mint(entry: Reference, shape: Lazy<ResourceShape>, state: Resource): Reference {
 

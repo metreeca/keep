@@ -15,15 +15,17 @@
  */
 
 /**
- * Model-driven storage API.
+ * Core model-driven storage API.
  *
  * Persists and retrieves linked data resources independently of the backend holding them. Resources are described by
- * {@link ResourceShape shapes} defined with the [@metreeca/blue](https://github.com/metreeca/blue) validation library,
- * and are read and written as {@link Resource} states, {@link Template} retrieval templates and {@link Projection}
- * queries following the data and query models of the [@metreeca/qest](https://github.com/metreeca/qest) data-modelling
- * library. The data operations of a {@link StoreClient} are what a connector implements against its backend; a
- * {@link Store} adds mutation events, transactional execution and lifecycle on top, typically supplied by
- * {@link createManagingStore}, and exposes both surfaces through one object.
+ * {@link ResourceShape shapes} defined with the [@metreeca/blue](https://github.com/metreeca/blue) validation library.
+ * They are read and written as {@link Resource} states, {@link Template} retrieval templates and {@link Projection}
+ * queries, following the data and query models of the [@metreeca/qest](https://github.com/metreeca/qest)
+ * data-modelling library.
+ *
+ * A {@link StoreClient} defines the data operations a connector implements against its backend. A {@link Store} adds
+ * mutation events, transactional execution and lifecycle management, and exposes both surfaces through one object.
+ * Connectors typically obtain the management surface from {@link createManagingStore}.
  *
  * {@link StoreClient} implementations are expected to fully support the {@link Template | query language}
  * defined by [@metreeca/qest](https://github.com/metreeca/qest), including property selection, linked
@@ -34,7 +36,7 @@
  * The {@link StoreClient} interface supports conditional resource operations for standard CRUD workflows:
  *
  * - {@link StoreClient.lookup lookup} — Retrieve a resource, narrowed to a validated retrieval template
- * - {@link StoreClient.create create} — Add a resource from a validated state to the collection a resource holds
+ * - {@link StoreClient.create create} — Add a resource from a validated state to a collection held by another resource
  * - {@link StoreClient.update update} — Replace a resource state with a validated state
  * - {@link StoreClient.delete delete} — Delete a resource identified by a validated entry
  *
@@ -57,17 +59,16 @@
  *
  * **Lifecycle**
  *
- * Every store exposes a {@link Store.close close} method that releases underlying resources
- * (database connections, file handles, observer subscriptions). Implementations with no resources to release
- * MAY return a resolved no-op.
+ * {@link Store.close close} releases the resources held by a store, such as database connections, file handles and
+ * observer subscriptions.
  *
  * **Shape Validation**
  *
- * Resource data is automatically {@link validate | validated} against the supplied shape:
+ * Request data is {@link validate | validated} against the supplied shape before it reaches the backend:
  *
  * - `model` is validated for {@link StoreClient.lookup lookup} and {@link StoreClient.create create}
- * - `state` is validated for {@link StoreClient.create create}, against the shape the collecting property ranges over,
- * and for {@link StoreClient.update update} and {@link StoreClient.insert insert}, against the supplied shape
+ * - `state` is validated for {@link StoreClient.update update} and {@link StoreClient.insert insert} against the
+ *   supplied shape, and for {@link StoreClient.create create} against the shape of the collected resources
  *
  * Validation failures surface as a {@link TraceError} carrying the collected failure trace.
  *
@@ -82,8 +83,8 @@
  * - {@link TraceError} — `model` or `state` fails {@link validate} against the shape
  * - {@link Problem} — network, storage, or other processing failures
  *
- * Callers should `await` and `try`/`catch` (or chain `.catch`) at the call site; the rejection
- * type discriminates logic errors from process errors.
+ * Errors are therefore handled at the call site, with `await` and `try`/`catch` or a chained `.catch`. The rejection
+ * type tells logic errors apart from process errors.
  *
  * **Retrieving Resources**
  *
@@ -214,11 +215,10 @@ import type { createManagingStore } from "./stores/managing.js";
 /**
  * Model-driven resource store.
  *
- * Extends {@link StoreClient} with management facilities (mutation events, transactional execution, and lifecycle)
- * to form the store surface produced by factories like {@link createManagingStore}. The data surface is factored into
- * a standalone {@link StoreClient} so it can be implemented and passed around on its own (for example, the inner client
- * handed to {@link Store.execute execute} carries no `execute` of its own), while consumers of a store reach both
- * surfaces through the same object.
+ * Extends {@link StoreClient} with management facilities: mutation events, transactional execution, and lifecycle.
+ * This is the store surface returned by connector factories and by wrappers like {@link createManagingStore}. The data
+ * surface stays a standalone {@link StoreClient}, so it can be implemented and passed around on its own: for example,
+ * the client handed to an {@link Store.execute execute} task carries no `execute` of its own.
  *
  * Every data method on a store is individually atomic, even when called outside {@link Store.execute execute} and
  * regardless of the number of server round-trips it may require.
@@ -239,11 +239,11 @@ export interface Store extends StoreClient {
 	/**
 	 * Observe mutation events.
 	 *
-	 * Each call mints an independent registration; multiple registrations of the same observer coexist and
-	 * fire independently, the observer being invoked once per matching registration per mutation batch. The
-	 * returned handle detaches **only** that registration; calling it more than once is a no-op and other
-	 * registrations of the same observer are unaffected. Detachment is the only supported way to stop
-	 * receiving events: repeated `observe` calls do not replace any prior registration.
+	 * Each call creates an independent registration. Multiple registrations of the same observer coexist and fire
+	 * independently: the observer is invoked once per matching registration for each mutation batch. The returned
+	 * handle detaches **only** its own registration. Calling it more than once is a no-op, and other registrations of
+	 * the same observer are unaffected. Detaching is the only way to stop receiving events: a repeated `observe` call
+	 * never replaces an earlier registration.
 	 *
 	 * `resources` is the filter for the registration:
 	 *
@@ -254,13 +254,13 @@ export interface Store extends StoreClient {
 	 *   matching any element and its descendants
 	 * - an empty collection — ignored; no registration is created and the returned handle is a no-op
 	 *
-	 * The filter is read once, as the registration is created: single-pass iterables are safe to hand over, and
-	 * later changes to the collection leave the registration untouched.
+	 * The filter is read once, when the registration is created. Single-pass iterables are safe to pass, and later
+	 * changes to the collection leave the registration untouched.
 	 *
 	 * > [!NOTE]
-	 * > The observer receives only resource identifiers and an existence flag — not the mutated state.
-	 * > This keeps event payloads small even when many resources are mutated within a single transaction,
-	 * > and lets each observer fetch whatever data envelope it needs via {@link StoreClient.lookup lookup}.
+	 * > The observer receives only resource identifiers and an existence flag, not the mutated state. Event payloads
+	 * > stay small even when a single transaction mutates many resources, and each observer can fetch the data it
+	 * > needs with {@link StoreClient.lookup lookup}.
 	 *
 	 * @param observer - Mutation observer invoked with each batch of matching mutations
 	 * @param resources - Filter (a single reference, a collection of references, or omitted for no filter)
@@ -274,23 +274,23 @@ export interface Store extends StoreClient {
 	/**
 	 * Execute a task within a store transaction.
 	 *
-	 * All operations performed during the task are executed atomically. If the task completes successfully, all
+	 * All operations performed by the task are executed atomically. If the task completes successfully, all
 	 * mutations are committed and {@link Store.observe registered observers} receive a single mutation event
-	 * containing all affected resources. If the task throws or rejects, including on logic errors
-	 * ({@link !RangeError RangeError}, {@link TraceError}) raised by inner {@link StoreClient} calls, no mutations are
-	 * executed, no events are notified, and the error is propagated to the caller as a promise rejection.
+	 * listing all affected resources. If the task throws or rejects, no mutations are committed and no events are
+	 * notified. This includes logic errors ({@link !RangeError RangeError}, {@link TraceError}) raised by inner
+	 * {@link StoreClient} calls. The error is propagated to the caller as a promise rejection.
 	 *
-	 * The task is handed its own {@link StoreClient} for the transaction. Operations performed through it belong to
-	 * the transaction and commit together, kept separate from any other `execute` running at the same time.
-	 *
-	 * > [!WARNING]
-	 * > `execute` is not re-entrant: transaction boundaries are flat, so a task cannot open a nested transaction
-	 * > and compositions must share a single outer call site.
+	 * The task receives its own {@link StoreClient} for the transaction. Operations performed through it belong to
+	 * the transaction and commit together, separately from any other `execute` running at the same time.
 	 *
 	 * > [!WARNING]
-	 * > The task MUST NOT retain or use the {@link StoreClient} it receives after `execute` settles: implementations
-	 * > may back it with transaction-scoped state (buffered mutations, a bound backend scope) that is flushed or
-	 * > discarded on completion, so any later call has undefined behaviour.
+	 * > `execute` is not re-entrant. Transaction boundaries are flat: a task cannot open a nested transaction, and
+	 * > composed operations must share a single outer call.
+	 *
+	 * > [!WARNING]
+	 * > The task MUST NOT retain or use the {@link StoreClient} it receives after `execute` settles. Implementations
+	 * > may back it with transaction-scoped state, such as buffered mutations or a bound backend scope, that is
+	 * > flushed or discarded on completion, so any later call has undefined behaviour.
 	 *
 	 * > [!WARNING]
 	 * > **Atomicity is mandatory; isolation is best-effort.** The task's mutations and their events always commit
@@ -315,7 +315,7 @@ export interface Store extends StoreClient {
 	 * Release resources held by this store.
 	 *
 	 * Frees underlying resources such as database connections or file handles. Calling `close` on an
-	 * already-closed store has no effect; implementations with no resources to release MAY return a
+	 * already-closed store has no effect. Implementations with no resources to release MAY return a
 	 * resolved no-op.
 	 *
 	 * @returns A promise resolving when all resources have been released; rejects with a {@link Problem} if a
@@ -328,33 +328,34 @@ export interface Store extends StoreClient {
 /**
  * Model-driven resource CRUD operations.
  *
- * Persists and retrieves linked data resources as shape-validated states and query projections.
+ * Persists and retrieves linked data resources as shape-validated states and query projections. This is the data
+ * surface a connector implements against its backend, and the client a {@link Store.execute execute} task works
+ * through.
  */
 export interface StoreClient {
 
 	/**
 	 * Look up a resource.
 	 *
-	 * Retrieves the single resource identified by `entry`, narrowed to the members the `model` {@link Template} names
-	 * and expanded through the linked resources it reaches. Values are typed after the `shape`: the template states
-	 * which members are wanted, not what they are.
+	 * Retrieves the resource identified by `entry`. The result holds only the members named by the `model`
+	 * {@link Template}, and expands the linked resources the template reaches. Values are typed after the `shape`:
+	 * the template states which members are wanted, not what they are.
 	 *
 	 * Multi-valued members are retrieved as collections. Filtering, ordering and pagination constraints are stated
-	 * under the member name, next to its retrieval keys. A {@link Projection} stated there instead of a template
+	 * under the member name, next to its retrieval keys. A {@link Projection} stated there in place of a template
 	 * returns rows of computed values, keyed by the names of its bindings. A collection with no matching item is
 	 * omitted from the result, like any other member without a value.
 	 *
 	 * > [!NOTE]
-	 * > `shape` and `model` are kept distinct so that a single `shape` can serve many retrieval templates: for
-	 * > example, a server wiring one `shape` at startup and accepting any admissible `model` decoded from the client
-	 * > request on each call. Callers wanting a template addressing every member the shape declares MUST author it
-	 * > explicitly.
+	 * > `shape` and `model` are kept distinct so that a single `shape` can serve many retrieval templates. For
+	 * > example, a server may wire one `shape` at startup and accept any admissible `model` decoded from each client
+	 * > request. A template retrieving every member the shape declares MUST be written out explicitly.
 	 *
 	 * > [!CAUTION]
 	 * > By default, `model` templates support the full query language, including aggregate transforms and nested
-	 * > expansion. When exposing retrieval to untrusted clients, restrict query complexity as required by setting the
-	 * > {@link StoreScope | scope} `plain` to `true`, `depth` to `0` or a positive value, and/or `limit` to a maximum
-	 * > result set size.
+	 * > expansion. When exposing retrieval to untrusted clients, restrict query complexity through the
+	 * > {@link StoreScope | scope}: set `plain` to `true`, `depth` to `0` or a positive value, and/or `limit` to a
+	 * > maximum result set size.
 	 *
 	 * @typeParam S - The shape driving the retrieval
 	 * @typeParam T - The retrieval template, naming only members the shape carries
@@ -374,15 +375,15 @@ export interface StoreClient {
 	/**
 	 * Create a resource.
 	 *
-	 * Adds a resource to the collection the resource identified by `entry` holds under the single multi-valued
-	 * property `model` names, provided no resource already exists under the identifier of the new one; its own data is
-	 * stored as described by the shape the collecting property ranges over.
+	 * Adds a new resource to a collection held by the resource identified by `entry`. The collecting property is the
+	 * single multi-valued property named by `model`, and the new resource is stored as described by the shape that
+	 * property ranges over. Nothing is created if a resource already exists under the identifier of the new one.
 	 *
-	 * The new resource is identified by the `id` its `state` carries, which must be nested under `entry`. Where `id`
-	 * is left out, the store mints one under `entry`, following the identifier {@link ResourceShape.pattern | pattern}
-	 * the collected shape declares, if any: each `{name}` slot is filled with the like-named member of `state`, which
-	 * must be a single path segment, and any other slot with an opaque segment. A remote store may leave the choice to
-	 * the service holding the collection.
+	 * The new resource is identified by the `id` of its `state`, which must be nested under `entry`. If `id` is left
+	 * out, the store mints one under `entry`, following the identifier {@link ResourceShape.pattern | pattern} declared
+	 * by the collected shape, if any. Each `{name}` slot is filled with the like-named member of `state`, which must
+	 * be a single path segment. Any other slot is filled with an opaque segment. A remote store may leave the choice
+	 * of identifier to the service holding the collection.
 	 *
 	 * Specific reference kinds are handled as follows:
 	 *
@@ -520,8 +521,8 @@ export interface StoreClient {
  * Store retrieval scope.
  *
  * Bounds the aggregates, nesting depth and page size a {@link StoreClient.lookup lookup} admits in its `model`, and
- * sets the locale priority for its localised content. Every member is optional: left out, a retrieval admits any
- * `model` the shape validates and negotiates against the undetermined `und` tag alone.
+ * sets the locale priority for its localised content. Every member is optional. An empty scope admits any `model`
+ * the shape validates, and resolves localised content against the undetermined `und` tag alone.
  */
 export type StoreScope = {
 
@@ -543,8 +544,10 @@ export type StoreScope = {
 	plain?: boolean
 
 	/**
-	 * Maximum nesting admitted for `model` expansion and query probe paths, each nested resource or path segment
-	 * counting against the budget; `0` rejects any nested template while still admitting IRI references.
+	 * Maximum nesting admitted for `model` expansion and query probe paths.
+	 *
+	 * Each nested resource or path segment counts against the budget. `0` rejects any nested template, but still
+	 * admits IRI references.
 	 *
 	 * @defaultValue Unbounded
 	 */
@@ -553,7 +556,7 @@ export type StoreScope = {
 	/**
 	 * Maximum page size admitted for the `#` pagination constraint on `model` collections.
 	 *
-	 * A positive value caps the result set: a `#` exceeding it or set to `0` (unbounded) is rejected, and a
+	 * A positive value caps the result set. A `#` exceeding it, or set to `0` (unbounded), is rejected, and a
 	 * collection with no `#` is held to it. `0` leaves result sets unbounded.
 	 *
 	 * @defaultValue `0`
@@ -613,9 +616,10 @@ export type StoreLookup<S extends Lazy<ResourceShape>, T extends Model<S, T>> = 
 	readonly shape: S;
 
 	/**
-	 * Retrieval template defining the data envelope of the result, naming only members `shape` carries, each in
-	 * a form its range admits. Multi-valued members may also state filtering, ordering and pagination constraints,
-	 * or a projection in place of a template.
+	 * Retrieval template defining the data envelope of the result.
+	 *
+	 * The template names only members carried by `shape`, each in a form its range admits. Multi-valued members may
+	 * also state filtering, ordering and pagination constraints, or a projection in place of a template.
 	 */
 	readonly model: T;
 
@@ -644,7 +648,7 @@ export type StoreCreate<S extends Lazy<ResourceShape>, T extends Slice<S, T>> = 
 	readonly shape: S;
 
 	/**
-	 * Collection slice naming the single multi-valued property `shape` carries that collects the new resource.
+	 * Collection slice naming the multi-valued property of `shape` that collects the new resource.
 	 */
 	readonly model: T;
 

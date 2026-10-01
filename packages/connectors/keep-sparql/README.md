@@ -11,8 +11,13 @@ implement the [@metreeca/wire-sparql](https://github.com/metreeca/wire/tree/main
 interface to support a new SPARQL backend.
 
 > [!IMPORTANT]
-> **Transaction Isolation** — Determined by the supplied `Repository`. The framework defers transaction semantics
-> to the backend; each connector documents the level it provides on its factory function.
+> **Transaction Isolation** — Determined by the supplied `Repository`: each connector documents the level it provides
+> on its factory function. Mutations issued within a store transaction are always buffered and applied as a single
+> update on commit.
+
+> [!IMPORTANT]
+> **Mutation Events** — Limited to mutations issued through the store; mutations from other clients on the underlying
+> repository are not observed.
 
 # Installation
 
@@ -33,9 +38,8 @@ npm install @metreeca/wire-sparql-oxigraph    # or another backend connector
 
 ## Wiring a Store
 
-Pass any [@metreeca/wire-sparql](https://github.com/metreeca/wire/tree/main/packages/wire-sparql) `Repository` connector
-to
-`createSPARQLStore` to obtain a fully functional `Store`:
+Pass any [@metreeca/wire-sparql](https://github.com/metreeca/wire/tree/main/packages/wire-sparql) `Repository`
+connector to `createSPARQLStore` to obtain a fully functional `Store`:
 
 ```typescript
 import { createSPARQLStore } from "@metreeca/keep-sparql";
@@ -56,9 +60,9 @@ const product = await store.lookup({
 ## Implementing a Connector
 
 A backend connector is a [@metreeca/wire-sparql](https://github.com/metreeca/wire/tree/main/packages/wire-sparql)
-`Repository`: implement `ask`, `select`, `construct`, `update`, `execute`, and optionally `close`, lifting backend node
-values into the shared `Term` representation with the `reference`, `tagged`, and `typed` constructors.
-`@metreeca/keep-sparql` then wraps any such connector into a `Store` via `createSPARQLStore`.
+`Repository`: implement `ask`, `select`, `construct`, `update`, `execute`, and `close`, lifting backend node values into
+the shared [@metreeca/trio](https://github.com/metreeca/trio) `Term` representation with the `named`, `tagged`, and
+`typed` constructors. `createSPARQLStore` then turns any such connector into a `Store`.
 
 See [@metreeca/wire-sparql-oxigraph](https://github.com/metreeca/wire/tree/main/packages/wire-sparql-oxigraph) for a
 complete reference connector.
@@ -66,22 +70,22 @@ complete reference connector.
 # Verified Backends
 
 This SPARQL connector has been exercised against the
-[@metreeca/keep-suite](https://github.com/metreeca/keep/tree/main/packages/keep-suite) conformance suite on the backends
-and versions below.
+[@metreeca/keep-suite](https://github.com/metreeca/keep/tree/main/packages/components/keep-suite) conformance suite on
+the backends and versions below, through the listed connectors.
 
-| Engine                       | Version                                                  | Storage       |
-|------------------------------|----------------------------------------------------------|---------------|
-| [Eclipse RDF4J][rdf4j]       | 5.3.1                                                    | MemoryStore   |
-| [Eclipse RDF4J][rdf4j]       | 5.3.1                                                    | NativeStore   |
-| [Eclipse RDF4J][rdf4j]       | 5.3.1                                                    | LmdbStore     |
-| [Apache Jena Fuseki][fuseki] | 6.1.0                                                    | MemoryDataset |
-| [Apache Jena Fuseki][fuseki] | 6.1.0                                                    | TDB1          |
-| [Apache Jena Fuseki][fuseki] | 6.1.0                                                    | TDB2          |
-| [Oxigraph][oxigraph]         | 0.5.8                                                    | in-memory     |
-| [Oxigraph][oxigraph]         | 0.5.8                                                    | disk          |
-| [QLever][qlever]             | [*upcoming*](https://github.com/metreeca/keep/issues/8)  | disk          |
-| [Fluree][fluree]             | [*upcoming*](https://github.com/metreeca/keep/issues/13) | disk          |
-| [Virtuoso][virtuoso]         | [*upcoming*](https://github.com/metreeca/keep/issues/9)  | disk          |
+| Engine                       | Version                                                  | Storage       | Connectors                                      |
+|------------------------------|----------------------------------------------------------|---------------|-------------------------------------------------|
+| [Eclipse RDF4J][rdf4j]       | 5.3.1                                                    | MemoryStore   | `createHTTPRepository`, `createRDF4JRepository` |
+| [Eclipse RDF4J][rdf4j]       | 5.3.1                                                    | NativeStore   | `createHTTPRepository`, `createRDF4JRepository` |
+| [Eclipse RDF4J][rdf4j]       | 5.3.1                                                    | LmdbStore     | `createHTTPRepository`, `createRDF4JRepository` |
+| [Apache Jena Fuseki][fuseki] | 6.1.0                                                    | MemoryDataset | `createHTTPRepository`                          |
+| [Apache Jena Fuseki][fuseki] | 6.1.0                                                    | TDB1          | `createHTTPRepository`                          |
+| [Apache Jena Fuseki][fuseki] | 6.1.0                                                    | TDB2          | `createHTTPRepository`                          |
+| [Oxigraph][oxigraph]         | 0.5.8                                                    | in-memory     | `createOxiRepository`                           |
+| [Oxigraph][oxigraph]         | 0.5.8                                                    | disk          | `createHTTPRepository`                          |
+| [QLever][qlever]             | [*upcoming*](https://github.com/metreeca/keep/issues/8)  | disk          |                                                 |
+| [Fluree][fluree]             | [*upcoming*](https://github.com/metreeca/keep/issues/13) | disk          |                                                 |
+| [Virtuoso][virtuoso]         | [*upcoming*](https://github.com/metreeca/keep/issues/9)  | disk          |                                                 |
 
 [rdf4j]: https://rdf4j.org/
 

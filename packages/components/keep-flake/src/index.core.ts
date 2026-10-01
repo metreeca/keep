@@ -15,11 +15,10 @@
  */
 
 /**
- * Producer-internal helpers for the flake IR.
+ * Internal helpers for flake builders.
  *
- * Utilities shared by the shape-, model-, and query-mode walks to assemble a node's property-major
- * {@link Entries}. Kept off the flake index's exported surface: only the flake producers
- * need them.
+ * Range resolution, drain classification, and property branch assembly shared by the shape-, model-, and
+ * query-mode builders. Not part of the package's public API.
  *
  * @module
  */
@@ -51,24 +50,27 @@ import type { Branch, Drain, Entries } from "./index.js";
 
 
 /**
- * The root node's effective {@link Range}: the driving `shape` enveloped as a range. The only
- * shape-to-range conversion in a flake — every other node's range is stepped from its parent's range.
+ * Resolves the root node's effective {@link Range}: the driving `shape` enveloped as a range.
+ *
+ * This is the only shape-to-range conversion in a flake: every other node's range is stepped from its parent's.
  */
 export function getRootRange(shape: Shape): Range {
 	return getRange(shape, [], []);
 }
 
 /**
- * The child {@link Range} one property step from a node's `range` (§5.8.1): the value the `property`
- * edge resolves to, composing cardinality across the step (an `id` / `type` marker yielding the IRI range).
+ * Resolves the child {@link Range} one `property` step from a node's `range` (§5.8.1).
+ *
+ * The cardinality composes across the step; an `id` / `type` marker resolves to the IRI range.
  */
 export function getPropertyRange(range: Range, property: Identifier): Range {
 	return getRange(range, [property], []);
 }
 
 /**
- * The {@link Range} a single `transform` produces from a stage's input `range` (§5.8.2): one stage
- * step, the pipe composed by nesting these rather than resolving the whole pipe at once.
+ * Resolves the {@link Range} a single `transform` produces from a stage's input `range` (§5.8.2).
+ *
+ * Pipes are resolved one stage at a time, each nested stage stepping from its parent's range.
  */
 export function getTransformRange(range: Range, transform: Transform): Range {
 	return getRange(range, [], [transform]);
@@ -76,11 +78,13 @@ export function getTransformRange(range: Range, transform: Transform): Range {
 
 
 /**
- * Resolves a probe against a shape or range through blue's {@link @metreeca/blue/value!effective | effective},
- * surfacing a {@link @metreeca/core!Trace | Trace} string (a contract violation, since models are validated at the Keep
- * boundary) as a {@link @metreeca/core!TraceError}. The shared engine behind {@link getRootRange} /
- * {@link getPropertyRange} / {@link getTransformRange}; every range in a flake is built incrementally through those,
- * never over a multi-step path.
+ * Resolves a probe against a shape or range through blue's {@link @metreeca/blue/value!effective | effective}.
+ *
+ * Backs {@link getRootRange}, {@link getPropertyRange}, and {@link getTransformRange}; every range in a flake is
+ * built one step at a time through those, never over a multi-step path.
+ *
+ * @throws {@link @metreeca/core/trace!TraceError | TraceError} If the probe fails to resolve: a contract violation,
+ * since Keep validates models at its boundary
  */
 function getRange(source: Shape | Range, path: readonly Identifier[], pipe: readonly Transform[]): Range {
 
@@ -239,7 +243,7 @@ export function mergeQueries(x: Query<Slot>, y: Query<Slot>): Query<Slot> {
  *
  * @returns The drain requested at the node
  *
- * @throws RangeError if `query` takes no form `range` admits
+ * @throws {@link !RangeError RangeError} If `query` takes no form `range` admits
  */
 export function getDrain(range: Range, query: Query<Slot>, alias?: Identifier): Drain {
 
@@ -293,10 +297,10 @@ export function getDrain(range: Range, query: Query<Slot>, alias?: Identifier): 
  * requested query as their {@link Flake.drain | drain}. A name declared by several variants is one property (union
  * coherence, §3.2): the requests reaching it fold through {@link mergeQueries} into one branch, entered through the
  * first declaring variant's member and ranging over the disjunction of the per-variant declarations (§5.8.1). Only a
- * single-valued range expanded inline as a nested object is descended for nested
- * properties; a leaf placeholder or a multi-valued range (which carries a
- * {@link @metreeca/qest/model!Query | Query}) holds none (§6.2). `path` accumulates the branch path to this node
- * and is prefixed onto every emitted child branch.
+ * single-valued property expanded by a non-atomic request is descended for nested properties. An atomic request
+ * (§5.3) or a multi-valued property, whose nested retrieval stays in its {@link @metreeca/qest/model!Query | query}
+ * (§5.6), holds none. `path` accumulates the branch path to this node and is prefixed onto every emitted child
+ * branch.
  *
  * @param range The effective {@link Range} of the node whose properties are assembled
  * @param path  The branch path accumulated to this node, prefixed onto every emitted child branch
@@ -338,7 +342,8 @@ export function getEntries(range: Range, path: readonly Identifier[], model: Que
 
 	const declared = records.flat().reduce<Readonly<Record<Identifier, readonly [Member, Query<Slot>]>>>(
 		(folded, [name, member, query]) => ({
-			...folded, [name]: name in folded ? [folded[name][0], mergeQueries(folded[name][1], query)] : [member, query]
+			...folded,
+			[name]: name in folded ? [folded[name][0], mergeQueries(folded[name][1], query)] : [member, query]
 		}),
 		{}
 	);
@@ -412,7 +417,10 @@ export function mergeEntries(entries: readonly Entries[]): undefined | Entries {
 
 	return entries.length === 0 ? undefined
 		: entries.flatMap(record => Object.entries(record)).reduce<Entries>(
-			(merged, [name, branch]) => ({ ...merged, [name]: name in merged ? mergeBranches(merged[name], branch) : branch }),
+			(merged, [name, branch]) => ({
+				...merged,
+				[name]: name in merged ? mergeBranches(merged[name], branch) : branch
+			}),
 			{}
 		);
 

@@ -8,14 +8,14 @@ Turnkey model-driven storage for linked data resources.
 resource models that describe them:
 
 - **Model-Driven Storage**: data models defined with [@metreeca/blue](https://github.com/metreeca/blue) drive storage
-  and validation
+	and validation
 - **Declarative Operations**: CRUD operations on linked data resources without hand-written queries
-- **Pluggable Connectors**: one storage API over every supported backend, one connector package per backend
+- **Pluggable Connectors**: one storage API over every supported backend, through interchangeable connector packages
 
 | Layer      | Package                                                 | Description                       |
 |------------|---------------------------------------------------------|-----------------------------------|
 | Components | [@metreeca/keep]                                        | Core model-driven storage API     |
-|            | [@metreeca/keep-flake]                                  | Shape-driven query representation |
+|            | [@metreeca/keep-flake]                                  | Shape-driven traversal trees      |
 |            | [@metreeca/keep-suite]                                  | Connector conformance test suite  |
 | Connectors | [@metreeca/keep-rest]                                   | REST/JSON proxy connector         |
 |            | [*upcoming*](https://github.com/metreeca/keep/issues/1) | [SQL:2011] database connector     |
@@ -36,20 +36,18 @@ resource models that describe them:
 
 [GQL:2024]: https://www.iso.org/standard/76120.html
 
-[SPARQL 1.1]: https://www.w3.org/TR/sparql11-update/
+[SPARQL 1.1]: https://www.w3.org/TR/sparql11-overview/
 
 
 # Installation
 
-Install the connector framework for your target query language together with a backend connector from the
-[@metreeca/wire] SPARQL connector collection. All required framework packages are resolved automatically as transitive
-dependencies. Some connectors also require a backend runtime or client library as a separate peer dependency: check the
-connector README for details.
+Install the connector for your target backend from the **Connectors** table above. All required framework packages are
+resolved automatically as transitive dependencies. Some connectors also require a backend driver, runtime or client
+library as a separate package: check the connector README for details.
 
 ```shell
-npm install @metreeca/keep-sparql              # connector framework
-npm install @metreeca/wire-sparql-<backend>    # backend connector from the @metreeca/wire collection
-npm install <runtime-or-client>                # if required by the connector
+npm install @metreeca/keep-<connector>    # a connector from the table above
+npm install <backend-package>             # backend driver, runtime or client, where required by the connector
 ```
 
 > [!WARNING]
@@ -57,20 +55,36 @@ npm install <runtime-or-client>                # if required by the connector
 > TypeScript consumers must use `"moduleResolution": "nodenext"/"node16"/"bundler"` in `tsconfig.json`.
 > The legacy `"node"` resolver is not supported.
 
-See the [@metreeca/wire] connector collection for the available SPARQL backend connectors, their peer dependencies, and
-verified engines.
-
-[@metreeca/wire]: https://github.com/metreeca/wire#installation
-
 
 # Usage
 
 > [!NOTE]
 >
-> This section introduces essential concepts; for complete coverage, see the
+> Each package documents its own API in its README and API reference; for complete coverage, see the
 > [API reference](https://metreeca.github.io/keep/).
 
-{TBD: usage overview and examples}
+An application obtains a store from a backend connector, then reads and writes resources against the models describing
+them, whatever the backend. For example, with the SPARQL connector over an RDF4J Server repository:
+
+```ts
+import { createSPARQLStore } from "@metreeca/keep-sparql";
+import { createRDF4JRepository } from "@metreeca/wire-sparql-rdf4j";
+
+const store = createSPARQLStore(createRDF4JRepository({
+	server: "http://localhost:8080/rdf4j-server",
+	repository: "products"
+}));
+
+const product = await store.lookup({
+	entry: "http://example.com/products/1",
+	shape: ProductShape,
+	model: {
+		name: {},
+		price: {},
+		vendor: { id: {}, name: {} }
+	}
+});
+```
 
 # Support
 

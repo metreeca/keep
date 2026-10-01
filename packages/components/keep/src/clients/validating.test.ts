@@ -21,7 +21,6 @@ import { string } from "@metreeca/blue/string";
 import { TraceError } from "@metreeca/core/trace";
 import { describe, expect, it, vi } from "vitest";
 import type { StoreClient } from "../index.js";
-import { createCachingStore } from "../stores/caching.js";
 import { createManagingStore } from "../stores/managing.js";
 import { createValidatingStore } from "./validating.js";
 
@@ -150,7 +149,11 @@ describe("createValidatingStore", () => {
 			async method => {
 				const inner = stubStore();
 				const store = createValidatingStore(inner);
-				await expect(store[method]({ entry, shape, state: { id: "http://example.com/products/2", ...fullState } }))
+				await expect(store[method]({
+					entry,
+					shape,
+					state: { id: "http://example.com/products/2", ...fullState }
+				}))
 					.rejects.toBeInstanceOf(RangeError);
 				expect(inner[method]).not.toHaveBeenCalled();
 			}
@@ -163,7 +166,12 @@ describe("createValidatingStore", () => {
 		});
 
 		const stateCallers: ReadonlyArray<[string, (s: StoreClient) => Promise<unknown>]> = [
-			["create", s => s.create({ entry: catalogue, shape: Catalogue, model: { items: {} }, state: { name: 42 } as never })],
+			["create", s => s.create({
+				entry: catalogue,
+				shape: Catalogue,
+				model: { items: {} },
+				state: { name: 42 } as never
+			})],
 			["update", s => s.update({ entry, shape, state: { name: 42 } as never })],
 			["insert", s => s.insert({ entry, shape, state: { name: 42 } as never })]
 		];
@@ -294,7 +302,12 @@ describe("createValidatingStore", () => {
 			const store = createManagingStore(createValidatingStore(inner));
 
 			await expect(store.execute(async s => {
-				await s.create({ entry: catalogue, shape: Catalogue, model: { items: {} }, state: { name: 42 } as never });
+				await s.create({
+					entry: catalogue,
+					shape: Catalogue,
+					model: { items: {} },
+					state: { name: 42 } as never
+				});
 			})).rejects.toBeInstanceOf(TraceError);
 
 			expect(inner.create).not.toHaveBeenCalled();

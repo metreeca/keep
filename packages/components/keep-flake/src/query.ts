@@ -15,7 +15,7 @@
  */
 
 /**
- * Query-mode walk for {@link createFlake}.
+ * Query-mode walk for the public `createQueryFlake` factory.
  *
  * Two passes decode a collection {@link Query} into the flake. A query's keys (operator-prefixed
  * `>price`, projection `alias=expr`, piped expressions) each encode a full path and transform pipe
@@ -108,12 +108,12 @@ type Entry = Probe & {
 /**
  * Builds the query-mode {@link Flake} from a collection's member shape and a {@link Query}.
  *
- * Internal entry point: public callers go through the dispatcher in {@link createFlake}, which routes
- * the `(Shape, Query)` call shape here.
+ * Internal entry point: public callers go through the `createQueryFlake` factory of the package index, which
+ * resolves the lazy member shape and delegates here.
  *
  * @param shape The member shape: the value shape of the collection's elements
- * @param query The user query: the node retrieving the collection, its
- *              {@link @metreeca/qest/model!Criteria | criteria} merged in alongside its retrieval keys
+ * @param query The query retrieving the collection, its {@link @metreeca/qest/model!Criteria | criteria} merged
+ * in alongside its retrieval keys
  *
  * @returns The immutable {@link Flake} rooted at `shape`, carrying the whole query on its
  * {@link Flake.drain | drain} and with constraints, transforms, and projection marks populated as the
@@ -211,13 +211,12 @@ function isVariantKey(key: string): boolean {
 const VariantKeys = /^(0|[1-9]\d*)$/;
 
 /**
- * Decodes a placeholder key into a {@link Probe}.
+ * Decodes a query key into a {@link Probe}.
  *
  * A bare identifier path (`name`, `vendor.name`) is a self-projecting path descent whose leaf identifier
- * names the target: qest's {@link @metreeca/qest/model!decodeProbe | decodeProbe} rejects it since the
- * binding shorthand was removed (an explicit `alias=expression` is now required at the qest boundary), so
- * Keep reproduces the descent locally. Binding (`alias=expr`) and operator (`>price`) keys, which carry no
- * bare-identifier path, still route through `decodeProbe`.
+ * names the target. qest's {@link @metreeca/qest/model!decodeProbe | decodeProbe} accepts only explicit
+ * `alias=expression` bindings, so the descent is decoded locally. Binding (`alias=expr`) and operator
+ * (`>price`) keys route through `decodeProbe`.
  */
 function queryProbeOf(key: string): Probe {
 
@@ -267,8 +266,8 @@ function queryNodeOf(range: Range, path: readonly Identifier[], entries: readonl
 	const base = queryLocusOf(range, path, [], [], local);
 
 	// a binding's nested template folds into the terminal's properties, symmetric with model mode (a
-	// projection binding's projected sub-structure is thus reachable through `entries`, not only
-	// `projection[1]`); the terminal keeps its projection alias
+	// projection binding's projected sub-structure is thus reachable through `entries`, not only through
+	// its drain); the terminal keeps its projection alias
 
 	const queried = descends ? queryDescentOf(range, path, deeper) : undefined;
 	const folded = descends && base.drain?.alias !== undefined
@@ -322,7 +321,7 @@ function queryLocusOf(
 	const identity = entries.filter(e => e.pipe.length === 0);
 	const piped = entries.filter(e => e.pipe.length > 0);
 
-	// `range` is this locus's own range — the node range, or a stage range already stepped by its transform;
+	// `range` is this locus's own range: the node range, or a stage range already stepped by its transform;
 	// nested stages step one transform further from it
 
 	return {
@@ -354,7 +353,7 @@ function queryConstraintsOf(entries: readonly Entry[]): Partial<Flake> {
  * Extracts the projection from a locus's entries.
  *
  * The first entry whose `target` is an alias rather than an {@link Operators | operator} binds that
- * alias to its requested `Query<Slot>`; yields the empty object when none is present.
+ * alias to its requested `Query<Slot>`; returns the empty object when none is present.
  */
 function queryProjectionOf(range: Range, entries: readonly Entry[]): { drain?: Drain } {
 

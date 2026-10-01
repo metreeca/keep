@@ -17,14 +17,14 @@
 /**
  * REST/JSON proxy connector.
  *
- * Exposes the {@link createRESTStore} factory, returning an immutable store that forwards every
- * {@link Store} call to a remote REST endpoint. Callers see the same {@link Store} surface as every other connector,
- * with each operation round-tripped to the service rather than applied to a local backing store.
+ * Gives an application access to a remote REST service through the standard {@link Store} API.
+ * {@link createRESTStore} returns a store with the same surface as every other connector. Each data operation is
+ * round-tripped to the service rather than applied to a local backing store.
  *
  * | Operation | HTTP | `Prefer` | Behaviour | Validated |
  * |---|---|---|---|---|
  * | {@link Store.lookup lookup} | `GET` | — | Template in query string; `404` → `undefined` | `model`, response |
- * | {@link Store.create create} | `POST` | — | Child IRI from `Location` header; `409` → `undefined` | `state` |
+ * | {@link Store.create create} | `POST` | — | Child IRI from `Location`; `409` → `undefined` | `model`, `state` |
  * | {@link Store.update update} | `PUT` | — | Conditional; `404` → `undefined` | `state` |
  * | {@link Store.delete delete} | `DELETE` | — | Conditional; `404` → `undefined` | — |
  * | {@link Store.insert insert} | `PUT` | `handling=lenient` | Unconditional upsert | `state` |
@@ -40,35 +40,46 @@
  * >   `Prefer: handling=lenient`, so a `PUT` against a missing resource becomes an upsert and a `DELETE` against one
  * >   succeeds silently.
  * >
- * > Servers that ignore the header degrade to the conditional `404` behaviour.
+ * > Servers that ignore the header degrade to the conditional behaviour: {@link Store.insert insert} against a
+ * > missing resource then rejects with a `404` {@link @metreeca/http!Problem | Problem}.
  *
- * Beyond the per-operation miss codes tabulated above, every other failure surfaces as a
- * {@link @metreeca/http!Problem | Problem} rejection: non-OK responses as well as protocol anomalies on
- * otherwise-successful responses (a missing `Location` header, a malformed response body). Callers therefore observe
- * a single rejection type for all error origins.
+ * Beyond the per-operation miss codes tabulated above, every remote failure surfaces as a
+ * {@link @metreeca/http!Problem | Problem} rejection. This covers non-OK responses as well as protocol anomalies on
+ * otherwise successful responses, such as a missing `Location` header or a malformed response body. Callers therefore
+ * handle every remote failure through a single rejection type.
+ *
+ * {@link Store.create create} posts only the `state` of the new resource. The `model` slice naming the collecting
+ * property is validated locally but not sent, so the service identifies the collection from `entry` alone.
  *
  * {@link Store.create create} resolves the returned `Location` against the request `entry` per RFC 3986 § 5.2 and
- * returns it verbatim, including across origins: the proxy applies no same-origin or path-containment check, so
+ * returns it verbatim, including across origins. The proxy applies no same-origin or path-containment check, so
  * callers MUST trust the service's choice of child IRI. Standard merge semantics apply, so an `entry` without a
- * trailing `/` strips its last path segment before merging. An unparseable `Location` surfaces as a `RangeError`
- * rather than a {@link @metreeca/http!Problem | Problem}.
+ * trailing `/` strips its last path segment before merging. An unparseable `Location` surfaces as a
+ * {@link !RangeError RangeError} rather than a {@link @metreeca/http!Problem | Problem}.
  *
- * {@link Store.lookup lookup} carries its `model` as a URL-safe base64 query string, so any template (filter
- * operators such as `~name` and `>=price`, nested shapes, aggregates, collection pagination) survives transport
- * intact; an empty template omits the query string. Root-relative references (`/…`) in the response are
- * resolved against the origin of the request `entry`, so the service may return them in place of absolute IRIs; any
- * other relative reference fails response validation.
+ * {@link Store.lookup lookup} carries its `model` as a base64url query string, so any template (filter operators
+ * such as `~name` and `>=price`, nested shapes, aggregates, collection pagination) survives transport intact. An
+ * empty template omits the query string. The scope `locale` is forwarded as an `Accept-Language` header, with a
+ * trailing `*` fallback so the service may answer in any language when none of the listed ones is available.
+ *
+ * IRIs on the origin of `entry` travel in root-relative form (`/…`), both in request templates and states and in
+ * {@link Store.lookup lookup} responses. Root-relative references in a response are resolved against the origin of
+ * `entry`, so the service may return them in place of absolute IRIs. Any other relative reference is rejected by
+ * response validation.
  *
  * > [!IMPORTANT]
- * > `entry` parameters MUST be bare absolute IRIs with no query string (`?…`) or fragment (`#…`): a query string
+ * > `entry` parameters MUST be bare absolute IRIs with no query string (`?…`) or fragment (`#…`). A query string
  * > would collide with the template carried by {@link Store.lookup lookup}, and a fragment would be stripped by
- * > `fetch` before the request reached the wire. Non-conforming entries are rejected with a `RangeError` on every
- * > method.
+ * > {@link !fetch fetch} before the request reached the wire. Non-conforming entries are rejected with a
+ * > {@link !RangeError RangeError} on every method.
  *
- * Inputs are validated against the shape before the network call: `model` on {@link Store.lookup lookup}, `state`
- * on every mutation. Because the remote endpoint is untrusted by default, {@link Store.lookup lookup} responses are
- * also validated against the shape narrowed by the caller's `model`. Failures reject with a {@link @metreeca/core!TraceError | TraceError} carrying
- * `"invalid model"`, `"invalid state"`, or `"invalid response"`, per the unified {@link Store} error channel.
+ * Inputs are validated against the shape before the network call: `model` on {@link Store.lookup lookup} and
+ * {@link Store.create create}, `state` on every mutation carrying one. The query-complexity bounds of the
+ * {@link StoreScope | retrieval scope} are also enforced locally, so a rejected template never reaches the service.
+ * Because the remote endpoint is untrusted by default, {@link Store.lookup lookup} responses are also validated
+ * against the shape narrowed by the caller's `model`. Failures reject with a
+ * {@link @metreeca/core!TraceError | TraceError} carrying `"invalid model"`, `"invalid state"`, or
+ * `"invalid response"`, per the unified {@link Store} error channel.
  *
  * @see {@link https://www.rfc-editor.org/rfc/rfc3986 RFC 3986 — URI Generic Syntax}
  * @see {@link https://www.rfc-editor.org/rfc/rfc7240 RFC 7240 — Prefer Header for HTTP}
@@ -76,7 +87,7 @@
  *
  * @group Connectors
  *
- * @module
+ * @module index
  */
 
 import { isError, isObject, type Optional } from "@metreeca/core";
@@ -97,23 +108,21 @@ import { decodeResource, encodeResource } from "@metreeca/qest/state";
  * Creates a REST proxy store backed by a remote REST service.
  *
  * Exposes a remote REST service through the standard {@link Store} API, so an application drives it with the same
- * calls as any local backend. Each operation round-trips to the service over `fetch`; observers see only mutations
- * issued through this store, and the module description carries the full request/response contract, validation rules,
- * and miss-code handling.
+ * calls as any local backend. Each data operation round-trips to the service over the configured `fetch` transport.
+ * The module description details the request and response contract, the validation rules and the miss-code handling.
  *
  * > [!IMPORTANT]
- * > **Transaction Isolation** — None. REST has no native transaction support; operations apply eagerly with
- * > no cross-call isolation, and a {@link Store.execute execute} task that throws after
- * > partial server-side mutations does not roll them back.
+ * > **Transaction Isolation** — None. REST has no native transaction support: operations apply eagerly with no
+ * > cross-call isolation, and a {@link Store.execute execute} task that throws after partial server-side mutations
+ * > does not roll them back.
  *
  * > [!IMPORTANT]
- * > **Mutation Events** — Limited to mutations issued through this store; mutations from other clients
- * > sharing the remote service are not observed.
+ * > **Mutation Events** — Limited to mutations issued through this store; mutations from other clients sharing the
+ * > remote service are not observed.
  *
  * @param options - Optional proxy options
  *
- * @returns An immutable {@link Store} whose methods round-trip every call to the remote
- *   REST service
+ * @returns An immutable {@link Store} proxying the remote REST service
  */
 export function createRESTStore({
 
@@ -124,18 +133,22 @@ export function createRESTStore({
 }: {
 
 	/**
-	 * Whether to accept retrieval responses without validating them against the model.
+	 * Whether to accept {@link Store.lookup lookup} responses without validating them against the shape narrowed by
+	 * the caller's `model`.
+	 *
+	 * Enabling it suits only a service trusted to deliver shape-conforming data, as responses then reach the caller
+	 * unchecked.
 	 *
 	 * @defaultValue `false`, treating the remote endpoint as untrusted
 	 */
 	readonly trusted?: boolean
 
 	/**
-	 * Fetch-compatible transport used for every HTTP request.
+	 * {@link !fetch fetch}-compatible transport used for every HTTP request.
 	 *
-	 * Supply a configured client to add authentication, custom headers, or other cross-cutting request handling.
+	 * A configured client adds authentication, custom headers, or other cross-cutting request handling.
 	 *
-	 * @defaultValue the global `fetch`
+	 * @defaultValue The global {@link !fetch fetch}
 	 */
 	readonly fetch?: typeof globalThis.fetch
 
@@ -325,17 +338,16 @@ export function createRESTStore({
 	/**
 	 * Tests whether a caught value is a {@link @metreeca/http!Problem | Problem} carrying the given HTTP status.
 	 *
-	 * Used by the per-method `.catch` branches to tell expected miss codes (`404`, `409`) apart
-	 * from every other {@link @metreeca/http!Problem | Problem}. {@link @metreeca/http!Problem | Problem} is an
-	 * interface rather than a class, so any object with a matching numeric `status` property is accepted; this is sound
-	 * because {@link @metreeca/http!createFetch | createFetch} is the only error source in scope and always throws
+	 * Tells expected miss codes (`404`, `409`) apart from every other {@link @metreeca/http!Problem | Problem}.
+	 * {@link @metreeca/http!Problem | Problem} is an interface rather than a class, so any object with a matching
+	 * numeric `status` property is accepted. This is sound because {@link @metreeca/http!createFetch | createFetch} is
+	 * the only source of status-carrying errors in scope, and it always throws
 	 * {@link @metreeca/http!Problem | Problem}-shaped values.
 	 *
 	 * @param error - Value caught from a proxy `.catch` branch
 	 * @param status - HTTP status code to match against
 	 *
-	 * @returns `true` if `error` is an object whose `status` matches the expected code; `false`
-	 *     otherwise
+	 * @returns true if `error` is an object whose `status` matches the expected code; false otherwise
 	 */
 	function isProblem(error: unknown, status: number): boolean {
 		return isObject(error) && error.status === status;

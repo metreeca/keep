@@ -20,8 +20,8 @@ import { type Range, sh, type Shape } from "@metreeca/blue/value";
 import { error, isArray, isBoolean, isNumber, isObject, isString, opt } from "@metreeca/core";
 import { some } from "@metreeca/core/arrays";
 import { xsd } from "@metreeca/core/datatype";
-import { isReference, type Literal, type Reference, type Value, type Values } from "@metreeca/qest/state";
 import { Options, type Transform } from "@metreeca/qest/model";
+import { isReference, type Literal, type Value, type Values } from "@metreeca/qest/state";
 import { type Blank, named, type Named, rdf, tagged, type Term, typed } from "@metreeca/trio";
 import type { SPARQL, Variable } from "@metreeca/wire-sparql";
 import {
@@ -65,23 +65,36 @@ import {
 
 
 /**
- * The RDF {@link Term} of a comparison bound (`<` / `>` / `<=` / `>=`), typed against the {@link Range |
- * range} variant it resolves to so the comparison resolves in the target's processing type (§5.7.1).
- * {@link getBoundBranch} routes the bound, relaxing the value-domain facets a bound need not satisfy. A
- * string variant carrying the `sh:IRI` datatype (an id / type entry, or a reference-ranged property) renders
- * an IRI node rather than a literal, told apart from an IRI-shaped literal (a `url`) by datatype alone.
+ * Converts a comparison bound (`<` / `>` / `<=` / `>=`) to an RDF {@link Term} (§5.7.1).
+ *
+ * The term is typed after the {@link Range | range} variant the bound singles out, so the comparison runs in that
+ * variant's processing type. A string variant carrying the `sh:IRI` datatype renders an IRI node rather than a
+ * literal.
+ *
+ * @param value The comparison bound
+ * @param range The range of the compared value
+ *
+ * @returns The typed bound term
+ *
+ * @throws {@link !RangeError RangeError} If `value` singles out no variant of `range`
  */
 export function boundToTerm(value: Literal, range: Range): Term {
 	return valueToTerm(value, boundToVariant(value, range));
 }
 
 /**
- * The {@link Range | range} variant a comparison bound (`<` / `>` / `<=` / `>=`) singles out (§5.7.1), the one
- * the comparison runs in: {@link getBoundBranch} routes the bound, relaxing the value-domain facets a bound
- * need not satisfy; a string bound no variant admits falls to a localised variant, whose coalesced label it
- * compares against (§6).
+ * Identifies the {@link Range | range} variant a comparison bound (`<` / `>` / `<=` / `>=`) runs in (§5.7.1).
  *
- * @throws {RangeError} If `value` singles out no variant of `range`
+ * The bound is routed by {@link getBoundBranch}, which ignores the value-domain facets a bound need not satisfy. A
+ * string bound admitted by no variant falls back to a localised variant and is compared against its coalesced label
+ * (§6).
+ *
+ * @param value The comparison bound
+ * @param range The range of the compared value
+ *
+ * @returns The variant the comparison runs in
+ *
+ * @throws {@link !RangeError RangeError} If `value` singles out no variant of `range`
  */
 export function boundToVariant(value: Literal, range: Range): Shape {
 
@@ -94,11 +107,18 @@ export function boundToVariant(value: Literal, range: Range): Shape {
 }
 
 /**
- * Flattens the options of a set-matching or focus constraint to individual match {@link Term | terms}: a
- * localised dictionary set expands to one language-tagged term per language tag (its value, or every element of
- * its value array), a scalar option maps to its term typed by the {@link Range | range} variant it
- * fits, and an option array maps element-wise. A `null` scalar survives as the absent-value option
- * (§5.7.3).
+ * Converts the options of a set-matching or focus constraint to individual match {@link Term | terms} (§5.7.3).
+ *
+ * A localised dictionary option expands to one term per text, plain under the `und` tag and language-tagged
+ * otherwise. A scalar option maps to a term typed after the {@link Range | range} variant it fits, and an option array
+ * maps element-wise. A `null` option is kept as the absent-value option.
+ *
+ * @param value The constraint options
+ * @param range The range of the constrained value
+ *
+ * @returns The match terms, `null` standing for the absent value
+ *
+ * @throws {@link !RangeError RangeError} If a scalar option fits no variant of `range`
  */
 export function optionsToTerms(value: Options, range: Range): readonly (null | Term)[] {
 
@@ -127,9 +147,17 @@ export function optionsToTerms(value: Options, range: Range): readonly (null | T
 }
 
 /**
- * Types an operand against its resolved {@link Shape | shape} (§5.7.1). A string shape carrying the
- * `sh:IRI` datatype (an id / type entry, or a reference-ranged property) renders an IRI node rather than a
- * literal, told apart from an IRI-shaped literal (a `url`) by datatype alone.
+ * Converts a scalar operand to the RDF {@link Term} typed after its resolved {@link Shape | shape} (§5.7.1).
+ *
+ * A string shape carrying the `sh:IRI` datatype (an `id` or `type` entry, or a reference-ranged property) renders an
+ * IRI node rather than a literal; an IRI-shaped literal (a `url`) is told apart by datatype alone.
+ *
+ * @param value The operand to convert
+ * @param shape The range variant the operand resolves to
+ *
+ * @returns The typed operand term
+ *
+ * @throws {@link !RangeError RangeError} If `shape` is a resource or union shape, neither of which types a scalar
  */
 export function valueToTerm(value: Value, shape: Shape): Term {
 	switch ( shape.kind ) {
@@ -168,16 +196,23 @@ export function valueToTerm(value: Value, shape: Shape): Term {
 }
 
 /**
- * Types a property's write value(s) to the RDF {@link Term | terms} to store, flattening a single value or
- * a value set against the resolved {@link Shape | shape} variant (§5.7.1).
+ * Converts a property's write values to the RDF {@link Term | terms} to store under a resolved
+ * {@link Shape | shape} variant.
  *
- * Each element is typed by the variant it fits: a boolean, number, or string operand to its datatype-typed
- * literal (a string shape carrying the `sh:IRI` datatype renders an IRI node instead, as in
- * {@link valueToTerm}); a localised dictionary to one plain or language-tagged term per tag (§6); a reference to
- * its IRI as-is; and a nested resource to its declared id when present (a captive resource with its own
- * identity), else a freshly skolemised IRI addressing the embedded sub-resource. Values not fitting the
- * variant are dropped, as is a nested resource carrying no content: skolemising it would store a link to a
- * subject with nothing under it.
+ * A boolean, number, or string value becomes a literal typed after the variant; a string shape carrying the `sh:IRI`
+ * datatype renders an IRI node instead, as in {@link valueToTerm}. A localised dictionary becomes one plain or
+ * language-tagged term per text (§6), and a reference becomes its IRI. A nested resource becomes its declared id if
+ * present (a captive resource with its own identity), else a fresh skolem IRI naming the embedded resource.
+ *
+ * Values not fitting the variant are dropped. A nested resource carrying no content is dropped too, so no link to an
+ * empty subject is stored.
+ *
+ * @param values The write values, a single value or a value set
+ * @param shape The range variant the values are typed after
+ *
+ * @returns The terms to store, possibly empty
+ *
+ * @throws {@link !RangeError RangeError} If `shape` is a union shape
  */
 export function valuesToTerms(values: Values, shape: Shape): readonly Term[] {
 	switch ( shape.kind ) {
@@ -242,10 +277,12 @@ export function valuesToTerms(values: Values, shape: Shape): readonly Term[] {
 /**
  * Checks whether a write value carries nothing to store.
  *
- * A value is vacant when it is absent, or when every element or entry it holds is itself vacant, so that
- * `{}`, `{ address: {} }` and `[{}]` all reduce to nothing. Only a nested resource consults this: every other
- * variant types its values and drops what does not fit, while a nested resource would otherwise be skolemised
- * into a subject carrying no triples.
+ * A value is vacant if it is absent, or if every element or entry it holds is itself vacant, so `{}`,
+ * `{ address: {} }` and `[{}]` all carry nothing.
+ *
+ * @param value The write value to check
+ *
+ * @returns true if `value` carries nothing to store; false otherwise
  */
 function isVacant(value: unknown): boolean {
 	return value === undefined
@@ -257,10 +294,18 @@ function isVacant(value: unknown): boolean {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /**
- * The stored edge connecting `source` to `target` through a {@link Property | property}'s declared
- * predicate. Renders the forward direction when the property declares one and `source` may stand in
- * subject position, else the reverse direction when `target` may; both directions carry the value, so
- * either connects the pair. Yields the empty fragment when neither applies.
+ * Generates the SPARQL triple pattern matching the stored edge from `source` to `target` through a
+ * {@link Property | property}.
+ *
+ * Both declared directions store the value, so either one connects the pair. The forward direction is used if the
+ * property declares one and `source` may stand in subject position; otherwise the reverse direction is used if
+ * `target` may.
+ *
+ * @param edge The edge to match, as a `[source, property, target]` tuple
+ *
+ * @returns The generated triple pattern, or the empty fragment if neither direction applies
+ *
+ * @see {@link https://www.w3.org/TR/sparql11-query/#QSynTriples SPARQL 1.1 Triple Patterns}
  */
 export function link([source, property, target]: readonly [Variable | Term, Property, Variable | Term]): SPARQL {
 
@@ -278,16 +323,13 @@ export function link([source, property, target]: readonly [Variable | Term, Prop
 }
 
 /**
- * Generates the SPARQL triple pattern rendering a {@link Property | property}'s forward direction.
+ * Generates the SPARQL triple pattern for a {@link Property | property}'s forward direction.
  *
- * Emits `subject forward object` when the property declares a `forward` predicate; an undeclared
- * forward direction contributes no pattern, yielding the empty fragment. The reverse-direction
- * counterpart is {@link reverse}.
+ * The pattern reads `subject forward object`. The reverse-direction counterpart is {@link reverse}.
  *
  * @param edge The edge to render, as a `[subject, property, object]` tuple
  *
- * @returns The generated triple pattern, or the empty fragment when the property declares no forward
- * predicate
+ * @returns The generated triple pattern, or the empty fragment if the property declares no `forward` predicate
  *
  * @see {@link https://www.w3.org/TR/sparql11-query/#QSynTriples SPARQL 1.1 Triple Patterns}
  */
@@ -298,17 +340,15 @@ export function forward(
 }
 
 /**
- * Generates the SPARQL triple pattern rendering a {@link Property | property}'s reverse direction.
+ * Generates the SPARQL triple pattern for a {@link Property | property}'s reverse direction.
  *
- * Emits `subject reverse object`, flipping object and subject, when the property declares a `reverse`
- * predicate; an undeclared reverse direction contributes no pattern, yielding the empty fragment. The
- * subject lands in the triple's object position, so it is constrained to an IRI {@link Reference}. The
+ * The edge is stated in forward order and the pattern swaps its ends, reading `subject reverse object`. The forward
+ * object becomes the subject of the stored triple, so it is constrained to a variable, a blank node or an IRI. The
  * forward-direction counterpart is {@link forward}.
  *
- * @param edge The edge to render, as a `[object, property, subject]` tuple
+ * @param edge The edge to render, in forward order, as an `[object, property, subject]` tuple
  *
- * @returns The generated triple pattern, or the empty fragment when the property declares no reverse
- * predicate
+ * @returns The generated triple pattern, or the empty fragment if the property declares no `reverse` predicate
  *
  * @see {@link https://www.w3.org/TR/sparql11-query/#QSynTriples SPARQL 1.1 Triple Patterns}
  */
@@ -320,18 +360,19 @@ export function reverse(
 
 
 /**
- * The gate binding a union shape's discriminator only for members belonging to it (blue Unions §Model).
+ * Generates the SPARQL clause admitting only the values belonging to a union variant.
  *
- * A classed node shape is gated by its stored `rdf:type` triple; a plain-string literal by a
- * datatype/kind `filter` (boolean datatype, numeric test, or plain string); a localised `dictionary` shape by
- * the language-tagged literal test, disjoint from the plain string; a classless node shape by the bare
- * IRI-kind test. Under the modeller's disjointness guarantee (blue Unions §State) at most one shape's arm
- * binds a given value.
+ * A classed resource or reference variant is gated by its stored `rdf:type` triple, and a classless one by an IRI
+ * test. A boolean, number or string variant is gated by a `filter` on the literal kind. A localised `dictionary`
+ * variant is gated by a language-tagged literal test, disjoint from the plain string test. Union variants are disjoint
+ * by contract, so at most one variant admits a given value.
  *
- * @param anchor The shape's value variable
- * @param shape The shape to gate on
+ * @param anchor The variable holding the value
+ * @param shape The variant to gate on
  *
  * @returns The gating triple pattern or `filter`
+ *
+ * @throws {@link !RangeError RangeError} If `shape` is a union shape
  */
 export function membership(anchor: Variable, shape: Shape): SPARQL {
 
@@ -378,9 +419,10 @@ export function membership(anchor: Variable, shape: Shape): SPARQL {
 }
 
 /**
- * The test admitting a plain string value: a literal carrying neither a language tag nor a boolean or
- * numeric datatype, which is how a stored string, a temporal the backend leaves opaque, and a coalesced
- * localised label (§6.2) all present.
+ * Generates the SPARQL test admitting a plain string value.
+ *
+ * A plain string is a literal carrying neither a language tag nor a boolean or numeric datatype. Stored strings,
+ * temporal values the backend leaves opaque, and coalesced localised labels (§6.2) all pass the test.
  *
  * @param value The expression to test
  *
@@ -396,13 +438,11 @@ export function textual(value: SPARQL): SPARQL {
 }
 
 /**
- * The SPARQL expression applying a transform `pipe` to a value variable.
+ * Generates the SPARQL expression applying a transform `pipe` to a value variable (§5.8.2).
  *
- * Composes the pipe right-to-left (`reduceRight`), so the pipe's trailing transform applies to `anchor`
- * first and each earlier transform wraps the running expression, leaving the leading transform
- * outermost; an empty pipe yields the bare variable. Each {@link Transform} maps to its SPARQL aggregate
- * (`count`/`sum`/`min`/`max`/`avg`, with the empty-set patch keeping `avg` over no rows unbound rather
- * than erroring, Appendix A.4.3) or scalar function (string, numeric, and date-part).
+ * The trailing transform applies to `anchor` first and the leading transform is outermost. Each {@link Transform}
+ * maps to its SPARQL aggregate or scalar function. An `avg` over no rows leaves its binding unbound rather than `0`,
+ * as QEST requires (Appendix A.4.3).
  *
  * @param anchor The value variable the pipe transforms
  * @param pipe The transforms to compose, leading (outermost) first

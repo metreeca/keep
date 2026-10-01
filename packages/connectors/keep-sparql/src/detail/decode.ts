@@ -14,6 +14,15 @@
  * limitations under the License.
  */
 
+/**
+ * Detail-pass result decoder.
+ *
+ * Assembles each queued {@link Detail} resource from the batched query's solution tuples, delegating multi-valued
+ * properties to the select pass.
+ *
+ * @module
+ */
+
 import { type Property, type ResourceShape } from "@metreeca/blue/resource";
 import { getShapeBranches } from "@metreeca/blue/union";
 import { eager, type Shape } from "@metreeca/blue/value";
@@ -24,8 +33,8 @@ import type { Scope } from "@metreeca/core/scope";
 import { equals } from "@metreeca/core/values";
 import {
 	type Branch,
-	type Flake,
 	type Drain,
+	type Flake,
 	getFlakeEntries,
 	getFlakeVariant,
 	isModelBranch,
@@ -39,28 +48,25 @@ import { column } from "../_/_decode.js";
 
 
 /**
- * Decodes a SELECT result tuple set into a resource state.
+ * Settles each batched detail request with the resource decoded from the `select` solution.
  *
- * Reads back the arms the emitter produced, walking the same {@link Flake | detail plan} and resolving
- * each property from its column in the returned `tuples` through the shared {@link Scope}. Each property
- * is read by the counterpart of the arm that emitted it:
+ * Each property is read from its column through the {@link Scope} shared with the encoder, following the same
+ * {@link Flake | detail plan}. Each property is read by the counterpart of the arm that produced it:
  *
- *  - a **scalar** property reads its column and recurses into the nested subject as an embedded or
- *    expanded resource;
- *  - a **localised** property collects every tagged term across its arm's rows into a tag-keyed
- *    dictionary or the shorthand the model requests;
- *  - a **variant** property reads whichever requested variant's column bound (blue Unions §Model), fixing the variant by the bound column with no term classification: the read-side
- *    dual of the emitter's membership gate.
+ *  - a **scalar** property reads its column and recurses into a nested embedded or expanded resource;
+ *  - a **localised** property collects the tagged terms across its arm's rows into a tag-keyed dictionary or the
+ *    coalesced label the model requests;
+ *  - a **union** property reads the column of the requested variant that bound, so the variant needs no term
+ *    inspection.
  *
- * Properties with no emitted column resolve inline: set-valued properties forward to the collections
- * pass through {@link select}, and `id` / `type` markers read from the focus and shape. Each item's
- * deferred settles with its decoded resource, or rejects with a `TypeError` on a malformed tuple set
- * that breaches the shape contract write-time validation upholds.
+ * Properties with no column resolve without the tuples: multi-valued properties are forwarded to the select pass
+ * through {@link Broker.select}, while `id` and `type` come from the entry and the shape. Each request resolves to
+ * its decoded resource, or rejects with the error raised while decoding it.
  *
  * @param scope The variable scope shared with the encoder
  * @param items The batched requests, each paired with its {@link Flake | detail plan} and deferred
- * @param broker The cross-pass channel forwarding set-valued slots to the collections pass
- * @param tuples The solution rows returned by the batched SELECT query
+ * @param broker The channel forwarding multi-valued properties to the select pass
+ * @param tuples The solution rows returned by the batched `select` query
  */
 export function decode(
 	scope: Scope<Variable>,
@@ -128,7 +134,7 @@ export function decode(
 	}
 
 	/**
-	 * Reads a single-valued model property, dispatching by range kind in the emitter's order: a **union** to
+	 * Reads a single-valued model property, dispatching by range kind in the encoder's order: a **union** to
 	 * {@link decodeUnion}, a **localised** `dictionary` leaf to {@link decodeDictionary}, any other **scalar**
 	 * shape to {@link decodeValue}. The property is single-valued, so the first decoded value stands; an empty
 	 * result omits the owning property (§4).
@@ -148,7 +154,7 @@ export function decode(
 
 		} else if ( rangeShape.kind === "dictionary" ) {
 
-			// localised slots resolve as a single structured `Localised` value, not a collection:
+			// localised slots resolve as a single structured `Dictionary` value, not a collection:
 			// the `Locale` placeholder's tag ranges select the languages, the property the per-tag cardinality
 
 			return decodeDictionary(
@@ -226,11 +232,10 @@ export function decode(
 	}
 
 	/**
-	 * Decodes the variant arms, the read-side dual of the emitter's membership gate: each requested variant
-	 * owns its own arm and object column, so the value's variant is fixed by which column bound, with no
-	 * term classification (blue Unions §Model). The property is single-valued, so the first requested variant
-	 * whose column is bound stands; same-kind variants decode an identical bare payload. Resolves to no
-	 * value when no variant column bound, omitting the owning property (§4).
+	 * Decodes the variant arms, the read-side counterpart of the encoder's membership gate. Each requested variant
+	 * has its own arm and object column, so the column that bound fixes the value's variant with no term inspection.
+	 * The property is single-valued, so the first requested variant whose column is bound stands. If no variant
+	 * column bound, the result is empty and the owning property is omitted (§4).
 	 */
 	function decodeUnion(
 		locale: readonly Tag[],

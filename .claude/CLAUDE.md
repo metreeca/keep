@@ -29,9 +29,9 @@ description: Development guidelines and conventions for the @metreeca/keep packa
 - **`npm run check`** - Run the test suite
 - **`npm run proof`** - Build and serve docs
 	- TypeDoc `--watch` doesn't support `entryPointStrategy: "packages"`,
-	  see [#1772](https://github.com/TypeStrong/typedoc/issues/1772)
+		see [#1772](https://github.com/TypeStrong/typedoc/issues/1772)
 	- five-server file watching disabled with `--watch=false` to avoid EMFILE errors on the large generated `docs/`
-	  folder
+		folder
 
 > [!CAUTION]
 > **`prime` and `setup` are not interchangeable.** Run `prime` when finalising a public release: `@metreeca/*` imports
@@ -56,7 +56,7 @@ files by name) still hold.
 # Version Management
 
 All workspace packages share the same version, defined in the root `package.json` `version` entry. When bumping the
-version, cascade the change to all `packages/*/package.json` — both the package `version` entry and any internal
+version, cascade the change to all `packages/*/package.json`: both the package `version` entry and any internal
 `@metreeca/keep*` dependency ranges.
 
 When adding, removing, or renaming packages, update the package table in the root `README.md` Usage section to match.
@@ -68,21 +68,24 @@ Each `packages/*/README.md` follows this structure (read standalone on npm):
 1. **Title** — `# @metreeca/<package>`
 2. **npm badge** — links to npmjs.com
 3. **Description with framework link** — one sentence combining `package.json` `description` with a link to the
-   framework, for example `SPARQL storage connector for the [@metreeca/keep](...) model-driven linked data storage
-	 framework.` The framework link is mandatory on every package, including the framework-namesake core package — the
-   self-reference still anchors the package within the wider framework.
+	 framework, for example `SPARQL storage connector for the [@metreeca/keep](...) model-driven linked data storage
+   framework.` The framework link is mandatory on every package, including the framework-namesake core package: the
+	 self-reference still anchors the package within the wider framework. Where the description already says
+	 `model-driven`, drop it from the framework qualifier to avoid the repetition, as the core package does:
+	 `Core model-driven storage API for the [@metreeca/keep](...) linked data storage framework.`
 
-When changing a package description, update all three locations — `package.json` `description`, README first paragraph,
-and module doc definition line — plus the package table in the root `README.md`.
+When changing a package description, update all three locations (`package.json` `description`, README first paragraph,
+and module doc definition line), plus the package table in the root `README.md`.
 
 4. **Role paragraph** — 1-2 sentences explaining what this package does in user terms, without referencing internal API
-   types
-5. **Transaction isolation and mutation events note** — `[!IMPORTANT]` or `[!WARNING]` alert documenting transaction
-   isolation level and, where applicable, mutation event scope; mirror the claim made on the factory TSDoc (see
-   `Transaction Isolation and Mutation Event Declarations`)
-6. **Installation** — `npm install` command; peer dependencies on separate lines with an `[!IMPORTANT]` alert noting the
-   version constraint
-7. **Usage** — code example showing connector wiring with `createSPARQLStore`
+	 types
+5. **Transaction isolation and mutation events note** (packages exporting a `Store` factory) — `[!IMPORTANT]` or
+	 `[!WARNING]` alert documenting transaction isolation level and, where applicable, mutation event scope; mirror the
+	 claim made on the factory TSDoc (see `Transaction Isolation and Mutation Event Declarations`)
+6. **Installation** — `npm install` command; where the package declares peer dependencies (an adapted external library,
+   see `Dependency Guidelines`), list them on separate lines with an `[!IMPORTANT]` alert noting the version constraint
+7. **Usage** — code example showing the package's own entry point in use: store wiring through the package factory for
+   connectors (`createSPARQLStore`, `createRESTStore`, …), the relevant API for component packages
 8. **Support** — issue and discussion links
 9. **License** — Apache 2.0 with link
 
@@ -90,19 +93,19 @@ and module doc definition line — plus the package table in the root `README.md
 revising, verify:
 
 - Every cross-reference to sibling packages, "connector packages", or other framework concepts resolves to an absolute
-  URL — typically `https://github.com/metreeca/keep#installation` for the connector table, the sibling repository, or
-  the matching TypeDoc page. No bare prose references that leave a cold reader stranded
-- Code examples conform to the documented API contract — for example, `entry` literals in `Store` examples are absolute
-  IRIs (`http://example.com/...`), since the contract rejects relative paths with `RangeError`
-- Snippets parse as legal TypeScript — arrow-function placeholders use `() => { /* ... */ }` rather than bare
-  `() => /* ... */` (which is a syntax error)
+	URL, typically `https://github.com/metreeca/keep#installation` for the connector table, the sibling repository, or the
+  matching TypeDoc page. No bare prose references that leave a cold reader stranded
+- Code examples conform to the documented API contract: for example, `entry` literals in `Store` examples are absolute
+	IRIs (`http://example.com/...`), since the contract rejects relative paths with `RangeError`
+- Snippets parse as legal TypeScript: arrow-function placeholders use `() => { /* ... */ }` rather than bare
+	`() => /* ... */` (which is a syntax error)
 
 # Dependency Guidelines
 
 - **Internal `@metreeca/keep*` packages**: Use regular dependencies, not peer dependencies. Consumers should not have to
-  manually install the full transitive chain
+	manually install the full transitive chain
 - **External adapted libraries** (for example, `oxigraph` in `@metreeca/wire-sparql-oxigraph`): Use peer dependencies.
-  The consumer provides the library being adapted
+	The consumer provides the library being adapted
 
 # Issues
 
@@ -111,7 +114,7 @@ When filing issues against this monorepo, apply a `pkg:*` label to identify the 
 one exception: the SPARQL stack folds into the single `pkg:sparql` label rather than minting a label per package. The
 stack is now just `keep-sparql`, since the backend connectors were extracted to the separate
 [`@metreeca/wire`](https://github.com/metreeca/wire) collection. When a new non-SPARQL package is added, clone the
-`pkg:core` label — same colour, description `<package> package` — to keep the set consistent.
+`pkg:core` label (same colour, description `<package> package`) to keep the set consistent.
 
 > [!IMPORTANT]
 > If filing an issue requires a `pkg:<name>` label that does not yet exist, create it autonomously following the
@@ -121,27 +124,27 @@ stack is now just `keep-sparql`, since the backend connectors were extracted to 
 # Design Principles
 
 - **Model-driven / shape-agnostic**: All store implementations MUST be entirely driven by the supplied shape. NEVER
-  hardcode property names, dataset-specific assumptions, or any other domain knowledge. All structural decisions MUST be
-  derived from the shape metadata at runtime.
+	hardcode property names, dataset-specific assumptions, or any other domain knowledge. All structural decisions MUST be
+	derived from the shape metadata at runtime.
 - **Lowercase generated queries**: All generated query code (SQL, SPARQL, Cypher, etc.) MUST use lowercase for keywords,
-  identifiers, and other generated tokens. Test expectations MUST match this convention.
+	identifiers, and other generated tokens. Test expectations MUST match this convention.
 - **Forward/reverse predicates**: `forward` and `reverse` on a `Property` are IRI predicates that control triple storage
-  direction. Both write actual triples. For example, `broader` with `forward: toys.broader, reverse:
+	direction. Both write actual triples. For example, `broader` with `forward: toys.broader, reverse:
   toys.narrower` writes BOTH `<child> toys:broader <parent>` AND `<parent> toys:narrower <child>`.
 - **Foreign properties**: `foreign` in a property's `PropertyConstraints` marks the property as read-only/derived. It
-  reads triples already written by the target property's forward/reverse predicates. It does NOT write or delete any
-  triples.
+	reads triples already written by the target property's forward/reverse predicates. It does NOT write or delete any
+	triples.
 - **NEVER conflate reverse predicates with foreign properties**: They are independent concepts. A `reverse` predicate on
-  a property writes a real triple in the inverse direction. A `foreign` property is a virtual view over triples owned
-  by another property.
-- **Embedded resources**: Embedded resources have no independent lifecycle or identity — they are created, updated, and
-  deleted only in the context of their embedding resource. The `id` and `type` fields are not allowed on them.
+	a property writes a real triple in the inverse direction. A `foreign` property is a virtual view over triples owned by
+  another property.
+- **Embedded resources**: Embedded resources have no independent lifecycle or identity: they are created, updated, and
+	deleted only in the context of their embedding resource. The `id` and `type` fields are not allowed on them.
 - **Captive resources**: Identified by the `captive` flag in a property's `PropertyConstraints`. Captive resources have
-  independent lifecycle and identity (unlike embedded resources), but on captor deletion they are always
-  cascade-deleted. They can be created, updated, and deleted independently of the referencing resource. They may also
-  optionally be created or updated in a single batch embedded within their captor resource.
+	independent lifecycle and identity (unlike embedded resources), but on captor deletion they are always
+	cascade-deleted. They can be created, updated, and deleted independently of the referencing resource. They may also
+	optionally be created or updated in a single batch embedded within their captor resource.
 - **NEVER conflate embedded and captive resources**: They are related but distinct concepts. Embedded resources lack
-  independent identity and lifecycle. Captive resources have both, but are cascade-deleted with their captor.
+	independent identity and lifecycle. Captive resources have both, but are cascade-deleted with their captor.
 
 # Transaction Isolation and Mutation Event Declarations
 
@@ -172,13 +175,13 @@ leading with a bold label:
 **Wording conventions**:
 
 - **Native backend** — name the level (`Read-committed`, `Snapshot`, `Serializable`, `None`) and follow with a
-  one-sentence justification of how the backend achieves it.
+	one-sentence justification of how the backend achieves it.
 - **Wrapper factory** — state explicitly that semantics are inherited, for example
-  `Inherited from the wrapped {@link Store}`.
+	`Inherited from the wrapped {@link Store}`.
 - **Delegating factory** — state which inner component determines the level, for example
-  `Determined by the supplied {@link @metreeca/wire-sparql!Repository | Repository}`.
+	`Determined by the supplied {@link @metreeca/wire-sparql!Repository | Repository}`.
 - **No native support** — use `None` and describe the resulting caller-visible behaviour (eager apply, no rollback, no
-  cross-client signal).
+	cross-client signal).
 
 **README mirror** — every package README MUST also carry the same isolation (and, where applicable, events) claim as an
 `[!IMPORTANT]` or `[!WARNING]` alert in the slot defined by the `Package README Structure` section, so the contract is

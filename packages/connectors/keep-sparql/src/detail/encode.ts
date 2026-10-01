@@ -15,27 +15,25 @@
  */
 
 /**
- * Resources-pass SPARQL emitter.
+ * Detail-pass SPARQL encoder.
  *
- * Folds every batched request's {@link Flake | detail plan} into one `SELECT` whose `WHERE` is a
- * `UNION` of arms. `UNION` sums solutions rather than joining them, so giving each fan-out source its
- * own arm keeps the row count a sum of per-slot cardinalities instead of a cross-product. Set-valued
- * properties go to the collections pass, so this pass sees only single-valued slots and the only
- * fan-out sources are localised (`dictionary`) leaves and union variants.
+ * Folds every batched request's {@link Flake | detail plan} into one `select` whose `where` is a `union` of arms.
+ * A `union` sums solutions rather than joining them, so giving each fan-out source its own arm keeps the row count a
+ * sum of per-property cardinalities instead of a cross-product. Multi-valued properties go to the select pass, so
+ * the only fan-out sources here are localised (`dictionary`) leaves and union variants.
  *
- * A resource contributes two descents, {@link scalars} and {@link composites}, together emitting three
- * arm kinds:
+ * A resource contributes three kinds of arms:
  *
- *  - a **scalar** arm (from {@link scalars}): the whole plain single-valued subtree (scalars, references,
- *    embedded resources), every edge `OPTIONAL` so one row carries all bound slots;
- *  - a **localised** arm per `dictionary` leaf (from {@link composites}): the required path to the leaf's
- *    parent, then the localised edge binding one tagged-term column;
- *  - a **variant** arm per requested union variant (from {@link composites}; blue Unions §Model): the variant's object
- * column gated by its {@link membership} constraint, then the variant's subtree.
+ *  - a **scalar** arm (from {@link scalars}): the whole plain single-valued subtree (scalars, references, embedded
+ *    resources), every edge `optional` so one row carries all bound values;
+ *  - a **localised** arm per `dictionary` leaf (from {@link composites}): the required path to the leaf's parent,
+ *    then the localised edge binding one tagged-term column;
+ *  - a **variant** arm per requested union variant (from {@link composites}): the variant's object column gated by
+ *    its {@link membership} constraint, then the variant's subtree.
  *
- * Variables come from the shared {@link Scope}, keyed on {@link Branch} identity (or the variant shape
- * for a variant column), so the decoder recovers each column by resolving the same node. Requests whose
- * flake has no descent branch contribute no arm and are pre-filtered by the caller.
+ * Variables come from the {@link Scope} shared with the decoder, keyed on {@link Branch} identity (paired with the
+ * variant shape for a variant column), so both sides agree on every column. Requests whose plan reads no
+ * single-valued property contribute no arm and must be filtered out by the caller.
  *
  * @module
  */
@@ -51,15 +49,12 @@ import { link, membership } from "../_/_encode.js";
 
 
 /**
- * Emits one batched SELECT covering every request.
- *
- * Builds the `WHERE` from the `UNION` of every request's arms, all sharing `scope` so the decoder can
- * recover each request's columns.
+ * Encodes one batched `select` covering every request.
  *
  * @param scope The variable allocator shared with the decoder, keyed on {@link Branch} identity
  * @param batch The root entries paired with their {@link Flake | detail plans}
  *
- * @returns The unified SELECT query
+ * @returns The batched `select` query
  */
 export function encode(
 	scope: Scope<Variable>,
@@ -74,10 +69,9 @@ export function encode(
 
 
 	/**
-	 * The arms reading the subtree at `anchor`. A resource has two descents, its {@link scalars} and its
-	 * {@link composites}, each an independent arm of the enclosing `UNION` and each prefixed by `path`:
-	 * the required edges reaching `anchor`, empty at the root, a variant's membership-gated reach in
-	 * recursion.
+	 * The arms reading the subtree at `anchor`: its {@link scalars} and its {@link composites}, each an independent
+	 * arm of the enclosing `union`. Every arm is prefixed by `path`, the required edges reaching `anchor`: empty at the
+	 * root, a variant's membership-gated reach below it.
 	 */
 	function resource(path: readonly SPARQL[], anchor: Variable | Named, entries: readonly Branch[]): readonly SPARQL[] {
 
@@ -89,9 +83,10 @@ export function encode(
 	}
 
 	/**
-	 * The single arm reading `anchor`'s scalar properties: `path` followed by the `OPTIONAL` block of the
-	 * plain single-valued subtree. Emitted only when non-empty, so a bare `path` still binds the edges
-	 * reaching `anchor` even when it has no scalar leaf.
+	 * The single arm reading `anchor`'s scalar properties: `path` followed by the `optional` block of the plain
+	 * single-valued subtree. The arm is emitted whenever it has clauses, so a bare `path` still binds the edges
+	 * reaching
+	 * `anchor` even if `anchor` has no scalar leaf.
 	 */
 	function scalars(path: readonly SPARQL[], anchor: Variable | Named, entries: readonly Branch[]): readonly SPARQL[] {
 
@@ -99,7 +94,7 @@ export function encode(
 
 
 		/**
-		 * The `OPTIONAL` clauses of the plain single-valued subtree at `anchor`, one per branch wrapping its
+		 * The `optional` clauses of the plain single-valued subtree at `anchor`, one per branch wrapping its
 		 * edge and nested descent. Composite branches (`dictionary` leaves, unions) are skipped:
 		 * {@link composites} emits them as standalone arms.
 		 */
@@ -127,10 +122,10 @@ export function encode(
 	}
 
 	/**
-	 * The standalone composite arms under `anchor`, the complement of {@link scalars}: one arm per
-	 * `dictionary` leaf, one per requested union variant (each with its own subtree and nested composites), recursing
-	 * through plain nested resources. Each arm carries `path` (the required edges reaching here) so it
-	 * yields rows only when that path exists.
+	 * The standalone composite arms under `anchor`, the complement of {@link scalars}: one arm per `dictionary` leaf
+	 * and one per requested union variant (each with its own subtree and nested composites), recursing through plain
+	 * nested resources. Each arm carries `path`, the required edges reaching `anchor`, so it returns rows only if that
+	 * path exists.
 	 */
 	function composites(path: readonly SPARQL[], anchor: Variable | Named, entries: readonly Branch[]): readonly SPARQL[] {
 

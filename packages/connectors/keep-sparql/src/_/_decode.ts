@@ -36,18 +36,18 @@ export function column(variable: Variable, tuples: readonly Tuple[]): readonly T
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /**
- * Coerces a scalar solution {@link Term} back to the QEST {@link Value} it stands for, the read-side dual of the
- * encoder's write-value typing (§3.3). An IRI keeps its reference identity; a literal collapses to its transport
- * type: an `xsd:boolean` to a boolean, a numeric datatype to a number, and every other datatype (including the
- * `xsd:string` a plain literal carries) to its lexical string, so the many-to-one egress mapping discards the
- * processing-type distinctions not carried on the wire.
+ * Coerces a scalar solution {@link Term} back to the QEST {@link Value} it stands for (§3.4).
  *
- * @param value The solution term to coerce, an IRI reference or a plain/typed literal
+ * An IRI keeps its reference identity. A literal maps to its transport type: an `xsd:boolean` to a boolean, a numeric
+ * datatype to a number, and any other datatype (the `xsd:string` of a plain literal included) to its lexical form.
+ * The mapping is many-to-one, so processing-type distinctions are not preserved.
+ *
+ * @param value The solution term to coerce, an IRI reference or a plain or typed literal
  *
  * @returns The decoded value: a reference, boolean, number, or string
  *
- * @throws {RangeError} If `value` is a blank node or a language-tagged literal, neither of which surfaces as a
- * scalar value (a localised property is decoded through the broker, not here)
+ * @throws {@link !RangeError RangeError} If `value` is a blank node or a language-tagged literal, neither of which
+ * stands for a scalar value
  */
 export function termToValue(value: Term): Value {
 	if ( value.kind === "blank" ) {

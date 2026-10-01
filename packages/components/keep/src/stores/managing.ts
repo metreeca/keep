@@ -17,8 +17,8 @@
 /**
  * Managing store wrapper.
  *
- * Manages mutation events, transactional execution, and lifecycle for a plain {@link StoreClient},
- * exposing it as a full {@link Store}.
+ * Turns a plain {@link StoreClient} into a full {@link Store}, supplying mutation events, transactional execution and
+ * lifecycle management that a connector does not provide natively.
  *
  * @module
  */
@@ -38,54 +38,48 @@ import type { Store, StoreClient, StoreObserver } from "../index.js";
  * Manages mutation events, transactional execution, and lifecycle for a bare {@link StoreClient},
  * exposing it as a full {@link Store}.
  *
- * This lets a connector implement only the {@link StoreClient} data surface and obtain
- * mutation events, transactional execution, and lifecycle for free: supply nothing and the wrapper provides working
- * defaults, or hand it backend primitives through `management` to back any of `execute`, `observe`, or `close`.
+ * A connector can implement only the {@link StoreClient} data surface and still offer the full {@link Store}
+ * contract. With no `management` options, the wrapper provides working defaults. Backend primitives supplied through
+ * `management` back any of `execute`, `observe` or `close`, and the wrapper fills in whatever is missing.
  *
- * Each standalone mutation call and each {@link Store.execute execute} call accumulates its own
- * batch of mutation signals and delivers a single filtered event to each matching registered
- * {@link StoreObserver observer} when the call resolves; if it rejects, pending signals are discarded
- * and no observers are notified. Both synchronous throws and asynchronous rejections from observers
- * are caught and silently ignored so that one faulty observer cannot break delivery to others.
+ * Each standalone mutation call and each {@link Store.execute execute} call delivers a single filtered event to each
+ * matching {@link StoreObserver observer} once the call resolves. If the call rejects, its pending events are
+ * discarded and no observer is notified. Synchronous throws and asynchronous rejections from observers are caught and
+ * silently ignored, so one faulty observer cannot break delivery to others.
  *
- * Any of the {@link Store} management methods may be supplied through `management` to delegate to an inner
- * implementation; the wrapper fills in whatever is missing.
- *
- * All errors — `RangeError`, {@link @metreeca/core!TraceError | TraceError},
- * {@link @metreeca/http!Problem | Problem} —
- * propagate as promise rejections per the unified {@link Store} error channel.
+ * All errors, including {@link !RangeError RangeError}, {@link @metreeca/core!TraceError | TraceError} and
+ * {@link @metreeca/http!Problem | Problem}, propagate as promise rejections, in line with the unified {@link Store}
+ * error channel.
  *
  * > [!IMPORTANT]
- * > **Transaction Isolation** — `None` by default: the built-in `execute` is a deferred identity that applies each
- * > call directly, with no write buffering and no rollback. When an `execute` opt is supplied through `management`,
- * > the level is determined by that wrapper (typically a backend transaction primitive).
+ * > **Transaction Isolation** — `None` by default: the built-in `execute` applies each call directly, with no write
+ * > buffering and no rollback. If an `execute` option is supplied through `management`, that option determines the
+ * > level, typically through a backend transaction primitive.
  *
  * > [!IMPORTANT]
  * > **Mutation Events** — emits in-process observer events: each standalone mutation and each
  * > {@link Store.execute execute} call delivers a single filtered batch to matching {@link StoreObserver observer}s
- * > on resolve, and none on rejection. Cross-client signals reach local observers only when a backend-bridging
- * > `observe` opt is supplied through `management`.
+ * > on resolve, and none on rejection. Mutations made by other clients reach local observers only if a
+ * > backend-bridging `observe` option is supplied through `management`.
  *
- * @param store - Inner StoreClient to delegate data calls to
- * @param management - Subset of {@link Store} management methods to delegate to; the wrapper fills in whatever is
- *     missing
- * @param management.execute - Wraps every standalone StoreClient call and the body of {@link Store.execute execute},
- *     typically a backend transaction primitive (for example, `graph.execute` for a SPARQL connector) responsible for
- *     atomic commit and rollback. The wrapper StoreClient passed to the user task does NOT re-enter the opt; it relies
- *     on the outer wrap so cross-call isolation works as expected. The task receives a per-call `scope` StoreClient,
- *     and every delegated call within the wrap routes through `scope` (mirroring the {@link Store.execute} contract),
- *     letting the wrapper install per-call state such as a freshly-bound graph buffer without leaking it across
- *     concurrent invocations. Defaults to a deferred identity (`task => Promise.resolve().then(() => task(store))`);
- *     user-supplied wrappers MUST pass a per-call `scope` StoreClient to `task` and MUST convert synchronous throws
- *     from `task` into promise rejections to preserve the unified Store error channel; the `lookup` path delegates
- *     directly to the wrapper and provides no additional guard
- * @param management.observe - Registers each observer with the delegate as well as locally, combining the two
- *     unsubscribe handles so a single detach call releases both; this is how storage-level events (mutations from
- *     other clients sharing the backend) reach the wrapper's local observers. The resource filter always arrives as
- *     an array of references, or as `undefined` where the registration is unfiltered, so a bare reference or a
- *     single-pass iterable handed to {@link Store.observe observe} never has to be handled again downstream.
+ * @param store - Inner StoreClient serving the data calls
+ * @param management - Subset of {@link Store} management methods backed by the connector; the wrapper fills in
+ *     whatever is missing
+ * @param management.execute - Transaction wrapper applied to every standalone StoreClient call and to the body of
+ *     each {@link Store.execute execute} call, typically a backend transaction primitive (for example,
+ *     `graph.execute` for a SPARQL connector) responsible for atomic commit and rollback. It receives a task and MUST
+ *     call it with a `scope` StoreClient dedicated to that call, so per-call state, such as a freshly bound graph
+ *     buffer, never leaks across concurrent invocations; every data call within the transaction is routed through
+ *     `scope`. Calls made by a user task inside {@link Store.execute execute} do not open further transactions: they
+ *     share the outer one. The option MUST convert synchronous throws from the task into promise rejections, to
+ *     preserve the unified Store error channel: lookups are routed through it with no additional guard. Defaults to
+ *     applying the task directly to `store`, with no isolation
+ * @param management.observe - Backend registration for storage-level events, such as mutations made by other clients
+ *     sharing the backend. Each observer is registered both with this option and locally, and a single detach call
+ *     releases both registrations. The resource filter always arrives as an array of references, or as `undefined`
+ *     for an unfiltered registration, so the option never has to handle bare references or single-pass iterables.
  *     Absent by default
- * @param management.close - Exposed verbatim on the returned store. Defaults to a resolved no-op
+ * @param management.close - Exposed as is on the returned store. Defaults to a resolved no-op
  *
  * @returns An immutable {@link Store} composing `store` with the supplied `management` opts
  */
@@ -196,7 +190,7 @@ export function createManagingStore(store: StoreClient, {
 				mutations.forEach((exists, id) => {
 
 					// `resources` is `undefined` for an unfiltered registration (fires for every mutation)
-					// and an array — possibly empty — for a filtered one
+					// and an array (possibly empty) for a filtered one
 
 					if ( resources === undefined || resources.some(r => isNestedIRI(r, id)) ) { event[id] = exists; }
 

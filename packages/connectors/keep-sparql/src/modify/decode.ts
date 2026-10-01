@@ -17,10 +17,8 @@
 /**
  * Modify-pass result decoder.
  *
- * Settles each queued {@link Modify} once the batched update has been applied: every request's
- * deferred resolves to its own `entry`, the mutation having already been folded into the single
- * update the encoder emitted. A SPARQL Update projects no bindings, so there is nothing to read
- * back; the decoder exists to keep the drive cycle uniform with the query passes.
+ * Settles each queued {@link Modify} once the batched update has been applied, resolving it to its own `entry`. A
+ * SPARQL update returns no bindings, so there is nothing to read back.
  *
  * @module
  */
@@ -35,7 +33,7 @@ import type { Variable } from "@metreeca/wire-sparql";
  *
  * @param scope The shared variable scope, unused: the update projects no bindings
  * @param batch The queued modify requests to settle, each carrying the `request` whose `entry` is returned
- * @param value The update result, unused: a SPARQL Update yields no solution
+ * @param value The update result, unused: a SPARQL update returns no solution
  */
 export function decode(
 	scope: Scope<Variable>,

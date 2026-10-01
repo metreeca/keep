@@ -15,20 +15,15 @@
  */
 
 /**
- * Per-arm coverage of selection on multi-valued properties of a directly-retrieved resource.
+ * Collection retrieval conformance: multi-valued properties retrieved as part of a single resource (§5.6).
  *
- * Consolidates the collection-retrieval contract in one place: the multi-valued
- * {@link @metreeca/qest/model!Placeholders} arms — a bare `Locale`, `[Placeholder, Criteria?]`, and
- * `[Union, Criteria?]` — against single-resource retrievals. Localised slots carry no inline
- * `Criteria` (`Locale` reaches `Placeholders` as its own arm, never a `Query` element), so the
- * `Locale` arm is exercised bare only; the `[Placeholder, Criteria?]` and `[Union, Criteria?]`
- * arms are exercised both bare and with a `Criteria` (filter / order / slice) attached in the
- * tuple's second slot. The `[Projection, Criteria?]` arm is exclusively covered by
- * `projection.ts` (catalogue-scoped); cross-cutting selection on projection sub-collections is
- * tracked as a follow-up gap.
+ * Covers each query form a multi-valued property admits on a directly retrieved resource: a locale over a localised
+ * property, and a placeholder or a union over any other property, both bare and with criteria (filter, order, slice)
+ * stated alongside the retrieval keys. Localised properties are retrieved through a locale alone, since the query
+ * forms carrying criteria do not apply to them. Projections are covered by the projection suite.
  *
  * Filtering, ordering, slicing and projection of catalogue members are covered in depth by the criteria, projection,
- * expression and localised suites; this suite covers the collection contract as a whole (empty and missing
+ * expression and localised suites. This suite covers the collection contract as a whole (empty and missing
  * collections) and multi-valued slots retrieved alongside the other members of a resource.
  *
  * @module retrieve/collection
@@ -56,10 +51,9 @@ export function testRetrieveCollection(factory: TestFactory): void {
 
 		describe("locale — §5.4", () => {
 
-			// Localised properties are inherently multi-valued (qest §10) and carry no inline
-			// `Criteria` — `Locale` reaches `Placeholders` as its own arm, never a `Query` element. Filtering or
-			// ordering by a localised value attaches at the enclosing collection's `Criteria` through an
-			// `Expression`, with the target language supplied out-of-band, never inline on the slot.
+			// a localised property is retrieved through a locale (§5.4), which carries no criteria: filtering or
+			// ordering by a localised value attaches to the enclosing collection's criteria through an expression,
+			// with the target language supplied out of band, never inline on the slot
 
 			it("should detail every requested tag without selection", factory(async ({ store }) => {
 
@@ -98,9 +92,8 @@ export function testRetrieveCollection(factory: TestFactory): void {
 
 		describe("placeholder (scalar collection) — §5.6", () => {
 
-			// Bare `[Placeholder]` with no Criteria attached. Criteria on scalar primitives is
-			// expressed through the second tuple slot `[Placeholder, Criteria]`,
-			// here authored through the local `collection(element, selection)` helper.
+			// a bare placeholder retrieves every item; criteria on a scalar collection are stated alongside the
+			// retrieval keys (§5.6), here authored through the local `collection(element, selection)` helper
 
 			it("should detail every element without selection", factory(async ({ store }) => {
 
@@ -347,25 +340,27 @@ export function testRetrieveCollection(factory: TestFactory): void {
 				const result = await store.lookup({
 					entry: target.id,
 					shape: Vendor,
-					model: { contacts: collection({
-						"0": {},
-						"1": {},
-						"2": {
-							label: { und: {}, en: {}, de: {}, fr: {}, it: {} },
-							street: {},
-							city: {},
-							zip: {},
-							country: {},
-							comment: { en: {}, de: {}, fr: {}, it: {} }
-						},
-						"3": {
-							label: { und: {}, en: {}, de: {}, fr: {}, it: {} },
-							latitude: {},
-							longitude: {},
-							opened: {},
-							comment: { en: {}, de: {}, fr: {}, it: {} }
-						}
-					}, { ">latitude": 0 }) }
+					model: {
+						contacts: collection({
+							"0": {},
+							"1": {},
+							"2": {
+								label: { und: {}, en: {}, de: {}, fr: {}, it: {} },
+								street: {},
+								city: {},
+								zip: {},
+								country: {},
+								comment: { en: {}, de: {}, fr: {}, it: {} }
+							},
+							"3": {
+								label: { und: {}, en: {}, de: {}, fr: {}, it: {} },
+								latitude: {},
+								longitude: {},
+								opened: {},
+								comment: { en: {}, de: {}, fr: {}, it: {} }
+							}
+						}, { ">latitude": 0 })
+					}
 				});
 
 				expect(result?.contacts).toHaveLength(expected.length);
@@ -381,25 +376,27 @@ export function testRetrieveCollection(factory: TestFactory): void {
 				const result = await store.lookup({
 					entry: target.id,
 					shape: Vendor,
-					model: { contacts: collection({
-						"0": {},
-						"1": {},
-						"2": {
-							label: { und: {}, en: {}, de: {}, fr: {}, it: {} },
-							street: {},
-							city: {},
-							zip: {},
-							country: {},
-							comment: { en: {}, de: {}, fr: {}, it: {} }
-						},
-						"3": {
-							label: { und: {}, en: {}, de: {}, fr: {}, it: {} },
-							latitude: {},
-							longitude: {},
-							opened: {},
-							comment: { en: {}, de: {}, fr: {}, it: {} }
-						}
-					}, { "#": 1 }) }
+					model: {
+						contacts: collection({
+							"0": {},
+							"1": {},
+							"2": {
+								label: { und: {}, en: {}, de: {}, fr: {}, it: {} },
+								street: {},
+								city: {},
+								zip: {},
+								country: {},
+								comment: { en: {}, de: {}, fr: {}, it: {} }
+							},
+							"3": {
+								label: { und: {}, en: {}, de: {}, fr: {}, it: {} },
+								latitude: {},
+								longitude: {},
+								opened: {},
+								comment: { en: {}, de: {}, fr: {}, it: {} }
+							}
+						}, { "#": 1 })
+					}
 				});
 
 				expect(result?.contacts?.length ?? 0).toBeLessThanOrEqual(1);
@@ -422,25 +419,27 @@ export function testRetrieveCollection(factory: TestFactory): void {
 				const result = await store.lookup({
 					entry: target.id,
 					shape: Vendor,
-					model: { contacts: collection({
-						"0": {},
-						"1": {},
-						"2": {
-							label: { und: {}, en: {}, de: {}, fr: {}, it: {} },
-							street: {},
-							city: {},
-							zip: {},
-							country: {},
-							comment: { en: {}, de: {}, fr: {}, it: {} }
-						},
-						"3": {
-							label: { und: {}, en: {}, de: {}, fr: {}, it: {} },
-							latitude: {},
-							longitude: {},
-							opened: {},
-							comment: { en: {}, de: {}, fr: {}, it: {} }
-						}
-					}, { "^street": 1 }) }
+					model: {
+						contacts: collection({
+							"0": {},
+							"1": {},
+							"2": {
+								label: { und: {}, en: {}, de: {}, fr: {}, it: {} },
+								street: {},
+								city: {},
+								zip: {},
+								country: {},
+								comment: { en: {}, de: {}, fr: {}, it: {} }
+							},
+							"3": {
+								label: { und: {}, en: {}, de: {}, fr: {}, it: {} },
+								latitude: {},
+								longitude: {},
+								opened: {},
+								comment: { en: {}, de: {}, fr: {}, it: {} }
+							}
+						}, { "^street": 1 })
+					}
 				});
 
 				const got = result?.contacts ?? [];

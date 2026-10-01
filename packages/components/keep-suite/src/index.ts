@@ -20,8 +20,8 @@
  * Provides reusable test suites that backend connector packages run to verify their {@link Store}
  * implementations satisfy the contracts defined by `@metreeca/keep`.
  *
- * {@link testStore} covers resource and collection lookup, CRUD operations, unconditional insert/remove,
- * transaction execution, change notifications, and lifecycle management.
+ * {@link testStore} covers resource and collection retrieval, conditional and unconditional writes, transaction
+ * execution, mutation events, and lifecycle management.
  *
  * Connectors call {@link testStore} with a {@link StoreTestOptions} object that provisions store instances and loads
  * them with the {@link toys | sample dataset}.
@@ -86,9 +86,8 @@ export type Probe<S extends Lazy<ResourceShape>> =
  * Sub-suite or test selector pattern accepted by {@link StoreTestOptions.target | target} and
  * {@link StoreTestOptions.ignore | ignore}.
  *
- * The literal branches enumerate the well-known sub-suite tags so editors can offer autocomplete on the canonical
- * names. The `(string & {})` branch keeps the union open to arbitrary substrings — typically a `describe` block name
- * or an individual test name — without losing literal suggestions.
+ * The literal branches list the well-known sub-suite tags, so editors offer them as completions. The union also
+ * accepts arbitrary substrings, typically a `describe` block name or an individual test name.
  */
 export type StoreTestPatterns =
 
@@ -130,8 +129,8 @@ export type StoreTestScope = {
 	 * Execute only the sub-suites or tests whose path contains any of the given patterns.
 	 *
 	 * Patterns are matched as substrings against the full test path, formed by joining the well-known sub-suite tag
-	 * (`PersistUpdate`, `RetrieveTemplate`, …) with the inner `describe`/`it` names using ` > ` as separator —
-	 * e.g. `PersistUpdate > update > contract > should return the resource id for an existing resource`.
+	 * (`PersistUpdate`, `RetrieveTemplate`, …) with the inner `describe`/`it` names using ` > ` as separator, for
+	 * example `PersistUpdate > update > contract > should return the resource id for an existing resource`.
 	 *
 	 * Well-known sub-suite tags are listed inline as autocomplete hints; arbitrary patterns are accepted via the
 	 * `(string & {})` branch and may target individual `describe` blocks or test names. When omitted (or empty), every
@@ -184,13 +183,13 @@ export interface StoreTestOptions<S extends StoreClient = StoreClient> extends S
 	/**
 	 * Checks whether every fact described by a resource is present in the store.
 	 *
-	 * Returns `true` if every fact described by `resource` (scalar values, references, nested structures) is present;
-	 * `false` otherwise. Used by mutation tests to verify persisted content without depending on
+	 * Returns `true` if every fact described by `entry` (scalar values, references, nested structures) is present;
+	 * `false` otherwise. Mutation tests rely on it to verify persisted content without depending on
 	 * {@link StoreClient.lookup}.
 	 *
-	 * Accepts partial resources: only the slots explicitly set on `resource` contribute facts — omitted slots produce
-	 * no triples and are not checked. Full validated states behave as whole-state equality checks; narrower probes
-	 * assert a targeted subset of facts.
+	 * Accepts partial resources: only the slots explicitly set on `entry` contribute facts, and omitted slots are not
+	 * checked. Full validated states behave as whole-state equality checks; narrower probes assert a targeted subset
+	 * of facts.
 	 *
 	 * @typeParam S - The resource shape the probe and its facts conform to
 	 *
@@ -202,14 +201,13 @@ export interface StoreTestOptions<S extends StoreClient = StoreClient> extends S
 	/**
 	 * Checks whether every fact described by a resource is absent from the store.
 	 *
-	 * Returns `true` if none of the facts described by `resource` (scalar values, references, nested structures) are
+	 * Returns `true` if none of the facts described by `entry` (scalar values, references, nested structures) are
 	 * present; `false` if any fact is still present. Mirror of {@link StoreTestOptions.includes | includes}: where
-	 * `includes` asserts all-present,
-	 * `excludes` asserts all-absent.
+	 * `includes` asserts all-present, `excludes` asserts all-absent.
 	 *
 	 * Accepts partial resources under the same semantics as {@link StoreTestOptions.includes | includes}: only
-	 * explicitly-set slots contribute facts. Passing a full state yields an always-false check (operations leave at
-	 * least some facts behind); probes should narrow to the exact slots whose triples are expected to be gone.
+	 * explicitly-set slots contribute facts. Probes narrow to the exact slots whose facts are expected to be gone,
+	 * since a fuller state would also cover facts the operation under test leaves in place.
 	 *
 	 * @typeParam S - The resource shape the probe and its facts conform to
 	 *
@@ -225,16 +223,17 @@ export interface StoreTestOptions<S extends StoreClient = StoreClient> extends S
 	 * Must clear all existing data and perform a full reload: any resources created, updated, or deleted by previous
 	 * tests must be removed so that only the original sample data is present.
 	 *
-	 * Called by individual sub-suites via `beforeAll` to populate or repopulate the store before their tests run.
+	 * Called by the retrieval sub-suites before their tests run, so each of them reads the pristine sample dataset.
 	 */
 	readonly populate: () => Awaitable<void>;
 
 	/**
 	 * Generates an isolated copy of a sample resource with a unique identifier and inserts it into the store.
 	 *
-	 * Used by mutation tests to create isolated resources that do not conflict with the sample dataset or other tests.
+	 * Mutation tests rely on it to create isolated resources that do not conflict with the sample dataset or other
+	 * tests. The {@link toys!clone | clone} helper mints a suitable copy.
 	 *
-	 * @param sample - The sample resource to use as template, validated with `value` scope
+	 * @param sample - The sample resource to use as template, typically drawn from the {@link toys | sample dataset}
 	 * @param shape - The resource shape describing the resource structure
 	 *
 	 * @returns The inserted copy with a unique `id`
@@ -249,8 +248,8 @@ export interface StoreTestOptions<S extends StoreClient = StoreClient> extends S
 /**
  * Runs the store conformance suite.
  *
- * Registers sub-suites for resource and collection lookup, CRUD operations, unconditional insert/remove,
- * change notifications, and lifecycle management. Sub-suites and individual tests can be filtered with
+ * Registers sub-suites for resource and collection retrieval, conditional and unconditional writes, transaction
+ * execution, mutation events, and lifecycle management. Sub-suites and individual tests can be filtered with
  * {@link StoreTestOptions.target | target} and {@link StoreTestOptions.ignore | ignore}.
  *
  * @param options - The store provisioning and lifecycle callbacks

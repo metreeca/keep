@@ -50,7 +50,9 @@ function retrieveStub(impl: (request: { entry: string }) => unknown): StoreClien
 // Localised cast, as for retrieveStub: the stub resolves to the identifier the state states, as a store minting
 // under the collection would, and to the product entry otherwise.
 function createStub(): StoreClient["create"] {
-	return vi.fn(async ({ state }: { readonly state: Resource }) => state.id ?? entry) as unknown as StoreClient["create"];
+	return vi.fn(async ({ state }: {
+		readonly state: Resource
+	}) => state.id ?? entry) as unknown as StoreClient["create"];
 }
 
 function stubStore(overrides: Partial<StoreClient> = {}): StoreClient {
@@ -129,7 +131,12 @@ describe("createManagingStore", () => {
 		// resource, update/delete on a missing one); an undefined result records no mutation and fires no event
 
 		const conditional: ReadonlyArray<readonly [string, (store: StoreClient) => Promise<unknown>]> = [
-			["create", store => store.create({ entry: catalogue, shape: Catalogue, model: { items: {} }, state: fullState })],
+			["create", store => store.create({
+				entry: catalogue,
+				shape: Catalogue,
+				model: { items: {} },
+				state: fullState
+			})],
 			["update", store => store.update({ entry, shape, state: fullState })],
 			["delete", store => store.delete({ entry, shape })]
 		];
@@ -309,7 +316,12 @@ describe("createManagingStore", () => {
 			store.observe(observer);
 
 			await store.execute(async s => {
-				await s.create({ entry: catalogue, shape: Catalogue, model: { items: {} }, state: { ...fullState, id: entryA } });
+				await s.create({
+					entry: catalogue,
+					shape: Catalogue,
+					model: { items: {} },
+					state: { ...fullState, id: entryA }
+				});
 				await s.update({ entry: entryB, shape, state: fullState });
 			});
 
@@ -326,7 +338,12 @@ describe("createManagingStore", () => {
 			store.observe(observer);
 
 			await store.execute(async s => {
-				await s.create({ entry: catalogue, shape: Catalogue, model: { items: {} }, state: { ...fullState, id: entryA } });
+				await s.create({
+					entry: catalogue,
+					shape: Catalogue,
+					model: { items: {} },
+					state: { ...fullState, id: entryA }
+				});
 				expect(observer).not.toHaveBeenCalled();
 				await s.update({ entry: entryB, shape, state: fullState });
 				expect(observer).not.toHaveBeenCalled();
@@ -357,12 +374,22 @@ describe("createManagingStore", () => {
 			const firstBlocker = new Promise<void>(resolve => { releaseFirst = resolve; });
 
 			const first = store.execute(async s => {
-				await s.create({ entry: catalogue, shape: Catalogue, model: { items: {} }, state: { ...fullState, id: entryA } });
+				await s.create({
+					entry: catalogue,
+					shape: Catalogue,
+					model: { items: {} },
+					state: { ...fullState, id: entryA }
+				});
 				await firstBlocker;
 			});
 
 			const second = store.execute(async s => {
-				await s.create({ entry: catalogue, shape: Catalogue, model: { items: {} }, state: { ...fullState, id: entryB } });
+				await s.create({
+					entry: catalogue,
+					shape: Catalogue,
+					model: { items: {} },
+					state: { ...fullState, id: entryB }
+				});
 			});
 
 			await second;
@@ -476,7 +503,12 @@ describe("createManagingStore", () => {
 			const store = createManagingStore(inner, { execute });
 
 			await store.execute(async s => {
-				await s.create({ entry: catalogue, shape: Catalogue, model: { items: {} }, state: { ...fullState, id: entryA } });
+				await s.create({
+					entry: catalogue,
+					shape: Catalogue,
+					model: { items: {} },
+					state: { ...fullState, id: entryA }
+				});
 				await s.update({ entry: entryB, shape, state: fullState });
 			});
 
@@ -486,7 +518,12 @@ describe("createManagingStore", () => {
 		it("should propagate execute opt rejection (rollback semantics)", async () => {
 			const store = createManagingStore(stubStore(), { execute: rejectingExecute("rollback") });
 
-			await expect(store.create({ entry: catalogue, shape: Catalogue, model: { items: {} }, state: fullState })).rejects.toThrow("rollback");
+			await expect(store.create({
+				entry: catalogue,
+				shape: Catalogue,
+				model: { items: {} },
+				state: fullState
+			})).rejects.toThrow("rollback");
 		});
 
 		it("should propagate execute opt rejection from a task (atomic rollback across calls)", async () => {

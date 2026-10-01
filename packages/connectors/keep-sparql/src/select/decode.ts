@@ -17,13 +17,14 @@
 /**
  * Select-pass result decoder.
  *
- * Materialises each queued {@link Select}'s collection from the batched SELECT's solution tuples, one
- * member per row of the request in the returned order: a projection row as a record of its bindings'
- * cells, a plain collection as its root cell. A cell retrieved as a union is read off the variant column
- * that bound (§5.5), with no term inspection; a resource or expanded reference is handed to the detail
- * pass through the supplied {@link Broker}, which re-fetches its content, as is the owner of a localised
- * property retrieved structurally (§5.4); any other cell coerces its term. The variable protocol shared
- * with the encoder is stated in `select/index.md`.
+ * Materialises each queued {@link Select} collection from the batched query's solution tuples, one member per row of
+ * the request, in the returned order. A projection row becomes a record of its bindings, and a plain collection row
+ * becomes its member. A cell retrieved as a union is read from the variant column that bound (§5.5), with no term
+ * inspection.
+ *
+ * A resource or expanded reference is handed to the detail pass through the {@link Broker}, which fetches its
+ * content. So is the owner of a localised property retrieved structurally (§5.4). Any other cell coerces its term.
+ * The contract shared with the encoder is stated in `select/index.md`.
  *
  * @module
  */
@@ -53,12 +54,12 @@ import { termToValue } from "../_/_decode.js";
 
 
 /**
- * Settles each batched select request against the SELECT solution.
+ * Settles each batched select request with the collection decoded from the `select` solution.
  *
  * @param scope The variable scope shared with the encoder, recovering per-request tuple slots
  * @param batch The queued select requests to settle, each paired with its {@link Flake | query plan} and deferred
  * @param broker The cross-pass channel expanding structured and localised cells through the detail pass
- * @param tuples The solution tuples returned by the batched SELECT round
+ * @param tuples The solution tuples returned by the batched `select` query
  */
 export function decode(
 	scope: Scope<Variable>,
@@ -77,9 +78,9 @@ export function decode(
 		});
 
 		Promise.all(rows.map(row => flake.drain?.form === "projection"
-			? record(flake, row, locale)
-			: cell(flake, flake, row, locale)
-		))
+				? record(flake, row, locale)
+				: cell(flake, flake, row, locale)
+			))
 			.then(values => values.filter(value => value !== undefined))
 			.then(resolve)
 			.catch(reject);
@@ -158,7 +159,12 @@ export function decode(
 			const owner = owning(root, node);
 
 			return term.kind !== "named" || owner === undefined ? Promise.resolve(undefined)
-				: broker.detail({ entry: term.iri, shape: owner, model: { [name]: drain.query }, locale }).then(resource =>
+				: broker.detail({
+					entry: term.iri,
+					shape: owner,
+					model: { [name]: drain.query },
+					locale
+				}).then(resource =>
 					// ;(cast) the detailed resource carries the one localised field just requested, which decodes to a
 					// single structured value rather than to a set; the static inference no longer says either,
 					// reading leaf types off a notation that no longer carries them (see `@metreeca/blue/value`)
@@ -221,7 +227,7 @@ export function decode(
 		return getShapeBranches(parent.range.shape)
 			.flatMap(variant => opt(getShapeTarget(variant), target => [target], []))
 			.find(target => opt(target.members[name], member =>
-				member.kind === "property" && getShapeBranches(member.range.shape).some(variant => variant.kind === "dictionary"),
+					member.kind === "property" && getShapeBranches(member.range.shape).some(variant => variant.kind === "dictionary"),
 				false
 			));
 

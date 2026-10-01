@@ -17,8 +17,8 @@
 /**
  * Shape-mode walk for {@link createFlake}.
  *
- * Walks every entry of `shape.entries` (id, type, property) and recurses through embedded resources
- * and captive references. Plain and foreign references stay as leaves: crossing them would reach into
+ * Walks every member of the shape (`id`, `type`, and properties) and recurses through embedded resources
+ * and captive references. Other references stay as leaves: crossing them would reach into resources with
  * their own independent identity.
  *
  * Produces an immutable {@link Flake} carrying only the structural reach, with no {@link Flake.drain | drain},
@@ -41,8 +41,7 @@ import { type Entries, type Flake } from "./index.js";
 /**
  * Builds the shape-mode {@link Flake} from a root shape.
  *
- * Internal entry point: public callers go through the dispatcher in {@link createFlake}, which routes
- * the no-input call shape here.
+ * Internal entry point: public callers go through {@link createFlake}, which routes the shape-only call here.
  *
  * A non-resource root yields a degenerate leaf flake with no property branches.
  *
@@ -68,9 +67,9 @@ export function createShapeFlake(shape: Shape): Flake {
 /**
  * Builds the property-major {@link Entries} of a node from its effective {@link Range}.
  *
- * Each owned variant of the range — an embedded resource or a captive reference — contributes its target's
- * declared properties, merged across variants; plain and foreign references keep their independent identity
- * and contribute none. Every declared name becomes one {@link Branch} carrying its range (stepped one property
+ * Each owned variant of the range (an embedded resource or a captive reference) contributes its target's
+ * declared properties, merged across variants; other references keep their independent identity and contribute
+ * none. Every declared name becomes one {@link Branch} carrying its range (stepped one property
  * from the node range) and recursing into that child's own owned structure; a name declared by several variants
  * is one property (union coherence, §3.2), entered through the first declaring variant's member. Cyclic captive
  * shapes are unsupported: the walk performs no cycle detection.

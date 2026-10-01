@@ -14,6 +14,15 @@
  * limitations under the License.
  */
 
+/**
+ * Select-pass driver.
+ *
+ * Materialises every queued {@link Select} collection in a batch with a single `select` query against the
+ * repository. Members whose content the request asks for are expanded through the detail pass.
+ *
+ * @module index
+ */
+
 import { createScope } from "@metreeca/core/scope";
 import { createQueryFlake } from "@metreeca/keep-flake";
 import type { Broker, Deferred, Select } from "@metreeca/keep/batching";
@@ -23,16 +32,16 @@ import { encode } from "./encode.js";
 
 
 /**
- * Per-batch body for the select handler.
+ * Resolves a batch of select requests with one `select` query.
  *
- * Three phases run in sequence: **plan** every request by pairing it with its
- * {@link _flake_!createFlake | flake} and unpacking the deferred callbacks; **fetch** by
- * folding plans into one batched SELECT through
- * {@link encode} and running it; **deliver** by {@link decode | decoding} each request,
- * expanding nested-resource references through the supplied {@link Broker}, and settling
- * each request's deferred. Variable allocation across the
- * batched SELECT is shared between {@link encode} and {@link decode} via a single
- * {@link createScope | Scope}, so the decoder recovers the same per-request slots.
+ * Each request is planned with {@link createQueryFlake}, and every plan is folded into one query. Each request
+ * resolves to the members of its collection, in the order and window its query states.
+ *
+ * @param batch The queued select requests to resolve
+ * @param client The repository the query runs against
+ * @param broker The channel expanding members through the detail pass
+ *
+ * @returns A promise settling once the query results have been handed to the decoder
  */
 export async function select(
 	batch: readonly Deferred<Select>[],

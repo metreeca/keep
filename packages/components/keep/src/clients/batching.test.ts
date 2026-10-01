@@ -23,7 +23,7 @@ import type { Query, Slot, Template } from "@metreeca/qest/model";
 import type { Reference } from "@metreeca/qest/state";
 import { describe, expect, it } from "vitest";
 import { createBroker, mint } from "./batching.core.js";
-import { type Broker, createBatchingStore, type Detect, type Detail, type Modify, type Select } from "./batching.js";
+import { type Broker, createBatchingStore, type Detail, type Detect, type Modify, type Select } from "./batching.js";
 
 
 declare const process: {
@@ -123,7 +123,11 @@ describe("createBatchingStore", () => {
 
 	describe("create", () => {
 
-		const Item = resource({ pattern: "/items/{code}" }, { id: id(), code: required(string()), name: required(string()) });
+		const Item = resource({ pattern: "/items/{code}" }, {
+			id: id(),
+			code: required(string()),
+			name: required(string())
+		});
 		const Thing = resource({ id: id(), name: required(string()) });
 
 		const Catalogue = resource({ items: multiple(reference(Item)), things: multiple(reference(Thing)) });
@@ -972,12 +976,18 @@ describe("createBroker", () => {
 
 			const loader = createBroker({
 				async detect(batch, _) {
-					batch.forEach(d => { handled.push(d.request.entry); d.resolve(true); });
+					batch.forEach(d => {
+						handled.push(d.request.entry);
+						d.resolve(true);
+					});
 				},
 				async detail() {},
 				async select() {},
 				async modify(batch, _) {
-					batch.forEach(d => { handled.push(d.request.entry); d.resolve(d.request.entry); });
+					batch.forEach(d => {
+						handled.push(d.request.entry);
+						d.resolve(d.request.entry);
+					});
 				}
 			});
 
@@ -1015,7 +1025,11 @@ describe("mint", () => {
 
 	const entry = "https://example.com/vendors/";
 
-	const Slugged = resource({ pattern: "/vendors/{code}" }, { id: id(), code: required(string()), name: required(string()) });
+	const Slugged = resource({ pattern: "/vendors/{code}" }, {
+		id: id(),
+		code: required(string()),
+		name: required(string())
+	});
 	const Wild = resource({ pattern: "/vendors/*" }, { id: id(), name: required(string()) });
 	const Plain = resource({ id: id(), name: required(string()) });
 
