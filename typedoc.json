@@ -3,7 +3,7 @@
     "packages/*/*"
   ],
   "entryPointStrategy": "packages",
-  "name": "Metreeca Keep",
+  "name": "@metreeca/keep",
   "out": "docs",
   "readme": "README.md",
   "hostedBaseUrl": "https://metreeca.github.io/keep/",
