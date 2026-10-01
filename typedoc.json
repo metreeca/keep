@@ -3,6 +3,9 @@
     "packages/*/*"
   ],
   "entryPointStrategy": "packages",
+  "plugin": [
+    "./typedoc.mjs"
+  ],
   "name": "@metreeca/keep",
   "out": "docs",
   "readme": "README.md",
