@@ -1174,6 +1174,8 @@ function encodeVendor(vendor: Fragment<typeof Vendor>) {
 		property(id, toys.score, term(vendor.score, score)),
 		property(id, toys.certified, term(vendor.certified, certified)),
 		property(id, toys.audited, term(vendor.audited, audited)),
+		property(id, toys.origin, isPlace(vendor.origin) ? vendor.origin : [], encodePlace),
+		property(id, toys.origin, isPlace(vendor.origin) ? [] : text(vendor.origin)),
 		property(id, toys.address, vendor.address, encodeLocation),
 		property(id, toys.contacts, vendor.contacts, encodeLocation)
 	)));
@@ -1198,6 +1200,10 @@ function encodeVendor(vendor: Fragment<typeof Vendor>) {
 		return typed(audited,
 			isBoolean(audited) ? xsd.boolean : xsd.date
 		);
+	}
+
+	function isPlace(origin: Fragment<typeof Vendor>["origin"]): origin is State<typeof Place> {
+		return origin !== undefined && "latitude" in origin;
 	}
 
 }

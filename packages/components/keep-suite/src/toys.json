@@ -309,6 +309,10 @@
       "audited": "2023-06-15",
       "founded": "1985",
       "opens": "09:00:00",
+      "origin": {
+        "en": "Franconia",
+        "de": "Franken"
+      },
       "address": {
         "label": {
           "und": "Nürnberg, Germany"
@@ -392,6 +396,10 @@
       "certified": "B",
       "founded": "1972",
       "opens": "08:30:00",
+      "origin": {
+        "en": "Tuscany",
+        "it": "Toscana"
+      },
       "address": {
         "label": {
           "und": "Firenze, Italy"
@@ -429,6 +437,13 @@
       "certified": "1999",
       "audited": "2020-03-10",
       "founded": "2005",
+      "origin": {
+        "label": {
+          "und": "Asakusa, Tokyo"
+        },
+        "latitude": 35.7148,
+        "longitude": 139.7967
+      },
       "address": "3-7-1 Taito, Taito-ku, Tokyo 110-0016, Japan",
       "contacts": [
         "support@kidscraft.example.net",

@@ -933,6 +933,127 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 
 			});
 
+			describe("text variant — §3.2", () => {
+
+				// §3.2, §5.5: `Vendor.origin` pairs a text variant with the Place variant. Folding recasts the text
+				// variant as an ordinary string branch carrying its coalesced value (§6.2) before retrieval reaches
+				// it, so an atomic alternative addresses the region name as its coalesced label, and a template
+				// alternative the Place. A locale alternative is admitted only within a projection binding.
+
+				const regions = vendors.filter(v => isObject(v.origin) && !("latitude" in v.origin));
+				const places = vendors.filter(v => isObject(v.origin) && "latitude" in v.origin);
+
+				it("should retrieve each member's origin under the branch its stored value singles out", factory(async ({ store }) => {
+
+					const result = await store.lookup({
+						entry: "https://data.example.net/vendors/",
+						shape: Vendors,
+						model: {
+							members: {
+								id: {},
+								origin: { "0": {}, "1": { latitude: {}, longitude: {} } }
+							}
+						}
+					}, { locale: ["en"] });
+
+					expect(result?.members).toHaveLength(vendors.length);
+
+					vendors.forEach(vendor => {
+
+						const origin = result?.members?.find(member => member.id === vendor.id)?.origin;
+
+						if ( isObject(vendor.origin) && "latitude" in vendor.origin ) {
+							expect(origin).toEqual({
+								latitude: vendor.origin.latitude,
+								longitude: vendor.origin.longitude
+							});
+						} else if ( isObject(vendor.origin) ) {
+							expect(origin).toBe(vendor.origin.en);
+						} else {
+							expect(origin).toBeUndefined();
+						}
+
+					});
+
+				}));
+
+				it("should omit a folded text branch whose coalescing yields no value", factory(async ({ store }) => {
+
+					// §3.2: the text variant contributes nothing where coalescing yields undefined
+
+					const target = lookup(regions, v => isObject(v.origin) && !("de" in v.origin));
+
+					if ( target === undefined ) { return; }
+
+					const result = await store.lookup({
+						entry: target.id,
+						shape: Vendor,
+						model: { origin: { "0": {}, "1": { latitude: {}, longitude: {} } } }
+					}, { locale: ["de"] });
+
+					expect(result).not.toHaveProperty("origin");
+
+				}));
+
+				it("should skip the folded text branch when only the Place is requested", factory(async ({ store }) => {
+
+					// §5.5: variants left unmatched are skipped at retrieval, contributing no values
+
+					const [region] = regions;
+					const [place] = places;
+
+					if ( region === undefined || place === undefined
+						|| !isObject(place.origin) || !("latitude" in place.origin) ) { return; }
+
+					const model = { origin: { "0": { latitude: {}, longitude: {} } } };
+
+					const [regionResult, placeResult] = await Promise.all([
+						store.lookup({ entry: region.id, shape: Vendor, model }, { locale: ["en"] }),
+						store.lookup({ entry: place.id, shape: Vendor, model }, { locale: ["en"] })
+					]);
+
+					expect(regionResult).not.toHaveProperty("origin");
+					expect(placeResult?.origin).toEqual({
+						latitude: place.origin.latitude,
+						longitude: place.origin.longitude
+					});
+
+				}));
+
+				it("should reject a locale alternative outside a projection binding (§5.5)", factory(async ({ store }) => {
+
+					const [region] = regions;
+
+					if ( region === undefined ) { return; }
+
+					await expect(store.lookup({
+						entry: region.id,
+						shape: Vendor,
+						// @ts-expect-error the locale alternative is rejected by the type as well
+						model: { origin: { "0": { "*": {} } } }
+					})).rejects.toBeInstanceOf(RangeError);
+
+				}));
+
+				it("should reject a direct locale over a union pairing text and resource variants (§5.4)", factory(async ({ store }) => {
+
+					// §5.4: a property declaring both a text variant and a nested-resource variant leaves the object
+					// form ambiguous, and must be addressed through the keyed form
+
+					const [region] = regions;
+
+					if ( region === undefined ) { return; }
+
+					await expect(store.lookup({
+						entry: region.id,
+						shape: Vendor,
+						model: { origin: { "*": {} } }
+					})).rejects.toBeInstanceOf(RangeError);
+
+				}));
+
+			});
+
 		});
 
 		describe("empty-form elision", () => {

@@ -18,6 +18,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the `StoreClient` methods
 - `@metreeca/keep-rest` — `Store.lookup` accepts root-relative references (`/…`) in responses, resolving them against
   the origin of the request `entry`
+- `@metreeca/keep-suite` — conformance coverage for a union carrying a localised text variant, through the new
+	`Vendor.origin` property of the toys dataset: template and projection retrieval of the text variant as a coalesced
+  label or a tag-keyed map, and rejection of a locale alternative outside a projection binding
 
 ### Changed
 
@@ -78,6 +81,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   resource once it exists
 - Retrieve a union variant reached by several alternatives once, to the depth its most demanding alternative asks for,
   rather than through whichever alternative happens to come last
+- `@metreeca/keep-sparql` — retrieve a union value held by a localised text variant, which a template lookup returned
+  empty
 
 ## [0.10.0](https://github.com/metreeca/keep/releases/tag/v0.10.0) - 2026-09-09
 

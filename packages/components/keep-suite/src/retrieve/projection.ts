@@ -728,9 +728,7 @@ export function testRetrieveProjection(factory: TestFactory): void {
 				// to a heterogeneous [string, dictionary] range (blue `Range` note). Each media member's
 				// caption must surface under its own kind in the same composite cell across the fanned rows:
 				// the plain-string Image.caption as a bare string, the localised Video.caption as a Dictionary map.
-				// The mix is requested through the keyed form (a string alternative and a Locale alternative),
-				// since blue union() cannot hold a dictionary variant — a [string, dictionary] cell has no blue-shape
-				// spelling.
+				// The mix is requested through the keyed form (a string alternative and a Locale alternative).
 
 				const image = collections.images[0];
 				const video = collections.videos[0];
@@ -750,6 +748,62 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 				expect(caps).toContainEqual(image.caption);
 				expect(caps).toContainEqual(video.caption);
+
+			}));
+
+			it("should project the text variant of a declared union through a locale alternative (§5.5)", factory(async ({ store }) => {
+
+				// §5.5: within a projection binding a locale alternative addresses the text variant of
+				// `Vendor.origin` structurally, the region name occupying its cell as a dictionary, while the
+				// template alternative expands the Place variant of the vendors carrying one
+
+				const result = projected(members(await store.lookup({
+					entry: VendorsCatalogue,
+					shape: Vendors,
+					model: catalogue({
+						"id=id": {},
+						"origin=origin": { "0": { "*": {} }, "1": { latitude: {}, longitude: {} } }
+					})
+				}))) ?? [];
+
+				expect(result).toHaveLength(vendors.length);
+
+				result.forEach(r => {
+
+					const origin = lookup(vendors, { id: r.id as string })?.origin;
+
+					if ( isObject(origin) && "latitude" in origin ) {
+						expect(r.origin).toEqual({ latitude: origin.latitude, longitude: origin.longitude });
+					} else {
+						expect(r.origin).toEqual(origin);
+					}
+
+				});
+
+			}));
+
+			it("should project the folded text variant of a declared union through an atomic alternative (§3.2)", factory(async ({ store }) => {
+
+				// §3.2, §5.5: outside a locale alternative the text variant is folded into a string branch, so the
+				// atomic alternative yields the region name's coalesced label as a plain string cell
+
+				const expected = vendors
+					.map(v => v.origin)
+					.filter(o => isObject(o) && !("latitude" in o))
+					.map(o => isObject(o) && "en" in o ? o.en : undefined)
+					.filter(o => o !== undefined)
+					.sort(ascending);
+
+				const result = projected(members(await store.lookup({
+					entry: VendorsCatalogue,
+					shape: Vendors,
+					model: catalogue({
+						"id=id": {},
+						"origin=origin": { "0": {}, "1": { latitude: {}, longitude: {} } }
+					})
+				}, { locale: ["en"] }))) ?? [];
+
+				expect(result.map(r => r.origin).filter(o => typeof o === "string").sort(ascending)).toEqual(expected);
 
 			}));
 

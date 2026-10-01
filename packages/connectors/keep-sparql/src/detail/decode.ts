@@ -150,7 +150,7 @@ export function decode(
 
 		if ( rangeShape.kind === "union" ) {
 
-			return decodeUnion(locale, branch, drain)[0];
+			return decodeUnion(locale, branch, drain);
 
 		} else if ( rangeShape.kind === "dictionary" ) {
 
@@ -234,23 +234,29 @@ export function decode(
 	/**
 	 * Decodes the variant arms, the read-side counterpart of the encoder's membership gate. Each requested variant
 	 * has its own arm and object column, so the column that bound fixes the value's variant with no term inspection.
-	 * The property is single-valued, so the first requested variant whose column is bound stands. If no variant
-	 * column bound, the result is empty and the owning property is omitted (§4).
+	 * The property is single-valued, so the first requested variant whose column is bound stands, a localised variant
+	 * collecting its tagged terms as {@link decodeDictionary} does. If no variant column bound, the result is empty and
+	 * the owning property is omitted (§4).
 	 */
 	function decodeUnion(
 		locale: readonly Tag[],
 		branch: Branch & { readonly entry: Property },
 		drain: undefined | Drain
-	): readonly (Value | Promise<Resource>)[] {
+	): Values | Promise<Resource> | undefined {
 
 		const requested = drain?.form === "union" ? drain.variants : new Map<Shape, Drain>();
 
 		const present = [...requested.keys()].find(variant =>
-			variant.kind !== "dictionary" && unique(column(scope.resolve(branch, variant), tuples), equals).length > 0
+			unique(column(scope.resolve(branch, variant), tuples), equals).length > 0
 		);
 
-		return present === undefined ? []
-			: decodeValue(present, locale, getFlakeVariant(branch, present), requested.get(present), unique(column(scope.resolve(branch, present), tuples), equals));
+		return present === undefined ? undefined
+			: present.kind === "dictionary" ? decodeDictionary(
+					locale, requested.get(present),
+					unique(column(scope.resolve(branch, present), tuples), equals),
+					present.uniqueLang === true
+				)
+				: decodeValue(present, locale, getFlakeVariant(branch, present), requested.get(present), unique(column(scope.resolve(branch, present), tuples), equals))[0];
 	}
 
 	/**

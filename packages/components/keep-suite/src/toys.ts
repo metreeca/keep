@@ -111,6 +111,7 @@ export const toys = createNamespace(`${base}toys#`, [
 	"score",
 	"certified",
 	"audited",
+	"origin",
 
 	// PostalAddress
 
@@ -398,6 +399,7 @@ export function Vendor() {
 		score: optional(Score),
 		certified: optional(Certified),
 		audited: optional(union(boolean, date)),
+		origin: optional(Origin),
 
 		address: optional(Address),
 		contacts: multiple(Contacts),
@@ -434,6 +436,21 @@ export function Certified() {
 		decimal({ minInclusive: 0, maxInclusive: 5 }),
 		string({ pattern: /^[A-F]$/ }),
 		year
+	);
+}
+
+/**
+ * Provenance union for `Vendor.origin`: a localised region name or a geolocated {@link Place}.
+ *
+ * The text variant is told apart from the node variant by wire form, a dictionary matching it and no other variant
+ * (§3.1). Folding leaves a string and a node branch, so the property stays union-typed for retrieval (§5.5): a template
+ * reaches the region name through an atomic alternative as its coalesced label, and only a projection binding reaches it
+ * structurally, through a locale alternative.
+ */
+export function Origin() {
+	return union(
+		dictionary({ uniqueLang: true, languageIn: languages }),
+		Place
 	);
 }
 
@@ -483,7 +500,7 @@ export function PostalAddress() {
 /**
  * Geolocated place for vendor locations, after the schema.org `Place` modelling.
  *
- * Embedded resource used as a union variant for `Vendor.address` and `Vendor.contacts`,
+ * Embedded resource used as a union variant for `Vendor.address`, `Vendor.contacts` and `Vendor.origin`,
  * structurally disjoint from its sibling {@link PostalAddress} variant.
  */
 export function Place() {
