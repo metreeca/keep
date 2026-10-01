@@ -94,6 +94,13 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   empty
 - `@metreeca/keep-flake` — `Flake.order` holds the numeric sort order its type declares, with the `"asc"` and `"desc"`
 	shorthands normalised to `1` and `-1`
+- `@metreeca/keep-flake` — a union drain is keyed by the variants the frozen flake exposes on its range, so looking up a
+	variant's drain by `getShapeBranches(flake.range.shape)` finds it
+- Read a union alternative that could be either a template or a tag-range map as a template only, as
+	`@metreeca/qest` requires: a template alternative such as `{ latitude: {} }` no longer turns a sibling atomic over a
+	localised variant into a dictionary
+- Hand each variant a template alternative spans only the members that variant admits, as `@metreeca/qest` allows a
+  union template to span several nested-resource variants
 
 ## [0.10.0](https://github.com/metreeca/keep/releases/tag/v0.10.0) - 2026-09-09
 

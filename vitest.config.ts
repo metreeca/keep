@@ -28,6 +28,14 @@ export default defineConfig({
 		}
 	},
 
+	/**
+	 * Resolves shared dependencies to a single copy, so sibling repositories linked by `npm run setup` share the
+	 * classes this workspace checks against (`instanceof TraceError` and the like) rather than loading their own.
+	 */
+	resolve: {
+		dedupe: ["@metreeca/core", "@metreeca/qest"]
+	},
+
 	test: {
 
 		/**

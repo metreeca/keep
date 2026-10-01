@@ -65,6 +65,23 @@ import {
 
 
 /**
+ * Checks whether a write value carries nothing to store.
+ *
+ * A value is vacant if it is absent, or if every element or entry it holds is itself vacant, so `{}`,
+ * `{ address: {} }` and `[{}]` all carry nothing.
+ *
+ * @param value The write value to check
+ *
+ * @returns true if `value` carries nothing to store; false otherwise
+ */
+function isVacant(value: unknown): boolean {
+	return value === undefined
+		|| isArray(value, isVacant)
+		|| isObject(value, entry => isVacant(entry));
+}
+
+
+/**
  * Converts a comparison bound (`<` / `>` / `<=` / `>=`) to an RDF {@link Term} (§5.7.1).
  *
  * The term is typed after the {@link Range | range} variant the bound singles out, so the comparison runs in that
@@ -273,24 +290,8 @@ export function valuesToTerms(values: Values, shape: Shape): readonly Term[] {
 	}
 }
 
-/**
- * Checks whether a write value carries nothing to store.
- *
- * A value is vacant if it is absent, or if every element or entry it holds is itself vacant, so `{}`,
- * `{ address: {} }` and `[{}]` all carry nothing.
- *
- * @param value The write value to check
- *
- * @returns true if `value` carries nothing to store; false otherwise
- */
-function isVacant(value: unknown): boolean {
-	return value === undefined
-		|| isArray(value, isVacant)
-		|| isObject(value, entry => isVacant(entry));
-}
 
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//// Shape-Aware SPARQL DSL ////////////////////////////////////////////////////////////////////////////////////////////
 
 /**
  * Generates the SPARQL triple pattern matching the stored edge from `source` to `target` through a

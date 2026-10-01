@@ -785,7 +785,8 @@ export function testRetrieveProjection(factory: TestFactory): void {
 			it("should project the folded text variant of a declared union through an atomic alternative (§3.2)", factory(async ({ store }) => {
 
 				// §3.2, §5.5: outside a locale alternative the text variant is folded into a string branch, so the
-				// atomic alternative yields the region name's coalesced label as a plain string cell
+				// atomic alternative yields the region name's coalesced label as a plain string cell; the template
+				// alternative, `latitude` being also a valid tag range, never reads as a locale over the text variant
 
 				const expected = vendors
 					.map(v => v.origin)
@@ -799,7 +800,7 @@ export function testRetrieveProjection(factory: TestFactory): void {
 					shape: Vendors,
 					model: catalogue({
 						"id=id": {},
-						"origin=origin": { "0": {}, "1": { latitude: {}, longitude: {} } }
+						"origin=origin": { "0": {}, "1": { latitude: {} } }
 					})
 				}, { locale: ["en"] }))) ?? [];
 

@@ -1728,6 +1728,35 @@ describe("union methods", () => {
 
 			});
 
+			it("reads an alternative reading both as a template and as a locale as a template only", async () => {
+
+				// `name` is also a valid tag range (§5.4), but a resource variant accepts it as a template (§5.5)
+
+				expect(getUnionBranches(union(label, link), { "0": { name: {} } })).toEqual([[link, { name: {} }]]);
+
+			});
+
+			it("hands each variant a spanning template reaches the members it answers alone", async () => {
+
+				// `age` is answered by the person alone, `name: { code }` by the company alone, whose `name` is a
+				// nested resource rather than a string
+
+				const Person = resource({ age: optional(integer()), name: optional(string()) });
+				const Company = resource({ name: optional(resource({ code: optional(string()) })) });
+
+				expect(getUnionBranches(union(Person, Company), { "0": { age: {}, name: { code: {} } } })).toEqual([
+					[Person, { age: {} }],
+					[Company, { name: { code: {} } }]
+				]);
+
+			});
+
+			it("reads an alternative naming no resource member as a locale", async () => {
+
+				expect(getUnionBranches(union(label, link), { "0": { en: {} } })).toEqual([[label, { en: {} }]]);
+
+			});
+
 		});
 
 	});
@@ -1778,6 +1807,18 @@ describe("union methods", () => {
 				})).toEqual(new Map<unknown, unknown>([
 					[label, { "*": {} }],
 					[text, {}]
+				]));
+
+			});
+
+			it("keep the atomic on the localised variant where a template reads also as a locale", async () => {
+
+				expect(getUnionPlaceholders(union(label, link), {
+					"0": {},
+					"1": { name: {} }
+				})).toEqual(new Map<unknown, unknown>([
+					[label, {}],
+					[link, { name: {} }]
 				]));
 
 			});

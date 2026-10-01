@@ -29,6 +29,7 @@ import { getModelBranches, getShapeBranches } from "@metreeca/blue/union";
 import { effective, type Range, type Shape } from "@metreeca/blue/value";
 import { type Identifier, isArray, isObject, isString, type Lazy, opt } from "@metreeca/core";
 import { TraceError } from "@metreeca/core/trace";
+import { immutable } from "@metreeca/core/values";
 import {
 	encodeProbe,
 	isAtomic,
@@ -98,7 +99,10 @@ function getRange(source: Shape | Range, path: readonly Identifier[], pipe: read
 		throw new TraceError(encodeProbe(probe), [range]);
 	}
 
-	return range;
+	// frozen up front, so freezing the flake keeps the range as is: drains keyed by its variants stay keyed by the
+	// variants the frozen flake exposes, rather than by the originals of their clones
+
+	return immutable(range);
 
 }
 
@@ -113,8 +117,9 @@ function getRange(source: Shape | Range, path: readonly Identifier[], pipe: read
  *  - any **other** query is itself the single alternative.
  *
  * Each alternative reaches the variants it matches by form (§5.3): an atomic every variant it can stand for, a
- * template the nested-resource variants its properties are valid on, a locale the localised variant. One alternative
- * may thus reach several variants, and one variant may be reached by several alternatives.
+ * template the nested-resource variants answering any of its properties, a locale the localised variant. One
+ * alternative may thus reach several variants, and one variant may be reached by several alternatives. A template
+ * spanning several variants is handed to each as the properties that variant answers alone.
  *
  * Alternatives are returned as their retrieval half: the criteria riding on the query (§5.6) constrain the collection
  * as a whole and select no variant.
@@ -163,8 +168,23 @@ export function getUnionBranches(shape: Lazy<Shape>, query: Query<Slot>): readon
 
 	function pairs(alternative: Query<Slot>): readonly (readonly [Shape, Query<Slot>])[] {
 		return (getModelBranches(alternative, branches) ?? []).map((variant): readonly [Shape, Query<Slot>] =>
-			[variant, alternative]
+			[variant, part(variant, alternative)]
 		);
+	}
+
+	function part(variant: Shape, alternative: Query<Slot>): Query<Slot> {
+
+		// a template may span several resource variants (§5.5), each answering the members it admits alone
+
+		// ;(cast) Object.fromEntries widens the retained entries to a string-keyed record; they are a subset of the
+		// template's own entries, so the record is a template
+
+		return getShapeTarget(variant) !== undefined && isQuery(alternative, isTemplate)
+			? Object.fromEntries(getQueryEntries(alternative).filter(([name, query]) =>
+				getModelBranches({ [name]: query }, [variant]) !== undefined
+			)) as Query<Slot>
+			: alternative;
+
 	}
 
 }
