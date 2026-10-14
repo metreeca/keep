@@ -14,27 +14,14 @@
  * limitations under the License.
  */
 
+import { symlinks } from "@metreeca/rack/vite";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
 
-	/**
-	 * Resolves workspace package imports to the TypeScript source their exports declare, as `tsconfig.json` does
-	 * through `customConditions`, so tests run build-free against the working tree rather than against `dist`.
-	 */
-	ssr: {
-		resolve: {
-			conditions: ["@metreeca/source"]
-		}
-	},
-
-	/**
-	 * Resolves shared dependencies to a single copy, so sibling repositories linked by `npm run setup` share the
-	 * classes this workspace checks against (`instanceof TraceError` and the like) rather than loading their own.
-	 */
-	resolve: {
-		dedupe: ["@metreeca/core", "@metreeca/qest"]
-	},
+	plugins: [
+		symlinks({ conditions: "@metreeca/source" })
+	],
 
 	test: {
 
