@@ -40,10 +40,15 @@ description: Development guidelines and conventions for the @metreeca/keep packa
 
 # Testing
 
-The root `vitest.config.ts` enables the `@metreeca/source` export condition, so workspace `@metreeca/keep*` imports
-resolve to the TypeScript source each `package.json` export declares and vitest transpiles directly from `src/`
-without requiring a prior build step. Every export MUST declare its `@metreeca/source` entry: one lacking it silently
-resolves to the stale `dist` build.
+The root `vitest.config.ts` resolves imports of symlinked `@metreeca/*` packages (workspace packages and siblings
+linked by `npm run setup`) to the TypeScript source their `@metreeca/source` export entries declare, so vitest
+transpiles directly from `src/` without requiring a prior build step. Every export MUST declare its `@metreeca/source`
+entry: one lacking it silently resolves to the stale `dist` build.
+
+> [!CAUTION]
+> **NEVER** enable `@metreeca/source` through vitest `resolve.conditions`. Published manifests carry the entry while
+> the tarball ships no `src/`, and Vite does not fall back to `default` on a missing target, so a global condition
+> breaks every registry-installed package that declares it. Gating on the symlink keeps CI runs on `dist`.
 
 # Git
 
