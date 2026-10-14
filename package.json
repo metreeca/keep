@@ -10,14 +10,15 @@
     "node": ">=22.22.0"
   },
   "scripts": {
-    "clean": "npm run clean --workspaces && rm -rf dist docs node_modules",
+    "clean": "npm run clean --workspaces && rm dist docs node_modules",
     "prime": "npm ci",
-    "setup": "npm ci && sh package.sh",
-    "build": "npm run build --workspaces && rm -rf docs && npx typedoc",
+    "setup": "npm ci && ln",
+    "build": "npm run build --workspaces && rm docs && npx typedoc",
     "check": "npm run check --workspaces",
     "proof": "npm run build && npx five-server docs --open --watch=false"
   },
   "devDependencies": {
+    "@metreeca/rack": "^0.4.0",
     "five-server": "^0.4.5",
     "typedoc": "^0.28.18"
   },
