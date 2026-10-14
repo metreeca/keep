@@ -7,6 +7,16 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased](https://github.com/metreeca/keep/compare/v0.11.0...HEAD)
 
+### Changed
+
+- Upgrade `@metreeca/core` to `^0.12.1`
+- Upgrade `@metreeca/blue` to `^0.12.1`
+- Upgrade `@metreeca/qest` to `^0.12.1`
+- Upgrade `@metreeca/tape` to `^0.11.1`
+- Upgrade `@metreeca/trio` to `^0.1.3`
+- Upgrade `@metreeca/wire-sparql` to `^0.11.2`
+- Upgrade `@metreeca/http` to `^0.4.1`
+
 ## [0.11.0](https://github.com/metreeca/keep/releases/tag/v0.11.0) - 2026-10-01
 
 ### Added
