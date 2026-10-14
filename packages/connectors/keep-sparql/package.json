@@ -1,6 +1,6 @@
 {
   "name": "@metreeca/keep-sparql",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "description": "SPARQL 1.1 repository connector for @metreeca/keep.",
   "keywords": [
     "typescript",
