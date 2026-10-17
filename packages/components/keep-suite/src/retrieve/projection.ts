@@ -15,7 +15,7 @@
  */
 
 import { isObject } from "@metreeca/core";
-import { ascending, by, compound, descending } from "@metreeca/core/order";
+import { ascending, by, compound, descending, locale } from "@metreeca/core/order";
 import type { Criteria, Projection } from "@metreeca/qest/model";
 import type { Resource } from "@metreeca/qest/state";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -1872,6 +1872,7 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 					const priceThreshold = 50;
 					const countThreshold = 2;
+					const collation = locale();
 
 					const countsByCondition = new Map<string, number>();
 					products
@@ -1879,7 +1880,7 @@ export function testRetrieveProjection(factory: TestFactory): void {
 						.forEach(p => countsByCondition.set(p.condition, (countsByCondition.get(p.condition) ?? 0)+1));
 					const expected = [...countsByCondition.entries()]
 						.filter(([, n]) => n >= countThreshold)
-						.sort(([a], [b]) => a.localeCompare(b));
+						.sort(by(([condition]) => condition, collation));
 
 					const result = projected(members(await store.lookup({
 						entry: Catalogue,
@@ -1891,7 +1892,7 @@ export function testRetrieveProjection(factory: TestFactory): void {
 					})));
 
 					expect(result?.length).toBe(expected.length);
-					expect(result?.map(r => [r.condition, r.cnt] as const).sort(([a], [b]) => String(a).localeCompare(String(b))))
+					expect(result?.map(r => [r.condition, r.cnt] as const).sort(by(([condition]) => String(condition), collation)))
 						.toEqual(expected);
 
 				}));

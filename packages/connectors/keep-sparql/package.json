@@ -47,7 +47,7 @@
   },
   "dependencies": {
     "@metreeca/blue": "^0.12.1",
-    "@metreeca/core": "^0.12.1",
+    "@metreeca/core": "^0.13.0",
     "@metreeca/keep": "^0.11.0",
     "@metreeca/keep-flake": "^0.11.0",
     "@metreeca/qest": "^0.12.1",

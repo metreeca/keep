@@ -46,7 +46,7 @@
     "check": "npx vitest --typecheck run"
   },
   "dependencies": {
-    "@metreeca/core": "^0.12.1",
+    "@metreeca/core": "^0.13.0",
     "@metreeca/http": "^0.4.1",
     "@metreeca/keep": "^0.11.0",
     "@metreeca/qest": "^0.12.1"
