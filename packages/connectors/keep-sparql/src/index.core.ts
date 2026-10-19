@@ -22,7 +22,7 @@ import { some } from "@metreeca/core/arrays";
 import { isNumeric as isNumericDatatype, xsd } from "@metreeca/core/datatype";
 import { Options, type Transform } from "@metreeca/qest/model";
 import { isReference, isVacuous, type Value, type Values } from "@metreeca/qest/state";
-import { type Blank, named, type Named, rdf, tagged, type Term, typed } from "@metreeca/trio";
+import { named, rdf, type Subject, tagged, type Term, typed } from "@metreeca/trio";
 import type { SPARQL, Variable } from "@metreeca/wire-sparql";
 import {
 	abs,
@@ -89,7 +89,7 @@ export function link([source, property, target]: readonly [Variable | Term, Prop
 		: reverse !== undefined && isAnchor(target) ? pattern([target, named(reverse), source])
 			: nil();
 
-	function isAnchor(value: Variable | Term): value is Variable | Blank | Named {
+	function isAnchor(value: Variable | Term): value is Variable | Subject {
 		return isString(value) || value.kind === "blank" || value.kind === "named";
 	}
 
@@ -106,7 +106,7 @@ export function link([source, property, target]: readonly [Variable | Term, Prop
  *
  * @see {@link https://www.w3.org/TR/sparql11-query/#QSynTriples SPARQL 1.1 Triple Patterns}
  */
-export function forward([subject, property, object]: readonly [Variable | Blank | Named, Property, Variable | Term]): SPARQL {
+export function forward([subject, property, object]: readonly [Variable | Subject, Property, Variable | Term]): SPARQL {
 	return opt(property.forward, forward => pattern([subject, named(forward), object]), nil());
 }
 
@@ -123,7 +123,7 @@ export function forward([subject, property, object]: readonly [Variable | Blank 
  *
  * @see {@link https://www.w3.org/TR/sparql11-query/#QSynTriples SPARQL 1.1 Triple Patterns}
  */
-export function reverse([object, property, subject]: readonly [Variable | Term, Property, Variable | Blank | Named]): SPARQL {
+export function reverse([object, property, subject]: readonly [Variable | Term, Property, Variable | Subject]): SPARQL {
 	return opt(property.reverse, reverse => pattern([subject, named(reverse), object]), nil());
 }
 
