@@ -32,10 +32,10 @@
  * @module
  */
 
-import { type Property, type ResourceShape } from "@metreeca/blue/resource";
+import { getStateEntries, type Property, type ResourceShape } from "@metreeca/blue/resource";
 import { getShapeBranches, getStateBranch } from "@metreeca/blue/union";
 import { eager, type Shape } from "@metreeca/blue/value";
-import { isObject, opt } from "@metreeca/core";
+import { isObject } from "@metreeca/core";
 import { some } from "@metreeca/core/arrays";
 import type { Scope } from "@metreeca/core/scope";
 import { type Branch, type Flake, getFlakeVariant } from "@metreeca/keep-flake";
@@ -188,26 +188,7 @@ export function encode(
 				return fragment(
 					shape.class !== undefined ? pattern([entry, named(rdf.type), named(shape.class)]) : nil(),
 					...(shape.classes ?? []).map(clazz => pattern([entry, named(rdf.type), named(clazz)])),
-					...Object.entries(shape.members).flatMap(([label, property]) => {
-
-						const values = state[label];
-
-						if ( property.kind === "property" && values !== undefined ) {
-
-							const variants = getShapeBranches(property.range.shape);
-
-							return some(values).flatMap(value => opt(getStateBranch(value, variants),
-								variant => facts(property, value, variant),
-								[]
-							));
-
-						} else {
-
-							return [];
-
-						}
-
-					})
+					...getStateEntries(shape, state).flatMap(({ property, shape, value }) => facts(property, value, shape))
 				);
 
 				function facts(property: Property, values: Values, shape: Shape): readonly SPARQL[] {

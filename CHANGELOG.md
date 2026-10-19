@@ -9,6 +9,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Upgrade `@metreeca/blue` to `^0.13.0`
 - Upgrade `@metreeca/core` to `^0.13.0`
 - Upgrade `@metreeca/http` to `^0.5.0`
 - Upgrade `@metreeca/qest` to `^0.13.0`
