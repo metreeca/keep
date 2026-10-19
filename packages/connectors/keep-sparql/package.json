@@ -50,7 +50,7 @@
     "@metreeca/core": "^0.13.0",
     "@metreeca/keep": "^0.12.0",
     "@metreeca/keep-flake": "^0.12.0",
-    "@metreeca/qest": "^0.12.1",
+    "@metreeca/qest": "^0.13.0",
     "@metreeca/tape": "^0.12.0",
     "@metreeca/trio": "^0.2.0",
     "@metreeca/wire-sparql": "^0.12.0"
