@@ -18,7 +18,7 @@
     "proof": "npm run build && npx five-server docs --open --watch=false"
   },
   "devDependencies": {
-    "@metreeca/rack": "^0.4.0",
+    "@metreeca/rack": "^0.5.0",
     "five-server": "^0.4.5",
     "typedoc": "^0.28.18"
   },

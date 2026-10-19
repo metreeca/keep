@@ -5,7 +5,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.12.0](https://github.com/metreeca/keep/compare/v0.11.1...HEAD)
+## [Unreleased](https://github.com/metreeca/keep/compare/v0.12.0...HEAD)
+
+## [0.12.0](https://github.com/metreeca/keep/compare/v0.11.1...v0.12.0) - 2026-10-19
 
 ### Changed
 
@@ -20,6 +22,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Removed
 
 - Remove the `rdfs` namespace from `@metreeca/keep-suite/toys`: take it from `@metreeca/trio`, which defines it
+  (`import { rdfs } from "@metreeca/keep-suite/toys"` → `import { rdfs } from "@metreeca/trio"`)
 
 ## [0.11.1](https://github.com/metreeca/keep/compare/v0.11.0...v0.11.1) - 2026-10-14
 
