@@ -30,8 +30,6 @@ description: Development guidelines and conventions for the @metreeca/keep packa
 - **`npm run proof`** - Build and serve docs
 	- TypeDoc `--watch` doesn't support `entryPointStrategy: "packages"`,
 		see [#1772](https://github.com/TypeStrong/typedoc/issues/1772)
-	- five-server file watching disabled with `--watch=false` to avoid EMFILE errors on the large generated `docs/`
-		folder
 
 > [!CAUTION]
 > **`prime` and `setup` are not interchangeable.** Run `prime` when finalising a public release: `@metreeca/*` imports

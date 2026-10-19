@@ -15,11 +15,11 @@
     "setup": "npm ci && ln",
     "build": "npm run build --workspaces && rm docs && npx typedoc",
     "check": "npm run check --workspaces",
-    "proof": "npm run build && npx five-server docs --open --watch=false"
+    "proof": "npm run build && npx wds --root-dir docs --open"
   },
   "devDependencies": {
     "@metreeca/rack": "^0.5.0",
-    "five-server": "^0.4.5",
+    "@web/dev-server": "^1.0.0",
     "typedoc": "^0.28.18"
   },
   "allowScripts": {
