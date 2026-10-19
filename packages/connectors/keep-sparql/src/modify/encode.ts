@@ -44,8 +44,10 @@ import type { Reference, Resource, Values } from "@metreeca/qest/state";
 import { named, type Named, rdf } from "@metreeca/trio";
 import { type SPARQL, type Variable } from "@metreeca/wire-sparql";
 import {
+	data,
 	deleet,
 	fragment,
+	group,
 	insert as create,
 	nil,
 	optional,
@@ -88,7 +90,7 @@ export function encode(
 
 		// the membership edge alone, in both directions the property declares: the entry's own state is left as it is
 
-		return create(fragment(
+		return create(data(
 			forward([named(entry), property, named(item)]),
 			reverse([named(entry), property, named(item)])
 		));
@@ -98,8 +100,8 @@ export function encode(
 	function insert(entry: Reference, flake: Flake, state: Resource): SPARQL {
 
 		return update(
-			deleet(triples(named(entry), flake), where(matches(named(entry), flake))),
-			create(data(entry, flake, state))
+			deleet(group(triples(named(entry), flake)), where(matches(named(entry), flake))),
+			create(data(content(entry, flake, state)))
 		);
 
 
@@ -171,7 +173,7 @@ export function encode(
 			));
 		}
 
-		function data(entry: Reference, flake: Flake, state: Resource): SPARQL {
+		function content(entry: Reference, flake: Flake, state: Resource): SPARQL {
 
 			const shape = getStateBranch(state, getShapeBranches(flake.range.shape));
 
@@ -270,7 +272,7 @@ export function encode(
 			pattern([scope.resolve(), scope.resolve(), root])
 		];
 
-		return deleet(fragment(...wildcard), where(
+		return deleet(group(...wildcard), where(
 			union(
 				values([variable(root)], [[reference(entry)]]),
 				...matches(named(entry), [], branches)

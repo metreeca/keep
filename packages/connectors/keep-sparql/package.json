@@ -53,13 +53,13 @@
     "@metreeca/qest": "^0.12.1",
     "@metreeca/tape": "^0.12.0",
     "@metreeca/trio": "^0.2.0",
-    "@metreeca/wire-sparql": "^0.11.2"
+    "@metreeca/wire-sparql": "^0.12.0"
   },
   "devDependencies": {
     "@metreeca/keep-suite": "^0.12.0",
-    "@metreeca/wire-sparql-http": "^0.11.1",
-    "@metreeca/wire-sparql-oxigraph": "^0.11.1",
-    "@metreeca/wire-sparql-rdf4j": "^0.11.1",
+    "@metreeca/wire-sparql-http": "^0.12.0",
+    "@metreeca/wire-sparql-oxigraph": "^0.12.0",
+    "@metreeca/wire-sparql-rdf4j": "^0.12.0",
     "oxigraph": "^0.5.8",
     "testcontainers": "^12.1.0",
     "typescript": "^5.9.3",
