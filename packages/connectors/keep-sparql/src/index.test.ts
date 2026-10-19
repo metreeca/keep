@@ -48,7 +48,6 @@ import {
 	Place,
 	PostalAddress,
 	Product,
-	rdfs,
 	Resources,
 	Review,
 	toys,
@@ -58,7 +57,7 @@ import {
 } from "@metreeca/keep-suite/toys";
 import { type Reference, type Resource } from "@metreeca/qest/state";
 import { log } from "@metreeca/tape";
-import { blank, skolemize, tagged, type Tagged, type Triple, typed } from "@metreeca/trio";
+import { blank, rdfs, skolemize, tagged, type Tagged, type Triple, typed } from "@metreeca/trio";
 import { data, description as resource, link, property, resource as about, term } from "@metreeca/trio/builder";
 import type { Repository } from "@metreeca/wire-sparql";
 import { createHTTPRepository } from "@metreeca/wire-sparql-http";

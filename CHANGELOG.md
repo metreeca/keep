@@ -17,6 +17,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Upgrade `@metreeca/trio` to `^0.2.0`
 - Upgrade `@metreeca/wire-sparql` to `^0.12.0`
 
+### Removed
+
+- Remove the `rdfs` namespace from `@metreeca/keep-suite/toys`: take it from `@metreeca/trio`, which defines it
+
 ## [0.11.1](https://github.com/metreeca/keep/compare/v0.11.0...v0.11.1) - 2026-10-14
 
 ### Changed

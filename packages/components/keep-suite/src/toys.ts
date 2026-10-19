@@ -51,6 +51,7 @@ import { date, duration, email, instant, phone, string, time, timestamp, url, ye
 import { union } from "@metreeca/blue/union";
 import type { Lazy } from "@metreeca/core";
 import { createNamespace } from "@metreeca/core/resource";
+import { rdfs } from "@metreeca/trio";
 
 export { catalogues, collections, identify, clone } from "./toys.core.js";
 
@@ -161,18 +162,6 @@ export const toys = createNamespace(`${base}toys#`, [
 	"duration",
 	"subject",
 	"caption"
-
-]);
-
-/**
- * Namespace for RDF Schema terms used for labelling and membership.
- */
-export const rdfs = createNamespace("http://www.w3.org/2000/01/rdf-schema#", [
-
-	"label",
-	"comment",
-
-	"member"
 
 ]);
 
