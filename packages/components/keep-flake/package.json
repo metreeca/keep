@@ -1,6 +1,6 @@
 {
   "name": "@metreeca/keep-flake",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "description": "Shape-driven traversal trees for @metreeca/keep connectors.",
   "keywords": [
     "typescript",
