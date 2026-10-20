@@ -19,6 +19,12 @@ interface to support a new SPARQL backend.
 > **Mutation Events** — Limited to mutations issued through the store; mutations from other clients on the underlying
 > repository are not observed.
 
+> [!IMPORTANT]
+> **Embedded Resources** — Named by IRIs in the repository, never by blank nodes. The store skolemises the embedded
+> resources it writes, and a graph loaded by other means must be skolemised before the store reads it. A blank node
+> found where an embedded resource is expected fails the whole retrieval with a `RangeError`, so no embedded resource
+> and none of the content requested under it ever goes silently missing from a retrieved result.
+
 # Installation
 
 Install the framework together with a backend connector from the

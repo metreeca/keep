@@ -7,6 +7,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased](https://github.com/metreeca/keep/compare/v0.12.0...HEAD)
 
+### Fixed
+
+- `@metreeca/keep-sparql` — `Store.lookup` fails with a `RangeError` on a blank node naming an embedded resource,
+  instead of silently dropping that resource and the content requested under it from the result
+
 ## [0.12.0](https://github.com/metreeca/keep/compare/v0.11.1...v0.12.0) - 2026-10-19
 
 ### Changed
