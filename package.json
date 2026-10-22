@@ -1,6 +1,6 @@
 {
   "private": true,
-  "version": "0.12.1",
+  "version": "0.12.2",
   "description": "Turnkey model-driven storage for linked data resources.",
   "type": "module",
   "workspaces": [
