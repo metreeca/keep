@@ -14,6 +14,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the nested template into the row; a nested template expanded from a projected cell retains the `id` / `type`
   markers it requests, which the expanded resource silently left out before this release
 
+### Security
+
+- Upgrade `vite` to `8.3.5`, fixing GHSA-587h-7wmj-h5pm, GHSA-r825-w8mm-5pxw and GHSA-698v-4r3x-3vcv (development
+  dependency, no consumer impact)
+- Upgrade `markdown-it` to `14.3.3`, fixing GHSA-gfr2-rv44-r23c (development dependency, no consumer impact)
+
 ## [0.12.1](https://github.com/metreeca/keep/compare/v0.12.0...v0.12.1) - 2026-10-20
 
 ### Fixed
