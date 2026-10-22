@@ -7,6 +7,13 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased](https://github.com/metreeca/keep/compare/v0.12.1...HEAD)
 
+### Fixed
+
+- `@metreeca/keep-flake` — a projection binding with an empty path (`"dataset=": { id: {}, title: {} }`) projects the
+  item itself under its binding name, next to its grouping aggregates, instead of dropping the cell and flattening
+  the nested template into the row; a nested template expanded from a projected cell retains the `id` / `type`
+  markers it requests, which the expanded resource silently left out before this release
+
 ## [0.12.1](https://github.com/metreeca/keep/compare/v0.12.0...v0.12.1) - 2026-10-20
 
 ### Fixed

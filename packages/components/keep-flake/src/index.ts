@@ -107,8 +107,11 @@ export type Flake = {
 	 * The retrieval requested at this node, in a model- or query-mode flake.
 	 *
 	 * On the root, the drain holds the whole retrieval. On a {@link Branch}, it holds the query requested for the
-	 * property. A projected node, including a transform stage, also carries the binding `alias`. Absent where
-	 * nothing is requested.
+	 * property; a requested {@link Id} / {@link Type} marker takes the atomic form. A projected node, including a
+	 * transform stage, also carries the binding `alias`. A query root carries one when an empty-path binding (qest
+	 * §5.8.1) projects the member itself: its drain remains the projection over the collection, and the properties
+	 * the binding requests of the member appear among its {@link Flake.entries | entries}. Absent where nothing is
+	 * requested, as on a branch or marker present only to carry the constraints the query states for it.
 	 */
 	readonly drain?: Drain;
 
@@ -124,7 +127,8 @@ export type Flake = {
 	 * Absent where the node has none: scalar and localised ranges, {@link Id} / {@link Type} markers, and
 	 * transform stages. In a shape-mode flake, references other than captive ones carry none either. In a
 	 * model-mode flake, properties retrieved as atomics carry none, and neither do multi-valued properties, whose
-	 * drain holds the nested retrieval.
+	 * drain holds the nested retrieval. In a query-mode flake, the root holds a branch for every path the query
+	 * addresses, including the properties an empty-path binding requests of the member through its template.
 	 */
 	readonly entries?: Entries;
 
@@ -394,6 +398,9 @@ export function createFlake(shape: Lazy<Shape>, model?: Template): Flake {
  * query states for it. The root carries the whole query as its {@link Flake.drain | drain}. Collection queries
  * need this factory: unlike the plain {@link @metreeca/qest/model!Template | template} that {@link createFlake}
  * accepts, a query merges its {@link @metreeca/qest/model!Criteria | criteria} with its retrieval keys.
+ *
+ * An empty-path binding (qest §5.8.1) projects each member itself. The root then carries the binding alias, so
+ * {@link getFlakeProjection} indexes the root under it and a grouped query uses the member as a grouping key.
  *
  * @param shape The {@link Lazy | lazy} member shape of the collection's elements
  * @param query The query retrieving the collection, criteria included

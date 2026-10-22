@@ -379,14 +379,17 @@ describe("createFlake", () => {
 
 			});
 
-			it("id / type branches have empty components and no query", async () => {
+			it("id / type branches have empty components and carry the atomic drain requesting them", async () => {
+
+				// a requested marker is a retrieval like any other property, so consumers rebuilding a template
+				// from a node's drained branches (a projected cell expanded through the detail pass) keep it
 
 				const flake = createFlake(Thing, { id: {}, type: {} } as Template);
 
 				expect(at(flake, "id").entries).toBeUndefined();
-				expect(at(flake, "id").drain).toBeUndefined();
+				expect(at(flake, "id").drain).toEqual({ form: "atomic", query: {} });
 				expect(at(flake, "type").entries).toBeUndefined();
-				expect(at(flake, "type").drain).toBeUndefined();
+				expect(at(flake, "type").drain).toEqual({ form: "atomic", query: {} });
 
 			});
 
@@ -676,15 +679,6 @@ describe("createFlake", () => {
 
 			});
 
-			it("leaves model unset on id / type branches", async () => {
-
-				const flake = createFlake(Thing, { id: {}, type: {} } as Template);
-
-				expect(at(flake, "id").drain).toBeUndefined();
-				expect(at(flake, "type").drain).toBeUndefined();
-
-			});
-
 			it("leaves model unset in shape mode", async () => {
 
 				expect(at(createFlake(Thing), "label").drain).toBeUndefined();
@@ -827,6 +821,47 @@ describe("createFlake", () => {
 				const flake = createQueryFlake(Product, { "c=count:": {} });
 
 				expect(flake.transforms?.["count"]?.drain).toEqual({ alias: "c", form: "atomic", query: {} });
+
+			});
+
+			it("carries an empty-path binding's alias on the root drain next to the projection (§5.2, §5.8.1)", async () => {
+
+				// an empty path leaves the working set unchanged, so the binding projects the member itself: the
+				// root keeps the collection's projection and takes the binding alias, never the binding's own drain
+
+				const query = { "p=": { name: {} }, "c=count:": {} };
+				const flake = createQueryFlake(Product, query);
+
+				expect(flake.drain).toEqual({ alias: "p", form: "projection", query });
+
+			});
+
+			it("folds an empty-path binding's nested template into the root's properties (§5.2)", async () => {
+
+				const flake = createQueryFlake(Product, { "p=": { id: {}, name: {} }, "c=count:": {} });
+
+				expect(at(flake, "id").drain).toEqual({ form: "atomic", query: {} });
+				expect(at(flake, "name").drain).toEqual({ form: "atomic", query: {} });
+				expect(flake.transforms?.["count"]?.drain).toEqual({ alias: "c", form: "atomic", query: {} });
+
+			});
+
+			it("leaves a constraint-only marker branch with no drain", async () => {
+
+				const flake = createQueryFlake(Product, { "p=": { name: {} }, "?type": ["https://example.com/Toy"] });
+
+				expect(at(flake, "type").any).toEqual(["https://example.com/Toy"]);
+				expect(at(flake, "type").drain).toBeUndefined();
+
+			});
+
+			it("keeps the root drain a projection under an empty-path atomic binding", async () => {
+
+				const query = { "p=": {}, "c=count:": {} };
+				const flake = createQueryFlake(Product, query);
+
+				expect(flake.drain).toEqual({ alias: "p", form: "projection", query });
+				expect(flake.entries).toEqual({});
 
 			});
 
@@ -1465,6 +1500,11 @@ describe("flake methods", () => {
 		it("indexes a root projection by its alias", async () => {
 			const node = root({ drain: { alias: "r", form: "atomic", query: {} } });
 			expect(getFlakeProjection(node).r).toEqual(node);
+		});
+
+		it("indexes an empty-path binding as the root of a query flake", async () => {
+			const flake = createQueryFlake(Product, { "p=": { name: {} }, "c=count:": {} });
+			expect(getFlakeProjection(flake).p).toBe(flake);
 		});
 
 		it("indexes a projection on a transform stage", async () => {

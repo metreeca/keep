@@ -722,6 +722,61 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 			}));
 
+			it("should project the item itself through an empty-path atomic binding (§5.2, §5.8.1)", factory(async ({ store }) => {
+
+				// an empty path leaves the working set unchanged (§5.8.1), so the binding projects each item
+				// itself, delivered as the reference naming it under the atomic placeholder (§5.3)
+
+				const expected = products.map(p => p.id).sort();
+
+				const result = projected(members(await store.lookup({
+					entry: Catalogue,
+					shape: Products,
+					model: catalogue({ "product=": {} })
+				})));
+
+				expect(result?.map(p => p.product).sort()).toEqual(expected);
+
+			}));
+
+			it("should expand the item itself through an empty-path template binding (§5.2, §5.8.1)", factory(async ({ store }) => {
+
+				// the nested template expands the bound item under the binding name, never at row level
+
+				const expected = products.map(p => ({ id: p.id, sku: p.sku }));
+
+				const result = projected(members(await store.lookup({
+					entry: Catalogue,
+					shape: Products,
+					model: catalogue({ "product=": { id: {}, sku: {} } })
+				})));
+
+				expect(result?.map(p => p.product)).toEqual(expect.arrayContaining(expected));
+				expect(result).toHaveLength(expected.length);
+
+			}));
+
+			it("should group by the item itself next to a per-item aggregate (§5.2, §5.8.2.1)", factory(async ({ store }) => {
+
+				// the empty-path binding is the grouping key (§5.8.2.1), so each row carries the expanded item
+				// next to the count of its own products, rather than a total over the whole collection
+
+				const expected = vendors.map(v => ({
+					vendor: { id: v.id, name: v.name },
+					size: products.filter(p => p.vendor === v.id).length
+				}));
+
+				const result = projected(members(await store.lookup({
+					entry: VendorsCatalogue,
+					shape: Vendors,
+					model: catalogue({ "vendor=": { id: {}, name: {} }, "size=count:products": {} })
+				})));
+
+				expect(result).toEqual(expect.arrayContaining(expected));
+				expect(result).toHaveLength(expected.length);
+
+			}));
+
 			it("should project a union-crossing path mixing string and dictionary kinds", factory(async ({ store }) => {
 
 				// §P6 linchpin: a path crossing the Media union to the divergent `caption` property resolves
