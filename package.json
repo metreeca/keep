@@ -12,13 +12,13 @@
   "scripts": {
     "clean": "npm run clean --workspaces && ush rm dist docs node_modules",
     "prime": "npm ci",
-    "setup": "npm ci && ln",
+    "setup": "npm ci && ush ln",
     "build": "npm run build --workspaces && ush rm docs && npx typedoc",
     "check": "npm run check --workspaces",
     "proof": "npm run build && npx wds --root-dir docs --open"
   },
   "devDependencies": {
-    "@metreeca/rack": "^0.5.0",
+    "@metreeca/rack": "^0.6.0",
     "@web/dev-server": "^1.0.0",
     "typedoc": "^0.28.18"
   },
