@@ -41,8 +41,8 @@
     "node": ">=22.22.0"
   },
   "scripts": {
-    "clean": "rm dist docs node_modules",
-    "build": "rm dist && tsc -p tsconfig.build.json",
+    "clean": "ush rm dist docs node_modules",
+    "build": "ush rm dist && tsc -p tsconfig.build.json",
     "check": "npx vitest --typecheck run"
   },
   "dependencies": {

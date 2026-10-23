@@ -10,10 +10,10 @@
     "node": ">=22.22.0"
   },
   "scripts": {
-    "clean": "npm run clean --workspaces && rm dist docs node_modules",
+    "clean": "npm run clean --workspaces && ush rm dist docs node_modules",
     "prime": "npm ci",
     "setup": "npm ci && ln",
-    "build": "npm run build --workspaces && rm docs && npx typedoc",
+    "build": "npm run build --workspaces && ush rm docs && npx typedoc",
     "check": "npm run check --workspaces",
     "proof": "npm run build && npx wds --root-dir docs --open"
   },
