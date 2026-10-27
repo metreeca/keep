@@ -808,9 +808,8 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 			it("should project the text variant of a declared union through a locale alternative (§5.5)", factory(async ({ store }) => {
 
-				// §5.5: within a projection binding a locale alternative addresses the text variant of
-				// `Vendor.origin` structurally, the region name occupying its cell as a dictionary, while the
-				// template alternative expands the Place variant of the vendors carrying one
+				// §5.5: a locale alternative returns the region name of `Vendor.origin` as a dictionary cell, while
+				// the template alternative expands the Place of the vendors carrying one instead of a region name
 
 				const result = projected(members(await store.lookup({
 					entry: VendorsCatalogue,

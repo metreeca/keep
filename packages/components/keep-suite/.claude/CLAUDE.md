@@ -175,8 +175,10 @@ union, embedded, foreign references) via nested `Template` expansion.
   multi-valued union (`Vendor.contacts`), covering per-branch recursion through nested
 	`Template`s, branch matching, key opacity (an embedded branch singled out by structure under an arbitrary key), the
 	**literal-variant unions** `Vendor.score` / `Vendor.certified` retrieved through the atomic (which matches **every**
-	literal variant, grade and year alike), rejection of mixed key spaces and of an **unsatisfiable** alternative (one
-	matching no variant, such as a template over a union declaring no nested-resource variant)
+	literal variant, grade and year alike), locale alternatives over the text variant of `Vendor.origin` and
+	`Vendor.tagline`, the folding of alternatives reaching the same variant, rejection of mixed key spaces and of an
+	**unsatisfiable** alternative (one matching no variant, such as a template over a union declaring no nested-resource
+	variant)
 - **Nested reference retrieval**: every reference slot MUST be retrievable both as id-only (via `reference` shape)
 	and as an expanded nested resource (via `resource` shape), covering scalar, multi-valued, and self-referential
 	references, plus multi-level nesting
@@ -228,8 +230,8 @@ interaction with criteria applied to projected rows.
 	a projection binding
 - **Projected values**: tests MUST cover each projected-value form — literal-typed, reference-typed, embedded-template,
 	and union-typed expressions; a union-typed binding is addressed directly by a single placeholder or through the
-	*keyed* form (opaque `${number}` keys, branches fixed by matching each alternative by form), which alone admits a
-	locale alternative for a branch resolving to localised text (§5.5)
+	*keyed* form (opaque `${number}` keys, branches fixed by matching each alternative by form), whose locale
+	alternative addresses a branch resolving to localised text as a dictionary cell (§5.5)
 - **Single-valued only**: a projected value is NEVER an array: each binding yields one cell per row, a multi-valued
 	binding fanning out into rows (§5.2). A structural `Locale` map is admitted (§5.2, §5.4): it occupies a single
 	dictionary cell, counting as one value and never fanning out a row

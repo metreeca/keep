@@ -7,6 +7,13 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased](https://github.com/metreeca/keep/compare/v0.12.2...HEAD)
 
+### Changed
+
+- `@metreeca/keep-suite` — template retrieval requires connectors to accept a locale alternative over the text variant
+  of a union-typed property, returning the localised text as a dictionary, where it previously required rejection
+  with a `RangeError`; alternatives reaching the same variant fold into one request, a locale or template prevailing
+  over the atomic and templates merging their properties (§5.5), so connectors passing the 0.12 suite may need updating
+
 ## [0.12.2](https://github.com/metreeca/keep/compare/v0.12.1...v0.12.2) - 2026-10-22
 
 ### Fixed
