@@ -935,10 +935,10 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 
 			describe("text variant — §3.2", () => {
 
-				// §3.2, §5.5: `Vendor.origin` pairs a text variant with the Place variant. Folding recasts the text
-				// variant as an ordinary string branch carrying its coalesced value (§6.2) before retrieval reaches
-				// it, so an atomic alternative addresses the region name as its coalesced label, and a template
-				// alternative the Place. A locale alternative is admitted only within a projection binding.
+				// §3.2, §5.5: `Vendor.origin` pairs a text variant with the Place variant. An atomic alternative
+				// addresses the region name as its coalesced label (§6.2), a locale alternative as its dictionary,
+				// and a template alternative the Place. Alternatives reaching the same variant fold into one request
+				// for it, a locale or template prevailing over the atomic and templates merging their properties.
 
 				const regions = vendors.filter(v => isObject(v.origin) && !("latitude" in v.origin));
 				const places = vendors.filter(v => isObject(v.origin) && "latitude" in v.origin);
@@ -1039,18 +1039,75 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 
 				}));
 
-				it("should reject a locale alternative outside a projection binding (§5.5)", factory(async ({ store }) => {
+				it("should retrieve the text variant structurally through a locale alternative (§5.5)", factory(async ({ store }) => {
+
+					const result = await store.lookup({
+						entry: "https://data.example.net/vendors/",
+						shape: Vendors,
+						model: {
+							members: {
+								id: {},
+								origin: { "0": { "*": {} }, "1": { latitude: {}, longitude: {} } }
+							}
+						}
+					});
+
+					expect(result?.members).toHaveLength(vendors.length);
+
+					vendors.forEach(vendor => {
+
+						const origin = result?.members?.find(member => member.id === vendor.id)?.origin;
+
+						if ( isObject(vendor.origin) && "latitude" in vendor.origin ) {
+							expect(origin).toEqual({
+								latitude: vendor.origin.latitude,
+								longitude: vendor.origin.longitude
+							});
+						} else {
+							expect(origin).toEqual(vendor.origin);
+						}
+
+					});
+
+				}));
+
+				it("should fold an atomic and a locale alternative into the locale (§5.5)", factory(async ({ store }) => {
+
+					// §5.5: both alternatives reach the text variant, and the locale prevails over the atomic, so the
+					// region name is returned as its dictionary rather than as its coalesced label
 
 					const [region] = regions;
 
 					if ( region === undefined ) { return; }
 
-					await expect(store.lookup({
+					const result = await store.lookup({
 						entry: region.id,
 						shape: Vendor,
-						// @ts-expect-error the locale alternative is rejected by the type as well
-						model: { origin: { "0": { "*": {} } } }
-					})).rejects.toBeInstanceOf(RangeError);
+						model: { origin: { "0": {}, "1": { "*": {} } } }
+					}, { locale: ["en"] });
+
+					expect(result?.origin).toEqual(region.origin);
+
+				}));
+
+				it("should fold template alternatives over the Place by merging their properties (§5.5)", factory(async ({ store }) => {
+
+					// §5.5: both templates reach the Place variant, and their properties merge into one request
+
+					const [place] = places;
+
+					if ( place === undefined || !isObject(place.origin) || !("latitude" in place.origin) ) { return; }
+
+					const result = await store.lookup({
+						entry: place.id,
+						shape: Vendor,
+						model: { origin: { "0": { latitude: {} }, "1": { longitude: {} } } }
+					});
+
+					expect(result?.origin).toEqual({
+						latitude: place.origin.latitude,
+						longitude: place.origin.longitude
+					});
 
 				}));
 
@@ -1076,9 +1133,10 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 			describe("string and text variants — §3.2", () => {
 
 				// §3.1, §3.2: `Vendor.tagline` pairs a string variant with a text variant admitting `und` entries.
-				// The two are told apart by wire form on ingress and fold into one string branch on retrieval: the
+				// The two are told apart by wire form on ingress and fold into one string branch under the atomic: the
 				// string variant contributes its plain value whatever the request priority, the text variant its
-				// coalesced label under that priority (§6.2), an `und` entry included
+				// coalesced label under that priority (§6.2), an `und` entry included. A locale addresses the text
+				// variant alone as its dictionary, directly or as an alternative prevailing over the atomic (§5.5).
 
 				const undetermined = lookup(vendors, v => isObject(v.tagline) && Object.keys(v.tagline).join() === "und");
 
@@ -1132,6 +1190,54 @@ export function testRetrieveTemplate(factory: TestFactory): void {
 					});
 
 					expect(result?.tagline).toBe(undetermined.tagline.und);
+
+				}));
+
+				it("should retrieve only the localised taglines through a direct locale (§5.4)", factory(async ({ store }) => {
+
+					// §5.4, §5.5: a locale matches the text variant alone, so plain slogans are skipped
+
+					const result = await store.lookup({
+						entry: "https://data.example.net/vendors/",
+						shape: Vendors,
+						model: { members: { id: {}, tagline: { "*": {} } } }
+					});
+
+					expect(result?.members).toHaveLength(vendors.length);
+
+					vendors.forEach(vendor => {
+
+						const tagline = result?.members?.find(member => member.id === vendor.id)?.tagline;
+
+						expect(tagline).toEqual(isObject(vendor.tagline) ? vendor.tagline : undefined);
+
+					});
+
+				}));
+
+				it("should retrieve plain and selected localised taglines through atomic and locale alternatives (§5.5)", factory(async ({ store }) => {
+
+					// §5.5: the atomic retrieves the plain slogans, and the locale prevails over it on the text variant,
+					// returning only the requested tags and omitting localised slogans carrying none of them
+
+					const result = await store.lookup({
+						entry: "https://data.example.net/vendors/",
+						shape: Vendors,
+						model: { members: { id: {}, tagline: { "0": {}, "1": { en: {} } } } }
+					});
+
+					expect(result?.members).toHaveLength(vendors.length);
+
+					vendors.forEach(vendor => {
+
+						const tagline = result?.members?.find(member => member.id === vendor.id)?.tagline;
+
+						expect(tagline).toEqual(!isObject(vendor.tagline) ? vendor.tagline
+							: "en" in vendor.tagline ? { en: vendor.tagline.en }
+								: undefined
+						);
+
+					});
 
 				}));
 

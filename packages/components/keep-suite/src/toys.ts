@@ -51,6 +51,7 @@ import { date, duration, email, instant, phone, string, time, timestamp, url, ye
 import { union } from "@metreeca/blue/union";
 import type { Lazy } from "@metreeca/core";
 import { createNamespace } from "@metreeca/core/resource";
+import { rdfs } from "@metreeca/trio";
 
 export { catalogues, collections, identify, clone } from "./toys.core.js";
 
@@ -161,18 +162,6 @@ export const toys = createNamespace(`${base}toys#`, [
 	"duration",
 	"subject",
 	"caption"
-
-]);
-
-/**
- * Namespace for RDF Schema terms used for labelling and membership.
- */
-export const rdfs = createNamespace("http://www.w3.org/2000/01/rdf-schema#", [
-
-	"label",
-	"comment",
-
-	"member"
 
 ]);
 
@@ -445,10 +434,9 @@ export function Certified() {
  * Provenance union for `Vendor.origin`: a localised region name or a geolocated {@link Place}.
  *
  * The text variant is told apart from the node variant by wire form, a dictionary matching it and no other variant
- * (§3.1). Folding leaves a string and a node branch, so the property stays union-typed for retrieval (§5.5): a template
- * reaches the region name through an atomic alternative as its coalesced label, and only a projection binding reaches it
- * structurally, through a locale alternative. The text variant admits `und` entries, for region names with no
- * determinate language.
+ * (§3.1). The property is retrieved through the keyed union form (§5.5): an atomic alternative returns the region name
+ * as its coalesced label, and a locale alternative returns it as a dictionary. The text variant admits `und` entries,
+ * for region names with no determinate language, coalesced only under a priority naming `und` (§6.2).
  */
 export function Origin() {
 	return union(
@@ -462,9 +450,10 @@ export function Origin() {
  *
  * A two-natured property, after the §4.3 modelling of content with or without a localised form: a vendor carries a
  * single untranslated slogan or a set of translations. The string and text variants are told apart by wire form, a plain
- * string matching the string variant and a dictionary the text variant (§3.1), and fold into one string branch on
- * retrieval (§3.2). The text variant admits `und` entries of its own, which stay text: an undetermined slogan is never
- * read back as a plain string.
+ * string matching the string variant and a dictionary the text variant (§3.1). An atomic alternative returns either
+ * slogan as a plain string, the localised one as its coalesced label (§3.2). A locale alternative returns only the
+ * localised slogans, as dictionaries (§5.5). The text variant admits `und` entries of its own, which stay text: an
+ * undetermined slogan is never read back as a plain string, and is coalesced only under a priority naming `und` (§6.2).
  */
 export function Tagline() {
 	return union(

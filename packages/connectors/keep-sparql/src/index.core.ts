@@ -21,8 +21,8 @@ import { error, isBoolean, isNumber, isObject, isString, opt } from "@metreeca/c
 import { some } from "@metreeca/core/arrays";
 import { isNumeric as isNumericDatatype, xsd } from "@metreeca/core/datatype";
 import { Options, type Transform } from "@metreeca/qest/model";
-import { isReference, isVacuous, type Value, type Values } from "@metreeca/qest/state";
-import { type Blank, named, type Named, rdf, tagged, type Term, typed } from "@metreeca/trio";
+import { isReference, isVacuous, type Reference, type Value, type Values } from "@metreeca/qest/state";
+import { named, rdf, type Subject, tagged, type Term, typed } from "@metreeca/trio";
 import type { SPARQL, Variable } from "@metreeca/wire-sparql";
 import {
 	abs,
@@ -89,7 +89,7 @@ export function link([source, property, target]: readonly [Variable | Term, Prop
 		: reverse !== undefined && isAnchor(target) ? pattern([target, named(reverse), source])
 			: nil();
 
-	function isAnchor(value: Variable | Term): value is Variable | Blank | Named {
+	function isAnchor(value: Variable | Term): value is Variable | Subject {
 		return isString(value) || value.kind === "blank" || value.kind === "named";
 	}
 
@@ -106,7 +106,7 @@ export function link([source, property, target]: readonly [Variable | Term, Prop
  *
  * @see {@link https://www.w3.org/TR/sparql11-query/#QSynTriples SPARQL 1.1 Triple Patterns}
  */
-export function forward([subject, property, object]: readonly [Variable | Blank | Named, Property, Variable | Term]): SPARQL {
+export function forward([subject, property, object]: readonly [Variable | Subject, Property, Variable | Term]): SPARQL {
 	return opt(property.forward, forward => pattern([subject, named(forward), object]), nil());
 }
 
@@ -123,7 +123,7 @@ export function forward([subject, property, object]: readonly [Variable | Blank 
  *
  * @see {@link https://www.w3.org/TR/sparql11-query/#QSynTriples SPARQL 1.1 Triple Patterns}
  */
-export function reverse([object, property, subject]: readonly [Variable | Term, Property, Variable | Blank | Named]): SPARQL {
+export function reverse([object, property, subject]: readonly [Variable | Term, Property, Variable | Subject]): SPARQL {
 	return opt(property.reverse, reverse => pattern([subject, named(reverse), object]), nil());
 }
 
@@ -362,8 +362,8 @@ export function optionsToTerms(value: Options, range: Range): readonly (null | T
  * datatype renders an IRI node instead, as in {@link valueToTerm}. A localised dictionary becomes one language-tagged
  * term per text (§6), the `und` tag included and a plain string shorthand standing for its `und` text, so a string
  * variant sharing the property never claims it on read (§3.1); a reference becomes its IRI. A nested resource becomes
- * its declared id if present (a captive resource with its own identity), else a fresh skolem IRI naming the embedded
- * resource.
+ * its declared id if present (a captive resource with its own identity). An embedded resource becomes a fresh
+ * `urn:uuid:` IRI instead, so the store never writes blank nodes and can read back every embedded resource it stores.
  *
  * Values not fitting the variant are dropped. A nested resource carrying no content is dropped too, so no link to an
  * empty subject is stored.
@@ -534,6 +534,35 @@ export function termToValue(term: Term, shape: Shape): undefined | Value {
 		case "union": // a range variant is always a flattened branch, never a union
 
 			throw new RangeError(`unsupported union variant`);
+
+	}
+}
+
+/**
+ * Converts a solution {@link Term} bound where a resource is expected to the {@link Reference} naming it.
+ *
+ * The store reads only resources named by IRIs, embedded resources included, so a graph loaded by other means must
+ * be skolemised first. A blank node is rejected rather than skipped: skipping it would silently drop the embedded
+ * resource it names, together with all the content requested under that resource.
+ *
+ * @param value The solution term to convert
+ *
+ * @returns The IRI of a named node, or `undefined` for a literal, which names no resource
+ *
+ * @throws {@link !RangeError RangeError} If `value` is a blank node
+ */
+export function termToReference(value: Term): undefined | Reference {
+	if ( value.kind === "blank" ) {
+
+		throw new RangeError(`unsupported blank node <_:${value.label}>`);
+
+	} else if ( value.kind === "named" ) {
+
+		return value.iri;
+
+	} else {
+
+		return undefined;
 
 	}
 }

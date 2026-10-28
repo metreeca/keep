@@ -867,8 +867,8 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 
 			it.each(rejectedKeys)("should reject a direct %s over a coalesced array-per-tag property as a multi-valued target", (_label, selection) => factory(async ({ store }) => {
 
-				// §5.7.4/§5.7.5: sort and focus are single-valued contexts, so a multi-valued coalesced
-				// set is no more a sort or focus key than any other multi-valued property.
+				// §5.7.4/§5.7.5: outside grouped queries, sort and focus are single-valued contexts, so a
+				// multi-valued coalesced set is no more a sort or focus key than any other multi-valued property.
 
 				await expect(store.lookup({
 					entry: ProductCatalogue,

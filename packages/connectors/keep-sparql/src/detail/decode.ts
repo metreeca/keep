@@ -51,7 +51,7 @@ import {
 import type { Term } from "@metreeca/trio";
 import type { Tuple, Variable } from "@metreeca/wire-sparql";
 
-import { termToValue } from "../index.core.js";
+import { termToReference, termToValue } from "../index.core.js";
 
 
 /**
@@ -290,7 +290,7 @@ export function decode(
 
 
 		function entries(): readonly Reference[] {
-			return terms.filter(t => t.kind === "named").map(t => t.iri);
+			return terms.flatMap(term => opt(termToReference(term), entry => [entry], []));
 		}
 
 	}

@@ -112,6 +112,13 @@ const logger = log(import.meta.url);
  * > **Mutation Events** — Limited to mutations issued through this store; mutations from other clients on the
  * > underlying repository are not observed.
  *
+ * > [!IMPORTANT]
+ * > **Embedded Resources** — Named by IRIs in the repository, never by blank nodes. The store skolemises the
+ * > embedded resources it writes, and a graph loaded by other means must be skolemised before the store reads it. A
+ * > blank node found where an embedded resource is expected fails the whole retrieval with a
+ * > {@link !RangeError RangeError}, so no embedded resource and none of the content requested under it ever goes
+ * > silently missing from a retrieved result, whatever tool loaded the graph into the repository.
+ *
  * @param repository - The repository for SPARQL query, update, and transaction execution
  *
  * @returns An immutable {@link Store}

@@ -5,7 +5,58 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased](https://github.com/metreeca/keep/compare/v0.11.1...HEAD)
+## [0.13.0](https://github.com/metreeca/keep/compare/v0.12.2...HEAD)
+
+### Changed
+
+- `@metreeca/keep-suite` — template retrieval requires connectors to accept a locale alternative over the text variant
+  of a union-typed property, returning the localised text as a dictionary, where it previously required rejection
+  with a `RangeError`; alternatives reaching the same variant fold into one request, a locale or template prevailing
+  over the atomic and templates merging their properties (§5.5), so connectors passing the 0.12 suite may need updating
+- `@metreeca/keep-suite` — grouped retrieval requires connectors to accept a sort or focus key matching a grouping key
+  over a multi-valued property, sorting or ranking the groups by their key value (§5.7.4, §5.7.5, §5.8.2.1), as
+  faceted listings need to keep selected values on top; the same keys stay rejected on ungrouped queries
+
+## [0.12.2](https://github.com/metreeca/keep/compare/v0.12.1...v0.12.2) - 2026-10-22
+
+### Fixed
+
+- `@metreeca/keep-flake` — a projection binding with an empty path (`"dataset=": { id: {}, title: {} }`) projects the
+  item itself under its binding name, next to its grouping aggregates, instead of dropping the cell and flattening
+  the nested template into the row; a nested template expanded from a projected cell retains the `id` / `type`
+  markers it requests, which the expanded resource silently left out before this release
+
+### Security
+
+- Upgrade `vite` to `8.3.5`, fixing GHSA-587h-7wmj-h5pm, GHSA-r825-w8mm-5pxw and GHSA-698v-4r3x-3vcv (development
+  dependency, no consumer impact)
+- Upgrade `markdown-it` to `14.3.3`, fixing GHSA-gfr2-rv44-r23c (development dependency, no consumer impact)
+- Upgrade `vitest` to `4.1.12`, fixing GHSA-qxg6-89mg-rqv8 and GHSA-xp26-3454-mjgp (development dependency, no
+  consumer impact)
+
+## [0.12.1](https://github.com/metreeca/keep/compare/v0.12.0...v0.12.1) - 2026-10-20
+
+### Fixed
+
+- `@metreeca/keep-sparql` — `Store.lookup` fails with a `RangeError` on a blank node naming an embedded resource,
+  instead of silently dropping that resource and the content requested under it from the result
+
+## [0.12.0](https://github.com/metreeca/keep/compare/v0.11.1...v0.12.0) - 2026-10-19
+
+### Changed
+
+- Upgrade `@metreeca/blue` to `^0.13.0`
+- Upgrade `@metreeca/core` to `^0.13.0`
+- Upgrade `@metreeca/http` to `^0.5.0`
+- Upgrade `@metreeca/qest` to `^0.13.0`
+- Upgrade `@metreeca/tape` to `^0.12.0`
+- Upgrade `@metreeca/trio` to `^0.2.0`
+- Upgrade `@metreeca/wire-sparql` to `^0.12.0`
+
+### Removed
+
+- Remove the `rdfs` namespace from `@metreeca/keep-suite/toys`: take it from `@metreeca/trio`, which defines it
+  (`import { rdfs } from "@metreeca/keep-suite/toys"` → `import { rdfs } from "@metreeca/trio"`)
 
 ## [0.11.1](https://github.com/metreeca/keep/compare/v0.11.0...v0.11.1) - 2026-10-14
 

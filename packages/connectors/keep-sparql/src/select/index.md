@@ -128,7 +128,8 @@ Under its variant, a term decodes as: the coalesced label or raw text of a **loc
 placeholder, the owner's property expanded tag by tag by the detail pass under the first resource of the parent range
 declaring the property as localised; a **resource** or **reference** expanded by the detail pass where the request asks
 for its content (a template, or drained branches), else the reference naming it; a **literal** coerced through
-`termToValue`.
+`termToValue`. A blank node bound where a resource is expected fails the request with a `RangeError`: the store
+reads embedded resources only when the repository names them by skolem IRIs, never when it names them by blank nodes.
 
 ## Batching
 

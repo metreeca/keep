@@ -50,7 +50,7 @@ import type { Broker, Deferred, Select } from "@metreeca/keep/batching";
 import type { Reference, Resource, Value } from "@metreeca/qest/state";
 import type { Term } from "@metreeca/trio";
 import type { Tuple, Variable } from "@metreeca/wire-sparql";
-import { computedToValue, termToValue } from "../index.core.js";
+import { computedToValue, termToReference, termToValue } from "../index.core.js";
 
 
 /**
@@ -157,10 +157,11 @@ export function decode(
 
 			const name = node.path[node.path.length-1];
 			const owner = owning(root, node);
+			const entry = termToReference(term);
 
-			return term.kind !== "named" || owner === undefined ? Promise.resolve(undefined)
+			return entry === undefined || owner === undefined ? Promise.resolve(undefined)
 				: broker.detail({
-					entry: term.iri,
+					entry,
 					shape: owner,
 					model: { [name]: drain.query },
 					locale
@@ -179,10 +180,11 @@ export function decode(
 
 			const target = getShapeTarget(variant);
 			const expanded = drain?.form === "template" || branches.some(isDrainedFlake);
+			const entry = termToReference(term);
 
-			return term.kind !== "named" ? Promise.resolve(undefined)
-				: expanded && target !== undefined ? expand(term.iri, target, branches, locale)
-					: Promise.resolve(term.iri);
+			return entry === undefined ? Promise.resolve(undefined)
+				: expanded && target !== undefined ? expand(entry, target, branches, locale)
+					: Promise.resolve(entry);
 
 		} else {
 

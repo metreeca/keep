@@ -126,11 +126,19 @@ export function createQueryFlake(shape: Shape, query: Query<Slot>): Flake {
 	// the root range describes one member, while the root drain is the query over the collection of them, so it
 	// is settled against the collection's cardinality
 
+	const drain = getDrain({ ...range, minCount: 0, maxCount: undefined }, query);
+
+	// an empty-path binding projects the member itself (§5.8.1): the root keeps the collection's drain and takes
+	// the binding alias, the binding's nested template being already folded into the root entries by the walk
+
+	const node = queryNodeOf(range, [], queryEntriesOf(shape, query));
+	const alias = node.drain?.alias;
+
 	return immutable({
 
-		drain: getDrain({ ...range, minCount: 0, maxCount: undefined }, query),
+		...node,
 
-		...queryNodeOf(range, [], queryEntriesOf(shape, query))
+		drain: alias === undefined ? drain : { ...drain, alias }
 
 	});
 
