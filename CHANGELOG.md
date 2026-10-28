@@ -13,6 +13,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   of a union-typed property, returning the localised text as a dictionary, where it previously required rejection
   with a `RangeError`; alternatives reaching the same variant fold into one request, a locale or template prevailing
   over the atomic and templates merging their properties (§5.5), so connectors passing the 0.12 suite may need updating
+- `@metreeca/keep-suite` — grouped retrieval requires connectors to accept a sort or focus key matching a grouping key
+  over a multi-valued property, sorting or ranking the groups by their key value (§5.7.4, §5.7.5, §5.8.2.1), as
+  faceted listings need to keep selected values on top; the same keys stay rejected on ungrouped queries
 
 ## [0.12.2](https://github.com/metreeca/keep/compare/v0.12.1...v0.12.2) - 2026-10-22
 

@@ -2034,6 +2034,25 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 				}));
 
+				it("should sort groups on a grouping key over a multi-valued property (§5.7.5, §5.8.2.1)", factory(async ({ store }) => {
+
+					// §5.7.5 + §5.8.2.1: each group holds one value per grouping key, so a sort key matching
+					// the multi-valued `documents` grouping key is admitted and sorts the groups by key value
+
+					const expected = [...new Set(products.flatMap(p => p.documents))].sort();
+
+					const result = projected(members(await store.lookup({
+						entry: Catalogue,
+						shape: Products,
+						model: catalogue({ "document=documents": {}, "cnt=count:": {} }, {
+							"^documents": 1
+						})
+					})));
+
+					expect(result?.map(r => r.document)).toEqual(expected);
+
+				}));
+
 				const rejectKeyCases: ReadonlyArray<readonly [string, Criteria]> = [
 					["ordering", { "^vendor": 1 }],
 					["focus", { "+vendor": [vendors[0].id] }]
@@ -2074,6 +2093,35 @@ export function testRetrieveProjection(factory: TestFactory): void {
 						})));
 
 						expect(result).toHaveLength(products.length);
+
+					}));
+
+				it("should rank focused groups first on a grouping key over a multi-valued property (§5.7.4, §5.8.2.1)",
+					factory(async ({ store }) => {
+
+						// §5.7.4 + §5.8.2.1: the faceted listing shape; each group holds one value per grouping
+						// key, so a focus matching the multi-valued `categories` grouping key is admitted and
+						// ranks the selected category first, the remaining groups following by descending count.
+						// The least populated category is focused, so the ranking can't follow from the counts.
+
+						const counts = countBy(products.flatMap(p => p.categories), category => category);
+						const [focused] = Object.keys(counts).sort(by(category => counts[category], ascending));
+
+						const result = projected(members(await store.lookup({
+							entry: Catalogue,
+							shape: Products,
+							model: catalogue({ "category=categories": {}, "cnt=count:": {} }, {
+								"^count:": -2,
+								"+categories": [focused]
+							})
+						}))) ?? [];
+
+						const [head, ...tail] = result;
+						const rest = tail.map(r => r.cnt);
+
+						expect(result).toHaveLength(Object.keys(counts).length);
+						expect(head?.category).toBe(focused);
+						expect(rest).toEqual([...rest].sort(descending));
 
 					}));
 
