@@ -1095,7 +1095,7 @@ describe("createFlake", () => {
 				if ( value === undefined ) { throw new Error("expected a range"); }
 
 				expect(value.maxCount).toBe(1);
-				expect(value.minCount).toBeUndefined();
+				expect(value.minCount).toBe(1);
 
 				// a non-union range resolves to a single value shape, not a multi-variant disjunction
 				expect(getShapeBranches(value.shape).map(branch => branch.kind)).toEqual(["number"]);
