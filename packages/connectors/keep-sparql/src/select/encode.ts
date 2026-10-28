@@ -17,14 +17,16 @@
 /**
  * Select-pass query encoder.
  *
- * Folds every queued {@link Select} into one SPARQL `select` query, contributing each request as an arm. A single
- * request runs as its bare arm, while several are joined by a `union` under an outer query keeping each request's
- * rows contiguous. Variables are allocated through the {@link Scope} shared with the decoder, so both sides agree on
- * every column.
+ * Folds every queued {@link Select} into one SPARQL `select` query, contributing each {@link Group | group} of
+ * requests as an arm. A group's owners are bound together in its arm through a `values` block, so a collection of a
+ * thousand members expanded through one query costs one arm rather than a thousand. A single group runs as its bare
+ * arm, while several are joined by a `union` under an outer query keeping each request's rows contiguous. Variables
+ * are allocated through the {@link Scope} shared with the decoder, so both sides agree on every column.
  *
- * Each arm is built from the request's {@link Flake | query plan}, covering only the nodes the query reads: the
- * projection head, the graph patterns, the row filters, the group filters, the ordering and the window. The
- * contract shared with the decoder is stated in `select/index.md`.
+ * Each arm is built from the group's {@link Flake | query plan}, covering only the nodes the query reads: the
+ * projection head, the graph patterns, the row filters, the group filters and the ordering. An arm applies the query
+ * window only for a group with a single owner: a `limit` spans every owner the arm binds, so the decoder windows the
+ * rows of larger groups. The contract shared with the decoder is stated in `select/index.md`.
  *
  * @module
  */
@@ -53,7 +55,7 @@ import {
 	isRequiredFlake
 } from "@metreeca/keep-flake";
 import type { Deferred, Select } from "@metreeca/keep/batching";
-import { getOrderDirection, isAggregate } from "@metreeca/qest/model";
+import { getOrderDirection, isAggregate, type Query, type Slot } from "@metreeca/qest/model";
 import type { Literal } from "@metreeca/qest/state";
 import { named, type Named, rdf, type Term } from "@metreeca/trio";
 import type { SPARQL, Variable } from "@metreeca/wire-sparql";
@@ -103,6 +105,7 @@ import {
 	string,
 	term,
 	union,
+	values,
 	variable,
 	where
 } from "@metreeca/wire-sparql/builder";
@@ -123,41 +126,79 @@ type Edge = {
 
 
 /**
- * Encodes one batched `select` query covering every request.
+ * The queued requests sharing one query plan: the same field, a structurally equal query and the same locale.
  *
- * @param scope The variable scope shared with the decoder, allocating per-request solution slots
- * @param batch The queued select requests to encode, each paired with its {@link Flake | query plan} and deferred
+ * The group is the unit the select pass batches on: its requests share the plan's variables, and the owner column
+ * tells them apart by entry. The shared {@link Scope} keys that column on the record's identity, so encoder and
+ * decoder must receive the very same records, never copies or fresh equivalents.
+ */
+export type Group = {
+
+	/**
+	 * The multi-valued property the requests read.
+	 */
+	readonly field: Property;
+
+	/**
+	 * The collection query every request states.
+	 */
+	readonly query: Query<Slot>;
+
+	/**
+	 * The language priority every request states.
+	 */
+	readonly locale: readonly Tag[];
+
+	/**
+	 * The query plan shared by the requests.
+	 */
+	readonly flake: Flake;
+
+	/**
+	 * The requests, each bound to its own entry on the owner column.
+	 */
+	readonly items: readonly Deferred<Select>[];
+
+}
+
+
+/**
+ * Encodes one batched `select` query covering every group.
  *
- * @returns The batched `select` query covering every request in `batch`
+ * @param scope The variable scope shared with the decoder, allocating per-group solution slots
+ * @param groups The groups to encode, each pairing the requests sharing a {@link Flake | query plan} with that plan
+ *
+ * @returns The batched `select` query covering every request in `groups`
  */
 export function encode(
 	scope: Scope<Variable>,
-	batch: readonly (Deferred<Select> & { readonly flake: Flake; })[]
+	groups: readonly Group[]
 ): SPARQL {
 
-	const guard = scope.resolve(batch);
+	const guard = scope.resolve(groups);
 
-	// a single request runs as it is; several are wrapped in an outer query reordering their rows, the
-	// request stamp first so each request's already-sliced window stays contiguous
+	// a single group runs as it is; several are wrapped in an outer query reordering their rows, the group
+	// stamp first and the owner next, so each request's rows stay contiguous and in query order
 
-	return batch.length > 1
+	return groups.length > 1
 		? select(wildcard(),
-			where(union(batch.map(arm))),
-			orderBy(asc(variable(guard)), batch.map(({ flake }) => ordering(flake)))
+			where(union(groups.map(arm))),
+			orderBy(asc(variable(guard)), groups.flatMap(group => [asc(variable(scope.resolve(group))), ordering(group.flake)]))
 		)
-		: union(batch.map(arm));
+		: union(groups.map(arm));
 
 
 	/**
-	 * One request's arm: the member edge, the patterns the query reads, and the clauses projecting,
-	 * filtering, grouping, ordering and slicing the members.
+	 * One group's arm: the owners bound in a `values` block, the member edge, the patterns the query reads, and
+	 * the clauses projecting, filtering, grouping, ordering and, for a single owner, slicing the members.
 	 */
-	function arm({ request: { entry, field, locale }, flake }: Deferred<Select> & {
-		readonly flake: Flake
-	}, index: number): SPARQL {
+	function arm(group: Group, index: number): SPARQL {
 
+		const { field, locale, flake, items } = group;
+
+		const owner = scope.resolve(group);
 		const root = scope.resolve(flake);
-		const edge: Edge = { owner: named(entry), property: field, object: root };
+		const edge: Edge = { owner, property: field, object: root };
 
 		const read = reader(flake);
 
@@ -166,6 +207,12 @@ export function encode(
 		const reduced = reductions(flake);
 
 		const stamp = as(number(index), variable(guard));
+		const binding = values([variable(owner)], items.map(({ request }) => [term(named(request.entry))]));
+
+		// a `limit` spans every owner bound in the arm, so the server windows the rows only where the group binds
+		// one owner; the decoder windows each owner's rows otherwise (see select/index.md)
+
+		const windowed = items.length === 1;
 
 		// a query whose projection aggregates is one grouped select; one reduced per item alone (§5.8.2.1)
 		// groups by the member in a subselect, which the arm then projects as distinct rows (§5.2)
@@ -173,31 +220,68 @@ export function encode(
 		const grouped = reduced.length > 0;
 		const itemised = grouped && !isGroupingFlake(flake);
 
+		// an aggregate over the whole collection has a value on an empty collection too (§5.2): a keyless
+		// aggregation yields one group whatever its input, but grouped by owner it keeps an owner's group only
+		// if a row of that owner survives an empty member set, so the members become optional under the owner
+		// binding and `reduction` keeps the surviving row out of the aggregates it would otherwise distort
+
+		const whole = grouped && keys.length === 0;
+
+		const members = [
+			link([edge.owner, edge.property, edge.object]),
+			patterns(flake, root),
+			shards(flake, edge),
+			admitted(),
+			...filters(flake, root)
+		];
+
 		const rows = select(
 			grouped
-				? [stamp, ...keys.flatMap(columns), ...reduced.map(([stage, origin]) =>
-					as(expression(origin, stage.pipe), variable(scope.resolve(stage)))
+				? [stamp, variable(owner), ...keys.flatMap(columns), ...reduced.map(([stage, origin]) =>
+					as(reduction(stage, origin), variable(scope.resolve(stage)))
 				)]
-				: distinct(stamp, ...cells.flatMap(columns)),
+				: distinct(stamp, variable(owner), ...cells.flatMap(columns)),
 			where(
-				link([edge.owner, edge.property, edge.object]),
-				patterns(flake, root),
-				shards(flake, edge),
-				admitted(),
-				filters(flake, root)
+				binding,
+				whole ? optional(...members) : fragment(...members)
 			),
-			grouped ? groupBy(keys.flatMap(columns)) : nil(),
+			grouped ? groupBy(variable(owner), keys.flatMap(columns)) : nil(),
 			grouped ? having(reduced.flatMap(([stage, origin]) => [
-				...conditions(stage, expression(origin, stage.pipe)),
-				...opt(stage.all, options => [conjunction(expression(origin, stage.pipe), optionsToTerms(options, stage.range))], [])
+				...conditions(stage, reduction(stage, origin)),
+				...opt(stage.all, options => [conjunction(reduction(stage, origin), optionsToTerms(options, stage.range))], [])
 			])) : nil(),
-			itemised ? nil() : orderBy(ordering(flake)),
-			itemised ? nil() : slicing(flake)
+			itemised ? nil() : orderBy(asc(variable(owner)), ordering(flake)),
+			itemised || !windowed ? nil() : slicing(flake)
 		);
 
 		return itemised
-			? select(distinct(variable(guard), ...cells.flatMap(columns)), where(rows), orderBy(ordering(flake)), slicing(flake))
+			? select(
+				distinct(variable(guard), variable(owner), ...cells.flatMap(columns)),
+				where(rows),
+				orderBy(asc(variable(owner)), ordering(flake)),
+				windowed ? slicing(flake) : nil()
+			)
 			: rows;
+
+
+		/**
+		 * The expression reducing `origin` through `stage`'s pipe. Under a whole-collection aggregation, the row
+		 * an owner without members keeps feeds the aggregates an error, which they drop or turn unbound, except
+		 * under `sum`, which still has to come to `0` (§5.2); every member row feeds them its plain value, so the
+		 * aggregates of an owner with members come out exactly as a keyless aggregation would compute them.
+		 */
+		function reduction(stage: Flake, origin: Variable): SPARQL {
+
+			// a variable nothing binds is the portable error: `coalesce()` reads as an error too, but RDF4J
+			// rejects its empty argument list at parse time as a malformed query, where oxigraph accepts it
+
+			const unbound = scope.resolve();
+
+			return expression(whole
+				? iif(isBound(variable(root)), variable(origin), stage.pipe.find(isAggregate) === "sum" ? number(0) : variable(unbound))
+				: variable(origin), stage.pipe);
+
+		}
 
 
 		/**

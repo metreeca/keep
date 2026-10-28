@@ -207,23 +207,22 @@ export function textual(value: SPARQL): SPARQL {
 }
 
 /**
- * Generates the SPARQL expression applying a transform `pipe` to a value variable (§5.8.2).
+ * Generates the SPARQL expression applying a transform `pipe` to an `anchor` expression (§5.8.2).
  *
  * The trailing transform applies to `anchor` first and the leading transform is outermost. Each {@link Transform}
  * maps to its SPARQL aggregate or scalar function. An `avg` over no rows leaves its binding unbound rather than `0`,
  * as QEST requires (Appendix A.4.3).
  *
- * @param anchor The value variable the pipe transforms
+ * @param anchor The expression the pipe transforms, typically a value variable
  * @param pipe The transforms to compose, leading (outermost) first
  *
- * @returns The SPARQL expression applying `pipe` to `anchor`, or the bare `anchor` variable when `pipe`
- * is empty
+ * @returns The SPARQL expression applying `pipe` to `anchor`, or `anchor` itself when `pipe` is empty
  *
  * @see {@link https://www.w3.org/TR/sparql11-query/#aggregates SPARQL 1.1 Aggregates}
  */
-export function expression(anchor: Variable, pipe: readonly Transform[]): SPARQL {
+export function expression(anchor: SPARQL, pipe: readonly Transform[]): SPARQL {
 
-	return pipe.reduceRight((expression, transform) => apply(expression, transform), variable(anchor));
+	return pipe.reduceRight((expression, transform) => apply(expression, transform), anchor);
 
 	function apply(expression: SPARQL, transform: Transform): SPARQL {
 
@@ -608,4 +607,99 @@ export function computedToValue(value: Term): Value {
 		return value.text;
 
 	}
+}
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * The most entries one query binds through its `values` blocks.
+ *
+ * A batch binding more entries runs as several queries, so no query outgrows what a backend accepts, however large
+ * the batch. Requests sharing a plan may be split across queries, and small groups of requests share one query.
+ */
+export const Chunk = 500;
+
+
+/**
+ * Groups the requests of a batch by the plan they share.
+ *
+ * Each request joins the first group it is `alike` to, or else opens a new group through `open`. Every request lands
+ * in exactly one group, groups list their requests in batch order, and groups follow the order of their first request.
+ *
+ * @param batch The requests to group, in order
+ * @param alike Tells whether a request shares the plan of a group
+ * @param open Creates the group for a request matching no existing group, holding that request alone
+ *
+ * @returns The groups, in order; empty for an empty batch
+ */
+export function grouped<R, G extends { readonly items: readonly R[] }>(
+	batch: readonly R[],
+	alike: (group: G, item: R) => boolean,
+	open: (item: R) => G
+): readonly G[] {
+
+	return batch.reduce<readonly G[]>((groups, item) => {
+
+		const group = groups.find(group => alike(group, item));
+
+		return group === undefined
+			? [...groups, open(item)]
+			: groups.map(candidate => candidate === group ? { ...group, items: [...group.items, item] } : candidate);
+
+	}, []);
+
+}
+
+/**
+ * Splits a set of request groups into queries binding at most {@link Chunk} entries each.
+ *
+ * A group larger than the cap is split into sub-groups sharing its plan. Consecutive sub-groups then share a query
+ * up to the cap, so small groups never run alone. Each query holds group records of its own: encoding and decoding
+ * it with those records keeps the variables keyed on them from clashing with the variables of any other query.
+ *
+ * @param groups The groups to run, in order
+ *
+ * @returns The queries, in order, each listing the groups it binds; empty for no groups
+ */
+export function bounded<G extends { readonly items: readonly unknown[] }>(groups: readonly G[]): readonly (readonly G[])[] {
+
+	return pack(
+		groups.flatMap(group => chunk(group.items, Chunk).map(items => ({ ...group, items }))),
+		({ items }) => items.length,
+		Chunk
+	);
+
+}
+
+
+/**
+ * Splits a list into consecutive runs of at most `size` items.
+ */
+function chunk<T>(items: readonly T[], size: number): readonly (readonly T[])[] {
+
+	return Array.from({ length: Math.ceil(items.length / size) }, (_, index) =>
+		items.slice(index * size, (index + 1) * size)
+	);
+
+}
+
+/**
+ * Packs a list into consecutive bins whose weights add up to at most `limit`: a bin closes when the next item would
+ * push its total over `limit`, and an item heavier than `limit` gets a bin of its own, so no item is ever left out.
+ */
+function pack<T>(items: readonly T[], weight: (item: T) => number, limit: number): readonly (readonly T[])[] {
+
+	type Packing = { readonly bins: readonly (readonly T[])[]; readonly total: number };
+
+	return items.reduce<Packing>(({ bins, total }, item) => {
+
+		const last = bins.at(-1);
+
+		return last !== undefined && total + weight(item) <= limit
+			? { bins: [...bins.slice(0, -1), [...last, item]], total: total + weight(item) }
+			: { bins: [...bins, [item]], total: weight(item) };
+
+	}, { bins: [], total: 0 }).bins;
+
 }

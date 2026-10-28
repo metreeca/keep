@@ -22,6 +22,9 @@
  * becomes its member. A cell retrieved as a union is read from the variant column that bound (§5.5), with no term
  * inspection.
  *
+ * A request reads only the rows of its {@link Group | group} carrying its own entry in the owner column. The decoder
+ * applies the query window to those rows, unless the group has a single owner and the server already applied it.
+ *
  * A resource or expanded reference is handed to the detail pass through the {@link Broker}, which fetches its
  * content. So is the owner of a localised property retrieved structurally (§5.4). Any other cell coerces its term.
  * The contract shared with the encoder is stated in `select/index.md`.
@@ -46,46 +49,79 @@ import {
 	isComputedFlake,
 	isDrainedFlake
 } from "@metreeca/keep-flake";
-import type { Broker, Deferred, Select } from "@metreeca/keep/batching";
+import type { Broker } from "@metreeca/keep/batching";
 import type { Reference, Resource, Value } from "@metreeca/qest/state";
 import type { Term } from "@metreeca/trio";
 import type { Tuple, Variable } from "@metreeca/wire-sparql";
 import { computedToValue, termToReference, termToValue } from "../index.core.js";
+import type { Group } from "./encode.js";
 
 
 /**
  * Settles each batched select request with the collection decoded from the `select` solution.
  *
- * @param scope The variable scope shared with the encoder, recovering per-request tuple slots
- * @param batch The queued select requests to settle, each paired with its {@link Flake | query plan} and deferred
+ * @param scope The variable scope shared with the encoder, recovering per-group tuple slots
+ * @param groups The groups to settle, which must be the very records handed to the encoder: each group's owner
+ * column is keyed on the record's identity, so a copy or a fresh equivalent would resolve to a different variable
  * @param broker The cross-pass channel expanding structured and localised cells through the detail pass
  * @param tuples The solution tuples returned by the batched `select` query
  */
 export function decode(
 	scope: Scope<Variable>,
-	batch: readonly (Deferred<Select> & { readonly flake: Flake; })[],
+	groups: readonly Group[],
 	broker: Broker,
 	tuples: readonly Tuple[]
 ): void {
 
-	const guard = scope.resolve(batch);
+	const guard = scope.resolve(groups);
 
-	batch.forEach(({ request: { locale }, flake, resolve, reject }, index) => {
+	groups.forEach((group, index) => {
 
-		const rows = tuples.filter(tuple => {
+		const { flake, items } = group;
+
+		const owner = scope.resolve(group);
+
+		// the server windowed the rows only where the group binds one owner (see select/index.md)
+
+		const windowed = items.length === 1;
+
+		const stamped = tuples.filter(tuple => {
 			const stamp = tuple[guard];
 			return stamp?.kind === "typed" && stamp.text === String(index);
 		});
 
-		Promise.all(rows.map(row => flake.drain?.form === "projection"
-				? record(flake, row, locale)
-				: cell(flake, flake, row, locale)
-			))
-			.then(values => values.filter(value => value !== undefined))
-			.then(resolve)
-			.catch(reject);
+		items.forEach(({ request: { entry, locale }, resolve, reject }) => {
+
+			const owned = stamped.filter(tuple => {
+				const bound = tuple[owner];
+				return bound?.kind === "named" && bound.iri === entry;
+			});
+
+			const rows = windowed ? owned : window(flake, owned);
+
+			Promise.all(rows.map(row => flake.drain?.form === "projection"
+					? record(flake, row, locale)
+					: cell(flake, flake, row, locale)
+				))
+				.then(values => values.filter(value => value !== undefined))
+				.then(resolve)
+				.catch(reject);
+
+		});
 
 	});
+
+
+	/**
+	 * The rows within the window the query states, the rows coming already ordered.
+	 */
+	function window(flake: Flake, rows: readonly Tuple[]): readonly Tuple[] {
+
+		const from = flake.offset ?? 0;
+
+		return rows.slice(from, flake.limit === undefined ? undefined : from + flake.limit);
+
+	}
 
 
 	/**

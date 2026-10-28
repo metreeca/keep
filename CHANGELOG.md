@@ -17,6 +17,17 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   over a multi-valued property, sorting or ranking the groups by their key value (§5.7.4, §5.7.5, §5.8.2.1), as
   faceted listings need to keep selected values on top; the same keys stay rejected on ungrouped queries
 
+### Fixed
+
+- `@metreeca/keep-sparql` — looking up a large collection with a template expanding its members no longer fails or
+  slows down on query size: the generated queries grow with the template and linearly with the members, no longer
+  with their product ([#22](https://github.com/metreeca/keep/issues/22)), and no query binds more than 500 entries,
+  as a larger batch runs as several queries; a paged multi-valued property read under several members is now
+  windowed by the connector, which fetches every matching row of those members as SPARQL has no per-owner window
+- `@metreeca/keep-sparql` — updating a resource no longer slows down with the product of the values of its
+  multi-valued properties: clearing its previous state now scales with the number of triples it holds, where a
+  product with a few keywords, documents, categories and reviews previously took seconds to update on Oxigraph
+
 ## [0.12.2](https://github.com/metreeca/keep/compare/v0.12.1...v0.12.2) - 2026-10-22
 
 ### Fixed

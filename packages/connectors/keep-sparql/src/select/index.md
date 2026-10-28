@@ -7,9 +7,10 @@ description: The row schema, the variable protocol and the clause structure the 
 # Select Pass
 
 Contract between [`encode.ts`](./encode.ts), which folds a batch of collection queries into one SPARQL `select`, and
-[`decode.ts`](./decode.ts), which settles each request from the returned tuples. Both read only the
-[`Flake`](../../../../components/keep-flake/src/index.ts) each request's `createQueryFlake(shape, query)` produces,
-never the raw `Query` or `Shape`, and share nothing but that tree and a `Scope`.
+[`decode.ts`](./decode.ts), which settles each request from the returned tuples. The driver groups the requests
+sharing a field, a structurally equal query and the same locale into a `Group` record carrying the one
+[`Flake`](../../../../components/keep-flake/src/index.ts) its `createQueryFlake(shape, query)` produces. Both sides
+read only that tree, never the raw `Query` or `Shape`, and share nothing but the group records and a `Scope`.
 
 ## Terminology
 
@@ -24,17 +25,19 @@ The result set is a table:
 
 ## Variable protocol
 
-Every variable comes from the `Scope` the driver shares between encoder and decoder, keyed on flake node identity, so
-the decoder recovers a slot by resolving the same key:
+Every variable comes from the `Scope` the driver shares between encoder and decoder, keyed on the identity of a group
+record or a flake node, so the decoder recovers a slot by resolving the same key:
 
 | Key               | Variable                                                                                                                                                        |
 |-------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `batch`           | the **stamp**: the index of the request a row belongs to, projected first in every arm                                                                          |
+| `groups`          | the **stamp**: the index of the group a row belongs to, projected first in every arm                                                                            |
+| `group`           | the **owner**: the entry of the request a row belongs to, bound by the arm's `values` block and projected after the stamp                                       |
 | `node`            | the **value** of a node: the member for the root, the stored object of a branch's edge, the computed value of a scalar stage, the aggregate of a reducing stage |
 | `(node, variant)` | the **shard** of a cell retrieved as a union (§5.5): bound, from the value, only when the stored value belongs to `variant`                                     |
 
 Keying on identity rather than on a path keeps the same property at distinct coordinates, and the same union retrieved
-by several batched requests, on distinct variables.
+by several batched groups, on distinct variables. The requests of one group share every node variable and are told
+apart by the owner alone, so encoder and decoder must receive the very same group records.
 
 ### Cells and columns
 
@@ -70,20 +73,21 @@ pass re-fetches per member and are left out of the `where`.
 
 ## Arm structure
 
-Each request contributes one arm, every clause a recursive descent over the nodes the query reads:
+Each group contributes one arm, every clause a recursive descent over the nodes the query reads:
 
 ```text
-select [distinct] (index as ?stamp) <columns…> [(aggregate as ?stage)…]
+select [distinct] (index as ?stamp) ?owner <columns…> [(aggregate as ?stage)…]
 where {
-  <entry> <field> ?root .           the member edge
+  values (?owner) { (<entry>) … }   the entries of the group's requests
+  ?owner <field> ?root .            the member edge, optional for whole-collection aggregates
   <patterns>                        stages, shards and branches under the root
   <admitted>                        filter(bound(shard) || …) for a union root retrieving a proper subset of variants
   <filters>                         the row constraints, at group level
 }
-[group by <key columns>]
+[group by ?owner <key columns>]
 [having (<group conditions>)]
-order by <focus…> <sort keys…> <tiebreak…>
-[offset n] [limit n]
+order by asc(?owner) <focus…> <sort keys…> <tiebreak…>
+[offset n] [limit n]                single-owner group only
 ```
 
 - **patterns** — under a node: `bind` one scalar stage per read transform; then one **step** per read branch, its own
@@ -101,21 +105,31 @@ order by <focus…> <sort keys…> <tiebreak…>
 - **comparison regime** (§5.7.1) — a bound runs in the variant it singles out: a boolean by its false < true rank, a
 	string-kind variant lexically (`str`), which also orders the ISO temporal forms a backend leaves opaque, anything else
   by its typed term; a guard on the variant's kind excludes the other variants of a union
-- **grouping** — an aggregate anywhere in the query groups it (§5.8.2.1): by the non-aggregate bindings where the
-	projection itself aggregates; else by the member, with the bindings and the non-aggregate sort and focus keys, so a
-  selection aggregate reduces per item, and the arm then wraps that grouped subselect in a `select distinct` over the
-  stamp and the cells, so the rows collapse as any projection's do (§5.2) once the items are filtered. Every read
-  reducing stage is projected as `(pipe(origin) as ?stage)` and its conditions move to `having`;
-	`min`/`max`/`sum`/`avg` over references project nothing, leaving their cells unbound (Appendix A.4.1)
-- **ordering** — focus boosts, then sort keys by precedence, each ranked by processing-type tier (boolean < numeric
-	< temporal < string) before its value (§5.7.5), then the group keys or the member as a stable tiebreak
-- **slicing** — inside the arm, after its ordering, so each request pages its own window
+- **grouping** — an aggregate anywhere in the query groups it (§5.8.2.1): by the owner and the non-aggregate
+  bindings where the projection itself aggregates; else by the owner and the member, with the bindings and the
+  non-aggregate sort and focus keys, so a selection aggregate reduces per item, and the arm then wraps that grouped
+  subselect in a `select distinct` over the stamp, the owner and the cells, so the rows collapse as any projection's
+  do (§5.2) once the items are filtered. Every read reducing stage is projected as `(pipe(origin) as ?stage)`, its
+  conditions move to `having`, and `min`/`max`/`sum`/`avg` over references project nothing (Appendix A.4.1)
+- **whole-collection aggregates** — a projection aggregating without non-aggregate bindings has a value on an empty
+  collection too (§5.2). Grouping by owner would drop an owner whose members are all filtered out, so the member edge
+  and everything under it become `optional` under the `values` block. Each aggregate argument then reads
+  `if(bound(?root), <value>, <neutral>)`: the neutral is `0` under `sum`, and an error (a variable nothing binds) under
+  any other aggregate, which drops it or comes out unbound. An owner with members thus aggregates exactly as a keyless
+  aggregation over its own members would, and an owner without members still gets one row of empty aggregates
+- **ordering** — the owner first, then focus boosts, then sort keys by precedence, each ranked by processing-type
+  tier (boolean < numeric < temporal < string) before its value (§5.7.5), then the group keys or the member as a
+  stable tiebreak, so the rows of every owner come back in the same order whatever else shares the arm
+- **slicing** — inside the arm, after its ordering, only where the group binds a single owner: a `limit` spans every
+  owner bound in the arm, so a group of several owners returns every row and the decoder windows each owner's rows
 
 ## Decoding
 
-A request's rows are the tuples carrying its stamp. A projection yields one record per row, each binding read from its
-cell and omitted when it resolves to no value; a plain collection yields one member per row from the root cell, rows
-resolving to no value dropped.
+A request's rows are the tuples carrying its group's stamp and its own entry on the owner column, in the order the
+query states; where the group binds several owners the decoder also applies the window (`offset`, `limit`) the query
+states, since the server windowed nothing. A projection yields one record per row, each binding read from its cell and
+omitted when it resolves to no value; a plain collection yields one member per row from the root cell, rows resolving
+to no value dropped, so an owner matching nothing settles with an empty collection rather than a missing one.
 
 A cell is read by its columns:
 
@@ -133,6 +147,12 @@ reads embedded resources only when the repository names them by skolem IRIs, nev
 
 ## Batching
 
-`encode` folds `N` requests into one `select`: a single request runs as its bare arm; several are wrapped as
-`select * where { arm union arm … } order by asc(?stamp), <each arm's ordering>`, the stamp first so each request's
-already-sliced rows stay contiguous and in order. The decoder demultiplexes on the same stamp.
+`encode` folds `N` groups into one `select`: a single group runs as its bare arm; several are wrapped as
+`select * where { arm union arm … } order by asc(?stamp), asc(?owner), <each arm's ordering>…`, the stamp first and
+each arm's owner next, so each request's rows stay contiguous and in order. The decoder demultiplexes on the same
+stamp and owner. A group's arm costs the same whatever the number of its requests, so expanding a thousand members
+through one template reads each of its multi-valued properties in a single arm, a thousand owners bound in its block.
+
+The driver binds at most `Chunk` owners in each query, so no query outgrows what a backend accepts. A larger group
+runs as several sub-groups sharing its plan, and small sub-groups share a query up to the same cap. Each query is
+decoded with the group records it was encoded from, so the stamp and owner variables of two queries never mix.

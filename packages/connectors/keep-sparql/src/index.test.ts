@@ -629,7 +629,7 @@ describe.skipIf(!process.env.FUSEKI_TDB2)("fuseki-tdb2", () => {
  */
 describe.skipIf(!process.env.OXIGRAPH)("oxigraph", () => {
 
-	const image = "oxigraph/oxigraph:0.5.8";
+	const image = "oxigraph/oxigraph:0.5.13";
 
 	const port = 7878;
 

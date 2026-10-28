@@ -27,6 +27,9 @@
  * written, foreign properties are left untouched, and embedded resources are written recursively while references
  * are written as links.
  *
+ * Clearing an entry scales with the number of triples it owns, embedded resources included, rather than with the
+ * product of the values of its multi-valued properties, so updating a richly described resource stays fast.
+ *
  * @see {@link https://www.w3.org/TR/sparql11-update/ SPARQL 1.1 Update}
  *
  * @module
@@ -50,7 +53,6 @@ import {
 	group,
 	insert as create,
 	nil,
-	optional,
 	pattern,
 	reference,
 	union,
@@ -100,7 +102,7 @@ export function encode(
 	function insert(entry: Reference, flake: Flake, state: Resource): SPARQL {
 
 		return update(
-			deleet(group(triples(named(entry), flake)), where(matches(named(entry), flake))),
+			deleet(group(triples(named(entry), flake)), where(union(...matches([], named(entry), flake)))),
 			create(data(content(entry, flake, state)))
 		);
 
@@ -134,10 +136,16 @@ export function encode(
 			));
 		}
 
-		function matches(entry: Variable | Named, flake: Flake): SPARQL {
-			return fragment(...getShapeBranches(flake.range.shape).flatMap(shape =>
-				shape.kind !== "resource" ? [] : [fragment(
-					isTyped(shape) ? optional(pattern([entry, named(rdf.type), scope.resolve(shape)])) : nil(),
+		/**
+		 * Returns one `union` arm for each edge owned under `entry`: the type edge, the forward and reverse edges of
+		 * each owned property, and the edges owned by the embedded resources below them. Each arm starts with `path`,
+		 * the edges leading to `entry`, so it binds on its own every variable the `delete` template needs. Matched
+		 * rows thus add up across edges instead of multiplying, and the clearing update stays linear in the triples.
+		 */
+		function matches(path: readonly SPARQL[], entry: Variable | Named, flake: Flake): readonly SPARQL[] {
+			return getShapeBranches(flake.range.shape).flatMap(shape =>
+				shape.kind !== "resource" ? [] : [
+					...(isTyped(shape) ? [fragment(...path, pattern([entry, named(rdf.type), scope.resolve(shape)]))] : []),
 					...getFlakeVariant(flake, shape).flatMap(branch => {
 
 						const property = branch.entry;
@@ -146,18 +154,15 @@ export function encode(
 
 							const v = scope.resolve(branch);
 
-							const edges = fragment(
+							const edges = [
 								forward([entry, property, v]),
 								reverse([entry, property, v])
-							);
+							];
 
-							return [
+							return edges.every(edge => edge === "") ? [] : [
+								fragment(...path, ...edges),
 								...(getShapeBranches(property.range.shape).some(variant => variant.kind === "resource")
-										? [optional(edges, matches(v, branch))] // only embedded resources recurse
-										: []
-								),
-								...(isLeaf(property)
-										? [optional(edges)]
+										? matches([...path, ...edges], v, branch) // only embedded resources recurse
 										: []
 								)
 							];
@@ -169,8 +174,8 @@ export function encode(
 						}
 
 					})
-				)]
-			));
+				]
+			);
 		}
 
 		function content(entry: Reference, flake: Flake, state: Resource): SPARQL {
@@ -319,16 +324,6 @@ export function encode(
 	function isTyped(shape: Shape): boolean {
 		return shape.kind === "union" ? getShapeBranches(shape).some(isTyped)
 			: shape.kind === "resource" && shape.class !== undefined;
-	}
-
-	function isLeaf(property: Property): boolean {
-
-		return property.foreign !== true && leaf(eager(property.range.shape));
-
-		function leaf(shape: Shape): boolean {
-			return shape.kind === "union" ? getShapeBranches(shape).some(leaf) : shape.kind !== "resource";
-		}
-
 	}
 
 	function isOwn(property: Property): boolean {

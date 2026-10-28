@@ -79,31 +79,22 @@ This SPARQL connector has been exercised against the
 [@metreeca/keep-suite](https://github.com/metreeca/keep/tree/main/packages/components/keep-suite) conformance suite on
 the backends and versions below, through the listed connectors.
 
-| Engine                       | Version                                                  | Storage       | Connectors                                      |
-|------------------------------|----------------------------------------------------------|---------------|-------------------------------------------------|
-| [Eclipse RDF4J][rdf4j]       | 5.3.1                                                    | MemoryStore   | `createHTTPRepository`, `createRDF4JRepository` |
-| [Eclipse RDF4J][rdf4j]       | 5.3.1                                                    | NativeStore   | `createHTTPRepository`, `createRDF4JRepository` |
-| [Eclipse RDF4J][rdf4j]       | 5.3.1                                                    | LmdbStore     | `createHTTPRepository`, `createRDF4JRepository` |
-| [Apache Jena Fuseki][fuseki] | 6.1.0                                                    | MemoryDataset | `createHTTPRepository`                          |
-| [Apache Jena Fuseki][fuseki] | 6.1.0                                                    | TDB1          | `createHTTPRepository`                          |
-| [Apache Jena Fuseki][fuseki] | 6.1.0                                                    | TDB2          | `createHTTPRepository`                          |
-| [Oxigraph][oxigraph]         | 0.5.8                                                    | in-memory     | `createOxiRepository`                           |
-| [Oxigraph][oxigraph]         | 0.5.8                                                    | disk          | `createHTTPRepository`                          |
-| [QLever][qlever]             | [*upcoming*](https://github.com/metreeca/keep/issues/8)  | disk          |                                                 |
-| [Fluree][fluree]             | [*upcoming*](https://github.com/metreeca/keep/issues/13) | disk          |                                                 |
-| [Virtuoso][virtuoso]         | [*upcoming*](https://github.com/metreeca/keep/issues/9)  | disk          |                                                 |
+| Engine                       | Version | Storage       | Connectors                                      |
+|------------------------------|---------|---------------|-------------------------------------------------|
+| [Eclipse RDF4J][rdf4j]       | 5.3.1   | MemoryStore   | `createHTTPRepository`, `createRDF4JRepository` |
+| [Eclipse RDF4J][rdf4j]       | 5.3.1   | NativeStore   | `createHTTPRepository`, `createRDF4JRepository` |
+| [Eclipse RDF4J][rdf4j]       | 5.3.1   | LmdbStore     | `createHTTPRepository`, `createRDF4JRepository` |
+| [Apache Jena Fuseki][fuseki] | 6.1.0   | MemoryDataset | `createHTTPRepository`                          |
+| [Apache Jena Fuseki][fuseki] | 6.1.0   | TDB1          | `createHTTPRepository`                          |
+| [Apache Jena Fuseki][fuseki] | 6.1.0   | TDB2          | `createHTTPRepository`                          |
+| [Oxigraph][oxigraph]         | 0.5.13  | in-memory     | `createOxiRepository`                           |
+| [Oxigraph][oxigraph]         | 0.5.13  | disk          | `createHTTPRepository`                          |
 
 [rdf4j]: https://rdf4j.org/
 
 [fuseki]: https://jena.apache.org/
 
 [oxigraph]: https://oxigraph.org/
-
-[qlever]: https://qlever.dev/
-
-[virtuoso]: https://virtuoso.openlinksw.com/
-
-[fluree]: https://flur.ee/
 
 # Support
 

@@ -630,20 +630,25 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 			})());
 
-			it.each([
-				["duplicate binding names", Catalogue, Products,
-					{ "foo=price": {}, "foo=stock": {} }],
-				["shorthand and explicit bindings sharing a name", VendorsCatalogue, Vendors,
-					{ "name": {}, "name=email": {} }]
-			] as const)("should reject %s", (_label, entry, shape, projection) => factory(async ({ store }) => {
+			it("should reject duplicate binding names", factory(async ({ store }) => {
 
 				await expect(store.lookup({
-					entry,
-					shape,
-					model: catalogue(projection)
+					entry: Catalogue,
+					shape: Products,
+					model: catalogue({ "foo=price": {}, "foo=stock": {} })
 				})).rejects.toThrow();
 
-			})());
+			}));
+
+			it("should reject shorthand and explicit bindings sharing a name", factory(async ({ store }) => {
+
+				await expect(store.lookup({
+					entry: VendorsCatalogue,
+					shape: Vendors,
+					model: catalogue({ "name": {}, "name=email": {} })
+				})).rejects.toThrow();
+
+			}));
 
 			it("should project multi-transform pipe over multi-step path", factory(async ({ store }) => {
 

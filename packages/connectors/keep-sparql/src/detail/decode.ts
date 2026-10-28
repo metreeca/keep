@@ -55,9 +55,9 @@ import { termToReference, termToValue } from "../index.core.js";
 
 
 /**
- * Settles each batched detail request with the resource decoded from the `select` solution.
+ * Settles each batched detail request with the resource decoded from its own `select` solution rows.
  *
- * Each property is read from its column through the {@link Scope} shared with the encoder, following the same
+ * Properties are read from the columns of the {@link Scope} shared with the encoder, following the same
  * {@link Flake | detail plan}. Each property is read by the counterpart of the arm that produced it:
  *
  *  - a **scalar** property reads its column and recurses into a nested embedded or expanded resource;
@@ -70,33 +70,40 @@ import { termToReference, termToValue } from "../index.core.js";
  * through {@link Broker.select}, while `id` and `type` come from the entry and the shape. Each request resolves to
  * its decoded resource, or rejects with the error raised while decoding it.
  *
+ * Each request must carry only the solution rows whose group subject binds its own entry. Entries sharing a plan
+ * share its columns too, so passing the rows of the whole group would mix the values of different entries.
+ *
  * @param scope The variable scope shared with the encoder
- * @param items The batched requests, each paired with its {@link Flake | detail plan} and deferred
+ * @param items The batched requests, each with its {@link Flake | detail plan} and the solution rows bound to its entry
  * @param broker The channel forwarding multi-valued properties to the select pass
- * @param tuples The solution rows returned by the batched `select` query
  */
 export function decode(
 	scope: Scope<Variable>,
-	items: readonly (Deferred<Detail> & { readonly flake: Flake })[],
-	broker: Broker,
-	tuples: readonly Tuple[]
+	items: readonly (Deferred<Detail> & { readonly flake: Flake; readonly tuples: readonly Tuple[] })[],
+	broker: Broker
 ): void {
 
 	// ;(cast) the decoded resource is the instance the request asked for: the walk is driven by the very flake
 	// the model built, so its slots are the model's keys. The static inference no longer says so, reading leaf
 	// types off a notation that no longer carries them (see `@metreeca/blue/value`).
 
-	items.forEach(({ request, flake, resolve, reject }) =>
-		decodeResource(request.entry, flake, request.locale)
+	items.forEach(({ request, flake, tuples, resolve, reject }) =>
+		decodeResource(request.entry, flake, request.locale, tuples)
 			.then(resource => resolve(resource as Response<Detail>))
 			.catch(reject)
 	);
 
 
-	function decodeResource(entry: Reference, flake: Flake, locale: readonly Tag[]): Promise<Resource> {
+	function decodeResource(
+		entry: Reference,
+		flake: Flake,
+		locale: readonly Tag[],
+		tuples: readonly Tuple[]
+	): Promise<Resource> {
 
 		return Promise.all(getShapeBranches(flake.range.shape).flatMap(variant =>
-			variant.kind !== "resource" ? [] : [decodeVariant(entry, variant, locale, getFlakeVariant(flake, variant))]
+			variant.kind !== "resource" ? []
+				: [decodeVariant(entry, variant, locale, getFlakeVariant(flake, variant), tuples)]
 		)).then(resources => resources.reduce<Resource>(
 			(merged, resource) => ({ ...merged, ...resource }),
 			{}
@@ -108,7 +115,8 @@ export function decode(
 		entry: Reference,
 		shape: ResourceShape,
 		locale: readonly Tag[],
-		branches: readonly Branch[]
+		branches: readonly Branch[],
+		tuples: readonly Tuple[]
 	): Promise<Resource> {
 
 		type Slot = readonly [Identifier, undefined | Values];
@@ -127,7 +135,7 @@ export function decode(
 					])
 
 				: isModelBranch(branch) ? Promise
-						.resolve(decodeProperty(locale, branch))
+						.resolve(decodeProperty(locale, branch, tuples))
 						.then(value => [branch.path[branch.path.length-1], value])
 
 					: branch.entry.kind === "id" ? [branch.path[branch.path.length-1], entry]
@@ -142,7 +150,8 @@ export function decode(
 
 	function decodeProperty(
 		locale: readonly Tag[],
-		branch: Branch & { readonly entry: Property }
+		branch: Branch & { readonly entry: Property },
+		tuples: readonly Tuple[]
 	): Values | Promise<Resource> | undefined {
 
 		const rangeShape = eager(branch.entry.range.shape);
@@ -151,7 +160,7 @@ export function decode(
 
 		if ( rangeShape.kind === "union" ) {
 
-			return decodeUnion(locale, branch, drain);
+			return decodeUnion(locale, branch, drain, tuples);
 
 		} else if ( rangeShape.kind === "dictionary" ) {
 
@@ -171,7 +180,8 @@ export function decode(
 				locale,
 				getFlakeEntries(branch),
 				drain,
-				unique(decodeColumn(scope.resolve(branch), tuples), equals)
+				unique(decodeColumn(scope.resolve(branch), tuples), equals),
+				tuples
 			)[0];
 
 		}
@@ -181,7 +191,8 @@ export function decode(
 	function decodeUnion(
 		locale: readonly Tag[],
 		branch: Branch & { readonly entry: Property },
-		drain: undefined | Drain
+		drain: undefined | Drain,
+		tuples: readonly Tuple[]
 	): Values | Promise<Resource> | undefined {
 
 		const requested = drain?.form === "union" ? drain.variants : new Map<Shape, Drain>();
@@ -200,7 +211,8 @@ export function decode(
 					present,
 					locale,
 					getFlakeVariant(branch, present), requested.get(present),
-					unique(decodeColumn(scope.resolve(branch, present), tuples), equals)
+					unique(decodeColumn(scope.resolve(branch, present), tuples), equals),
+					tuples
 				)[0];
 	}
 
@@ -255,7 +267,8 @@ export function decode(
 		locale: readonly Tag[],
 		branches: readonly Branch[],
 		drain: undefined | Drain,
-		terms: readonly Term[]
+		terms: readonly Term[],
+		tuples: readonly Tuple[]
 	): readonly (Value | Promise<Resource>)[] {
 
 		switch ( shape.kind ) {
@@ -271,12 +284,12 @@ export function decode(
 				// the atomic keeps the bare references
 
 				return drain?.form === "template"
-					? entries().map(entry => decodeVariant(entry, eager(shape.target), locale, branches))
+					? entries().map(entry => decodeVariant(entry, eager(shape.target), locale, branches, tuples))
 					: entries();
 
 			case "resource":
 
-				return entries().map(entry => decodeVariant(entry, shape, locale, branches));
+				return entries().map(entry => decodeVariant(entry, shape, locale, branches, tuples));
 
 			case "dictionary": // a localised variant is decoded from its tagged columns, never from a bound column
 

@@ -24,24 +24,29 @@
  */
 
 import { createScope } from "@metreeca/core/scope";
+import { equals } from "@metreeca/core/values";
 import { createQueryFlake } from "@metreeca/keep-flake";
 import type { Broker, Deferred, Select } from "@metreeca/keep/batching";
 import { type RepositoryClient, variable } from "@metreeca/wire-sparql";
+import { bounded, grouped } from "../index.core.js";
 import { decode } from "./decode.js";
-import { encode } from "./encode.js";
+import { encode, type Group } from "./encode.js";
 
 
 /**
- * Resolves a batch of select requests with one `select` query.
+ * Resolves a batch of select requests through shared `select` queries, binding at most `Chunk` owners each.
  *
- * Each request is planned with {@link createQueryFlake}, and every plan is folded into one query. Each request
- * resolves to the members of its collection, in the order and window its query states.
+ * Requests sharing a field, a structurally equal query and the same locale are planned once with
+ * {@link createQueryFlake} and read together. The queries therefore grow with the number of distinct plans and
+ * linearly with the number of entries, never with their product, and a batch over the cap runs as several queries.
+ * Each request still resolves to the members of its own collection alone, in the order and within the window its
+ * query states, whatever other requests share its plan or its query, and settles as soon as its own query returns.
  *
  * @param batch The queued select requests to resolve
  * @param client The repository the query runs against
  * @param broker The channel expanding members through the detail pass
  *
- * @returns A promise settling once the query results have been handed to the decoder
+ * @returns A promise settling once the results of every query have been handed to the decoder
  */
 export async function select(
 	batch: readonly Deferred<Select>[],
@@ -51,12 +56,23 @@ export async function select(
 
 	const scope = createScope(variable);
 
-	const items = batch.map(select =>
-		({ ...select, flake: createQueryFlake(select.request.field.range.shape, select.request.query) })
+	const groups = grouped<Deferred<Select>, Group>(batch,
+		({ field, query, locale }, { request }) =>
+			field === request.field && equals(query, request.query) && equals(locale, request.locale),
+		item => ({
+			field: item.request.field,
+			query: item.request.query,
+			locale: item.request.locale,
+			flake: createQueryFlake(item.request.field.range.shape, item.request.query),
+			items: [item]
+		})
 	);
 
-	decode(scope, items, broker, await client.select(
-		encode(scope, items)
+	// each query is decoded with the very group records it was encoded from, which key its stamp and owner variables
+
+	await Promise.all(bounded(groups).map(query => client
+		.select(encode(scope, query))
+		.then(tuples => decode(scope, query, broker, tuples))
 	));
 
 }

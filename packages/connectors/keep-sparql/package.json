@@ -60,7 +60,7 @@
     "@metreeca/wire-sparql-http": "^0.12.0",
     "@metreeca/wire-sparql-oxigraph": "^0.12.0",
     "@metreeca/wire-sparql-rdf4j": "^0.12.0",
-    "oxigraph": "^0.5.8",
+    "oxigraph": "^0.5.13",
     "testcontainers": "^12.1.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.13"
