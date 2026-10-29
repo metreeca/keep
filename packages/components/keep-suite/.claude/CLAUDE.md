@@ -80,8 +80,6 @@ the property's own value rather than an omission.
 		captive writes, deferred), set semantics (duplicate elision, order immaterial); empty `[]` ignored
 	- **localised properties** — `Dictionary` value sets; empty map `{}` and empty shorthand `[]` ignored, and an empty
 		tag entry ignored on an array-per-tag property and rejected on a single-string-per-tag one
-		- plain string shorthand (`und` tag)
-		- plain string-array shorthand (`und` tag)
 		- single-valued language map
 		- multi-valued language map
 	- **union properties** — state and template hierarchies diverge at this leaf; per-branch content follows scalar /

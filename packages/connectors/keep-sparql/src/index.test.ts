@@ -109,7 +109,7 @@ describe("oxigraph", () => {
  */
 describe("rdf4j-memory", () => {
 
-	const image = "eclipse/rdf4j-workbench:5.3.1-tomcat";
+	const image = "eclipse/rdf4j-workbench:6.1.0-tomcat";
 
 	const port = 8080;
 	const repo = "test";
@@ -204,7 +204,7 @@ describe("rdf4j-memory", () => {
  */
 describe.skipIf(!process.env.RDF4J_NATIVE)("rdf4j-native", () => {
 
-	const image = "eclipse/rdf4j-workbench:5.3.1-tomcat";
+	const image = "eclipse/rdf4j-workbench:6.1.0-tomcat";
 
 	const port = 8080;
 	const repo = "test";
@@ -299,7 +299,7 @@ describe.skipIf(!process.env.RDF4J_NATIVE)("rdf4j-native", () => {
  */
 describe.skipIf(!process.env.RDF4J_LMDB)("rdf4j-lmdb", () => {
 
-	const image = "eclipse/rdf4j-workbench:5.3.1-tomcat";
+	const image = "eclipse/rdf4j-workbench:6.1.0-tomcat";
 
 	const port = 8080;
 	const repo = "test";
@@ -395,7 +395,7 @@ describe.skipIf(!process.env.RDF4J_LMDB)("rdf4j-lmdb", () => {
  */
 describe.skipIf(!process.env.FUSEKI_MEMORY)("fuseki-memory", () => {
 
-	const image = "ghcr.io/kurrawong/fuseki:6.1.0-0";
+	const image = "ghcr.io/kurrawong/fuseki:6.2.0-0";
 
 	const port = 3030;
 	const dataset = "ds";
@@ -420,6 +420,14 @@ describe.skipIf(!process.env.FUSEKI_MEMORY)("fuseki-memory", () => {
 			<#mem> rdf:type ja:MemoryDataset .
 		`;
 
+	// the image guards every endpoint behind basic auth by default, so supply an open shiro
+	// policy; the entrypoint materialises it into the runtime base (/fuseki/shiro.ini)
+
+	const shiro = `
+			[urls]
+			/** = anon
+		`;
+
 
 	let base: string;
 	let container: StartedTestContainer;
@@ -433,6 +441,9 @@ describe.skipIf(!process.env.FUSEKI_MEMORY)("fuseki-memory", () => {
 			.withCopyContentToContainer([{
 				content: assembler,
 				target: "/opt/fuseki/configuration/assembler.ttl"
+			}, {
+				content: shiro,
+				target: "/opt/fuseki/shiro.ini"
 			}])
 			.withExposedPorts(port)
 			.withWaitStrategy(Wait.forHttp("/$/ping", port))
@@ -473,7 +484,7 @@ describe.skipIf(!process.env.FUSEKI_MEMORY)("fuseki-memory", () => {
  */
 describe.skipIf(!process.env.FUSEKI_TDB1)("fuseki-tdb1", () => {
 
-	const image = "ghcr.io/kurrawong/fuseki:6.1.0-0";
+	const image = "ghcr.io/kurrawong/fuseki:6.2.0-0";
 
 	const port = 3030;
 	const dataset = "ds";
@@ -499,6 +510,14 @@ describe.skipIf(!process.env.FUSEKI_TDB1)("fuseki-tdb1", () => {
 				tdb:location "/fuseki/databases/tdb" .
 		`;
 
+	// the image guards every endpoint behind basic auth by default, so supply an open shiro
+	// policy; the entrypoint materialises it into the runtime base (/fuseki/shiro.ini)
+
+	const shiro = `
+			[urls]
+			/** = anon
+		`;
+
 
 	let base: string;
 	let container: StartedTestContainer;
@@ -512,6 +531,9 @@ describe.skipIf(!process.env.FUSEKI_TDB1)("fuseki-tdb1", () => {
 			.withCopyContentToContainer([{
 				content: assembler,
 				target: "/opt/fuseki/configuration/assembler.ttl"
+			}, {
+				content: shiro,
+				target: "/opt/fuseki/shiro.ini"
 			}])
 			.withExposedPorts(port)
 			.withWaitStrategy(Wait.forHttp("/$/ping", port))
@@ -552,7 +574,7 @@ describe.skipIf(!process.env.FUSEKI_TDB1)("fuseki-tdb1", () => {
  */
 describe.skipIf(!process.env.FUSEKI_TDB2)("fuseki-tdb2", () => {
 
-	const image = "ghcr.io/kurrawong/fuseki:6.1.0-0";
+	const image = "ghcr.io/kurrawong/fuseki:6.2.0-0";
 
 	const port = 3030;
 	const dataset = "ds";
@@ -578,6 +600,14 @@ describe.skipIf(!process.env.FUSEKI_TDB2)("fuseki-tdb2", () => {
 				tdb2:location "/fuseki/databases/tdb2" .
 		`;
 
+	// the image guards every endpoint behind basic auth by default, so supply an open shiro
+	// policy; the entrypoint materialises it into the runtime base (/fuseki/shiro.ini)
+
+	const shiro = `
+			[urls]
+			/** = anon
+		`;
+
 
 	let base: string;
 	let container: StartedTestContainer;
@@ -591,6 +621,9 @@ describe.skipIf(!process.env.FUSEKI_TDB2)("fuseki-tdb2", () => {
 			.withCopyContentToContainer([{
 				content: assembler,
 				target: "/opt/fuseki/configuration/assembler.ttl"
+			}, {
+				content: shiro,
+				target: "/opt/fuseki/shiro.ini"
 			}])
 			.withExposedPorts(port)
 			.withWaitStrategy(Wait.forHttp("/$/ping", port))
@@ -1039,6 +1072,25 @@ function testSPARQLStore(factory: () => Repository, {
 
 	}));
 
+
+	describe("store options", () => {
+
+		it("should reject a cap that is not a non-negative integer", async () => {
+
+			expect(() => createSPARQLStore(factory(), { batch: 1.5 })).toThrow(TypeError);
+			expect(() => createSPARQLStore(factory(), { batch: -1 })).toThrow(TypeError);
+			expect(() => createSPARQLStore(factory(), { burst: 1.5 })).toThrow(TypeError);
+			expect(() => createSPARQLStore(factory(), { burst: -1 })).toThrow(TypeError);
+
+		});
+
+		it("should accept a lifted cap", async () => {
+
+			expect(() => createSPARQLStore(factory(), { batch: 0, burst: 0 })).not.toThrow();
+
+		});
+
+	});
 
 	describe("sparql storage", () => {
 

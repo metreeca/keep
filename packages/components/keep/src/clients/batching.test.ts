@@ -21,9 +21,17 @@ import { eager } from "@metreeca/blue/value";
 import type { Lazy } from "@metreeca/core";
 import type { Query, Slot, Template } from "@metreeca/qest/model";
 import type { Reference } from "@metreeca/qest/state";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createBroker, mint } from "./batching.core.js";
-import { type Broker, createBatchingStore, type Detail, type Detect, type Modify, type Select } from "./batching.js";
+import {
+	type Broker,
+	createBatchingStore,
+	type Detail,
+	type Detect,
+	type Limits,
+	type Modify,
+	type Select
+} from "./batching.js";
 
 
 declare const process: {
@@ -42,7 +50,7 @@ describe("createBatchingStore", () => {
 	// resolves a fixed instance, and `modify` resolves to the target entry. `detected`, `detailed`, and
 	// `modified` capture what reached each handler so tests can assert the conditional routing.
 
-	function batchedStore(present: readonly Reference[] = []) {
+	function batchedStore(present: readonly Reference[] = [], limit: Limits = {}) {
 
 		const detected: Reference[] = [];
 		const detailed: Detail[] = [];
@@ -69,13 +77,26 @@ describe("createBatchingStore", () => {
 					d.resolve(d.request.entry);
 				});
 			}
-		});
+		}, { limit });
 
 		return { store, detected, detailed, modified, instance };
 
 	}
 
 	describe("detail", () => {
+
+		it("hands the detect handler at most the limit of entries per call", async () => {
+
+			const { store, detected } = batchedStore([entry], { detect: 1 });
+
+			await Promise.all([
+				store.lookup({ entry, shape, model: {} }),
+				store.lookup({ entry: "http://example.com/s", shape, model: {} })
+			]);
+
+			expect(detected).toEqual([entry, "http://example.com/s"]);
+
+		});
 
 		it("returns the detailed instance for a present resource", async () => {
 
@@ -578,6 +599,151 @@ describe("createBroker", () => {
 			]);
 
 			expect(captured).toEqual(["http://example.com/x", "http://example.com/y"]);
+
+		});
+
+		it("serves requests sharing a plan in one handler call", async () => {
+
+			const sizes: number[] = [];
+
+			const loader = createBroker({
+				async detail(batch, _) {
+					sizes.push(batch.length);
+					batch.forEach(d => d.resolve({}));
+				},
+				async select() {},
+				async modify() {},
+				async detect() {}
+			});
+
+			// structurally equal models on distinct objects share the plan
+
+			await Promise.all([
+				loader.detail(detailRequest({ entry: "http://example.com/a", model: { broader: {} } })),
+				loader.detail(detailRequest({ entry: "http://example.com/b", model: { broader: {} } }))
+			]);
+
+			expect(sizes).toEqual([2]);
+
+		});
+
+		it("serves requests of distinct plans in distinct handler calls", async () => {
+
+			const calls: Reference[][] = [];
+
+			const loader = createBroker({
+				async detail(batch, _) {
+					calls.push(batch.map(d => d.request.entry));
+					batch.forEach(d => d.resolve({}));
+				},
+				async select(batch, _) {
+					calls.push(batch.map(d => d.request.entry));
+					batch.forEach(d => d.resolve([]));
+				},
+				async modify() {},
+				async detect() {}
+			});
+
+			await Promise.all([
+				loader.detail(detailRequest({ entry: "http://example.com/a", model: {} })),
+				loader.detail(detailRequest({ entry: "http://example.com/b", model: { broader: {} } })),
+				loader.detail(detailRequest({ entry: "http://example.com/c", model: {} })),
+				loader.detail(detailRequest({ entry: "http://example.com/d", model: {}, locale: ["en"] })),
+				loader.select(selectRequest({ entry: "http://example.com/e", query: {} })),
+				loader.select(selectRequest({ entry: "http://example.com/f", query: { "#": 1 } }))
+			]);
+
+			expect(calls).toEqual([
+				["http://example.com/a", "http://example.com/c"],
+				["http://example.com/b"],
+				["http://example.com/d"],
+				["http://example.com/e"],
+				["http://example.com/f"]
+			]);
+
+		});
+
+		it("splits a batch over the limit into several handler calls", async () => {
+
+			const sizes: number[] = [];
+
+			const loader = createBroker({
+				async detail(batch, _) {
+					sizes.push(batch.length);
+					batch.forEach(d => d.resolve({}));
+				},
+				async select() {},
+				async modify() {},
+				async detect() {}
+			}, { detail: 2 });
+
+			await Promise.all([
+				loader.detail(detailRequest({ entry: "http://example.com/a" })),
+				loader.detail(detailRequest({ entry: "http://example.com/b" })),
+				loader.detail(detailRequest({ entry: "http://example.com/c" }))
+			]);
+
+			expect(sizes).toEqual([2, 1]);
+
+		});
+
+		it("runs at most the burst of handler calls at once", async () => {
+
+			// each detail call blocks until released, so the calls in flight are exactly the ones started
+
+			const started: (() => void)[] = [];
+
+			const loader = createBroker({
+				async detail(batch, _) {
+					await new Promise<void>(release => { started.push(release); });
+					batch.forEach(d => d.resolve({}));
+				},
+				async select() {},
+				async modify() {},
+				async detect() {}
+			}, { detail: 1, burst: 2 });
+
+			const settled = Promise.all(["a", "b", "c", "d", "e"].map(name =>
+				loader.detail(detailRequest({ entry: `http://example.com/${name}` }))
+			));
+
+			await vi.waitFor(() => expect(started).toHaveLength(2));
+			await new Promise(resolve => setTimeout(resolve, 10));
+			expect(started).toHaveLength(2);
+
+			started.forEach(release => release());
+
+			await vi.waitFor(() => expect(started).toHaveLength(4));
+			started.forEach(release => release());
+
+			await vi.waitFor(() => expect(started).toHaveLength(5));
+			started.forEach(release => release());
+
+			await settled;
+
+		});
+
+		it("serves modify requests of any shape in one handler call in submission order", async () => {
+
+			const calls: Reference[][] = [];
+
+			const loader = createBroker({
+				async detail() {},
+				async select() {},
+				async modify(batch, _) {
+					calls.push(batch.map(d => d.request.entry));
+					batch.forEach(d => d.resolve(d.request.entry));
+				},
+				async detect() {}
+			});
+
+			await Promise.all([
+				loader.modify(modifyRequest({ entry: "http://example.com/a" })),
+				loader.modify(modifyRequest({ entry: "http://example.com/b", shape: Node, state: {} })),
+				loader.modify(modifyRequest({ entry: "http://example.com/c", link: { property, item: "http://example.com/a" } }))
+			]);
+
+			expect(calls).toEqual([["http://example.com/a", "http://example.com/b", "http://example.com/c"]]);
 
 		});
 

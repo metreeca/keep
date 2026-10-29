@@ -7,6 +7,22 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.13.0](https://github.com/metreeca/keep/compare/v0.12.2...HEAD)
 
+### Added
+
+- `@metreeca/keep` — `createBatchingStore` hands each handler a batch of requests sharing one plan (the same shape,
+  model and locale for a detail, the same field, query and locale for a selection), so connectors read the plan off
+  any request and never compare them, and takes a `limit` option capping the requests per batch and type, so a
+  connector declares what its backend accepts in one query and a larger accumulation runs as several batches
+- `@metreeca/keep` — the `limit` option of `createBatchingStore` takes a `burst`, the most handler calls in flight at
+  once, so a connector whose backend limits its connections, or charges per concurrent query, is never asked for
+  more than it declares; without one every call of a round still runs at once, as before
+- `@metreeca/keep-sparql` — `createSPARQLStore` takes a `batch` cap on the entries one query binds and a `burst` cap
+  on the queries in flight at once, with defaults of `500` and `8` and `0` lifting a cap, so a backend behind a
+  gateway with a short request limit or a tight connection pool is served within what it accepts
+- `@metreeca/keep-flake` — `getFlakeTemplate` rebuilds the retrieval template a node's branches request, restricted
+  to one union variant on demand, so a connector expanding a nested resource hands it to its retrieval pass under
+  the template the original request stated instead of reconstructing it from the tree
+
 ### Changed
 
 - `@metreeca/keep-suite` — template retrieval requires connectors to accept a locale alternative over the text variant
@@ -17,16 +33,32 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   over a multi-valued property, sorting or ranking the groups by their key value (§5.7.4, §5.7.5, §5.8.2.1), as
   faceted listings need to keep selected values on top; the same keys stay rejected on ungrouped queries
 
+### Removed
+
+- `@metreeca/keep-flake` — `isScalarFlake`, which no connector or component consumed: a computed node that does not
+  aggregate is told by `isComputedFlake` and `isAggregateFlake` together, with no separate predicate needed
+
 ### Fixed
 
 - `@metreeca/keep-sparql` — looking up a large collection with a template expanding its members no longer fails or
   slows down on query size: the generated queries grow with the template and linearly with the members, no longer
   with their product ([#22](https://github.com/metreeca/keep/issues/22)), and no query binds more than 500 entries,
-  as a larger batch runs as several queries; a paged multi-valued property read under several members is now
-  windowed by the connector, which fetches every matching row of those members as SPARQL has no per-owner window
+  as a larger batch reaches the connector as several batches; a paged multi-valued property read under several
+  members is windowed by the backend for each member, through one subselect per member, so no query fetches a row
+  beyond the pages requested, however many members the template expands and however many values each one holds
+- `@metreeca/keep-sparql` — a backend failure on one query rejects the requests that query served and no other:
+  unrelated requests batched in the same round, such as the other members of an expanded collection, settle on
+  their own instead of all rejecting with the one error, so a lookup fails only where its own query failed
 - `@metreeca/keep-sparql` — updating a resource no longer slows down with the product of the values of its
   multi-valued properties: clearing its previous state now scales with the number of triples it holds, where a
   product with a few keywords, documents, categories and reviews previously took seconds to update on Oxigraph
+- `@metreeca/keep-sparql` — a property declaring both a forward and a reverse predicate is cleared and cascaded in
+  whichever direction its edge is stored: updating a resource now retracts an owned edge a graph loaded by other
+  means carries in one direction only, and deleting a resource reaches the embedded and captive resources linked to
+  it through such an edge, where both were previously left behind next to the new state
+- `@metreeca/keep-sparql` — a collection query under an explicitly empty language priority matches no localised
+  text, taking the supplied priority literally as the specification requires, instead of falling back to `und`;
+  the `und` default still applies where a request states no priority at all, as it does on every other lookup
 
 ## [0.12.2](https://github.com/metreeca/keep/compare/v0.12.1...v0.12.2) - 2026-10-22
 

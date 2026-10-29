@@ -34,7 +34,7 @@ import type { Criteria } from "@metreeca/qest/model";
 import { beforeAll, describe, expect, it } from "vitest";
 import { lookup, type TestFactory } from "../index.core.js";
 import { collections } from "../toys.core.js";
-import { Products, Vendors } from "../toys.js";
+import { Products, Vendor, Vendors } from "../toys.js";
 import { catalogue, members } from "./index.js";
 
 
@@ -158,6 +158,31 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 
 				expect(omitted).toEqual(und);
 				expect(omitted).not.toEqual(en);
+
+			}));
+
+			it("should take an explicitly empty locale priority literally (§6.2)", factory(async ({ store }) => {
+
+				// §6.2: a supplied priority is taken literally and the `und` default applies only where none is
+				// supplied at all, so an empty priority names no tag and every localised property coalesces to
+				// `undefined`, the und-tagged vendor `label` included, on a collection row and a detailed resource alike
+
+				const rows = members(await store.lookup({
+					entry: VendorCatalogue,
+					shape: Vendors,
+					model: catalogue({ id: {}, label: {} })
+				}, { locale: [] })) ?? [];
+
+				expect(rows).toHaveLength(vendors.length);
+				rows.forEach(row => expect(row.label).toBeUndefined());
+
+				const [vendor] = vendors;
+
+				expect(await store.lookup({
+					entry: vendor.id,
+					shape: Vendor,
+					model: { id: {}, label: {} }
+				}, { locale: [] })).toEqual({ id: vendor.id });
 
 			}));
 

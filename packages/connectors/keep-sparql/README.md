@@ -63,6 +63,15 @@ const product = await store.lookup({
 });
 ```
 
+The store caps how it queries the repository: `batch` is the most entries one query binds (default `500`) and `burst`
+the most queries in flight at once (default `8`); `0` lifts a cap. Lower them for a backend behind a gateway with a
+short request limit or a tight connection pool, and raise them where the backend takes more and a round trip costs more
+than a larger query, as it does over a slow link to a remote backend serving few clients:
+
+```typescript
+const store = createSPARQLStore(createOxiRepository(), { batch: 200, burst: 4 });
+```
+
 ## Implementing a Connector
 
 A backend connector is a [@metreeca/wire-sparql](https://github.com/metreeca/wire/tree/main/packages/wire-sparql)
@@ -81,12 +90,12 @@ the backends and versions below, through the listed connectors.
 
 | Engine                       | Version | Storage       | Connectors                                      |
 |------------------------------|---------|---------------|-------------------------------------------------|
-| [Eclipse RDF4J][rdf4j]       | 5.3.1   | MemoryStore   | `createHTTPRepository`, `createRDF4JRepository` |
-| [Eclipse RDF4J][rdf4j]       | 5.3.1   | NativeStore   | `createHTTPRepository`, `createRDF4JRepository` |
-| [Eclipse RDF4J][rdf4j]       | 5.3.1   | LmdbStore     | `createHTTPRepository`, `createRDF4JRepository` |
-| [Apache Jena Fuseki][fuseki] | 6.1.0   | MemoryDataset | `createHTTPRepository`                          |
-| [Apache Jena Fuseki][fuseki] | 6.1.0   | TDB1          | `createHTTPRepository`                          |
-| [Apache Jena Fuseki][fuseki] | 6.1.0   | TDB2          | `createHTTPRepository`                          |
+| [Eclipse RDF4J][rdf4j]       | 6.1.0   | MemoryStore   | `createHTTPRepository`, `createRDF4JRepository` |
+| [Eclipse RDF4J][rdf4j]       | 6.1.0   | NativeStore   | `createHTTPRepository`, `createRDF4JRepository` |
+| [Eclipse RDF4J][rdf4j]       | 6.1.0   | LmdbStore     | `createHTTPRepository`, `createRDF4JRepository` |
+| [Apache Jena Fuseki][fuseki] | 6.2.0   | MemoryDataset | `createHTTPRepository`                          |
+| [Apache Jena Fuseki][fuseki] | 6.2.0   | TDB1          | `createHTTPRepository`                          |
+| [Apache Jena Fuseki][fuseki] | 6.2.0   | TDB2          | `createHTTPRepository`                          |
 | [Oxigraph][oxigraph]         | 0.5.13  | in-memory     | `createOxiRepository`                           |
 | [Oxigraph][oxigraph]         | 0.5.13  | disk          | `createHTTPRepository`                          |
 

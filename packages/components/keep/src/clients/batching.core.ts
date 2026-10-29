@@ -16,12 +16,12 @@
 
 import type { ResourceShape } from "@metreeca/blue/resource";
 import { eager, type Match } from "@metreeca/blue/value";
-import { error, type Identifier, isNumber, isString, type Lazy } from "@metreeca/core";
+import { error, isNumber, isString, type Lazy } from "@metreeca/core";
 import { resolve } from "@metreeca/core/resource";
-import { immutable } from "@metreeca/core/values";
+import { equals, immutable } from "@metreeca/core/values";
 import type { Query, Slot, Template } from "@metreeca/qest/model";
 import type { Reference, Resource, Value } from "@metreeca/qest/state";
-import type { Broker, Deferred, Detail, Detect, Handler, Modify, Request, Select } from "./batching.js";
+import type { Broker, Deferred, Detail, Detect, Handler, Limits, Modify, Request, Select } from "./batching.js";
 
 
 /**
@@ -37,9 +37,11 @@ const SegmentFormat = /^[^\s/?#]+$/;
  * Creates a batching request {@link Broker}.
  *
  * Backs {@link createBatchingStore}: the broker queues each submitted request by type and serves the queues in rounds
- * against the supplied handlers, running all four concurrently, until every queue is empty. Requests issued
- * mid-round, whether forwarded by a handler or freshly submitted, are served in a later round, so handlers must not
- * assume any ordering between handlers.
+ * against the supplied handlers, running all four concurrently, until every queue is empty. Within a round, a queue
+ * is served as one handler call per plan and per chunk of at most the `limits` declared for its type, the calls
+ * running concurrently, at most the `burst` the limits declare at once; see {@link Handler} for the plan each
+ * request type shares. Requests issued mid-round, whether forwarded by a handler or freshly submitted, are served
+ * in a later round, so a handler must not assume any ordering between its own run and that of another handler.
  *
  * A handler throw fails the whole run: every pending {@link Deferred} is rejected with the originating error, so
  * callers see a deterministic failure rather than a hang.
@@ -48,6 +50,7 @@ const SegmentFormat = /^[^\s/?#]+$/;
  *     its batch and may issue nested {@link Broker.detail} / {@link Broker.select} calls while
  *     processing; its returned promise must settle only after every owned request, including
  *     transitively nested ones, has settled.
+ * @param limits The most requests a handler receives in one call, per request type, and the most calls in flight
  *
  * @returns An immutable {@link Broker} surface for enqueuing requests and receiving their
  *     materialised results; each call returns a promise that settles when the relevant batch
@@ -60,58 +63,33 @@ export function createBroker(handlers: {
 	select: Handler<Select>
 	modify: Handler<Modify>
 
-}): Broker {
+}, limits: Limits = {}): Broker {
 
-	const queues: Record<Identifier, {
+	const admit = gate(limits.burst);
 
-		readonly items: Deferred<Request>[];
+	const queues = {
 
-		readonly round: () => { readonly done: Promise<void>, readonly settle: () => void };
-		readonly purge: (error: unknown) => void;
+		detect: queue(handlers.detect, () => true, limits.detect),
 
-	}> = Object.fromEntries(Object.entries(handlers).map(([key, handler]) => {
+		detail: queue(handlers.detail, (x, y) =>
+			x.shape === y.shape && equals(x.model, y.model) && equals(x.locale, y.locale), limits.detail
+		),
 
-		const items: Deferred<Request>[] = [];
+		select: queue(handlers.select, (x, y) =>
+			x.field === y.field && equals(x.query, y.query) && equals(x.locale, y.locale), limits.select
+		),
 
-		return [key, {
+		modify: queue(handlers.modify, () => true, limits.modify)
 
-			items,
-
-			// snapshots the queued requests and hands them to the handler, keeping them queued until the round
-			// is settled by the drain loop, which removes exactly the snapshot in the same step it re-checks the
-			// queues: a queue emptied any earlier would let a submission landing in between kick a second drain
-			// over the same snapshot, whose own removal would then drop whatever was queued behind it
-
-			round: () => {
-
-				const batch = items.slice();
-
-				return { // ;(cast) erased to the handler's union parameter
-
-					done: batch.length > 0 ? handler(batch as never, broker) : Promise.resolve(),
-
-					settle: () => { items.splice(0, batch.length); }
-
-				};
-
-			},
-
-			purge: error => {
-				items.forEach(deferred => deferred.reject(error));
-				items.length = 0;
-			}
-
-		}];
-
-	}));
+	};
 
 	// Inner surface handed to the handlers: nested calls enqueue without kicking a drain.
 
 	const broker: Broker = immutable({
 
-		detect(request: Detect) { // ;(cast) the erased queue holds the union; this entry is a Detect
+		detect(request: Detect) {
 			return new Promise<boolean>((resolve, reject) =>
-				queues.detect.items.push({ request, resolve, reject } as Deferred<Detect>)
+				queues.detect.items.push({ request, resolve, reject })
 			);
 		},
 
@@ -121,15 +99,15 @@ export function createBroker(handlers: {
 			);
 		},
 
-		select<T extends Query<Slot>>(request: Select<T>) { // ;(cast) the erased queue holds the union; this entry is a Select
+		select<T extends Query<Slot>>(request: Select<T>) {
 			return new Promise<readonly Value[]>((resolve, reject) =>
-				queues.select.items.push({ request, resolve, reject } as Deferred<Select>)
+				queues.select.items.push({ request, resolve, reject })
 			);
 		},
 
-		modify(request: Modify) { // ;(cast) the erased queue holds the union; this entry is a Modify
+		modify(request: Modify) {
 			return new Promise<Reference>((resolve, reject) =>
-				queues.modify.items.push({ request, resolve, reject } as Deferred<Modify>)
+				queues.modify.items.push({ request, resolve, reject })
 			);
 		}
 
@@ -201,6 +179,124 @@ export function createBroker(handlers: {
 		}
 
 		return submit();
+	}
+
+
+	/**
+	 * Admits a handler call through the burst gate: at most `limit` calls run at once, a call past the limit starting
+	 * as soon as an admitted one settles, in admission order; with no limit every call starts at once. An admitted call
+	 * starts synchronously, so a queue served after another one still snapshots what that one's handlers submitted.
+	 */
+	function gate(limit?: number): (call: () => Promise<void>) => Promise<void> {
+
+		if ( limit === undefined ) {
+
+			return call => call();
+
+		} else {
+
+			// the admitted count and the waiting line are the gate's state, updated in place: a gate is a
+			// counter by nature, and threading it through every call's promise chain would obscure the one
+			// rule it enforces, admission in order (sw-developer:code, genuine state machine)
+
+			const waiting: (() => void)[] = [];
+
+			let admitted = 0;
+
+			return call => new Promise((resolve, reject) => {
+
+				const start = () => {
+
+					admitted++;
+
+					call().then(resolve, reject).finally(() => {
+						admitted--;
+						waiting.shift()?.();
+					});
+
+				};
+
+				if ( admitted < limit ) {
+					start();
+				} else {
+					waiting.push(start);
+				}
+
+			});
+
+		}
+
+	}
+
+	/**
+	 * The queue of one request type: its pending requests, and the round serving them through `handler` as one
+	 * call per plan, `alike` telling the requests sharing a plan, and per chunk of at most `limit` requests.
+	 */
+	function queue<R extends Request>(handler: Handler<R>, alike: (x: R, y: R) => boolean, limit?: number): {
+
+		readonly items: Deferred<R>[];
+
+		readonly round: () => { readonly done: Promise<void>, readonly settle: () => void };
+		readonly purge: (error: unknown) => void;
+
+	} {
+
+		const items: Deferred<R>[] = [];
+
+		return {
+
+			items,
+
+			// snapshots the queued requests and hands them to the handler, keeping them queued until the round
+			// is settled by the drain loop, which removes exactly the snapshot in the same step it re-checks the
+			// queues: a queue emptied any earlier would let a submission landing in between kick a second drain
+			// over the same snapshot, whose own removal would then drop whatever was queued behind it
+
+			round: () => {
+
+				const batch = items.slice();
+
+				return {
+
+					done: Promise.all(batches(batch).map(call => admit(() => handler(call, broker)))).then(() => undefined),
+
+					settle: () => { items.splice(0, batch.length); }
+
+				};
+
+			},
+
+			purge: error => {
+				items.forEach(deferred => deferred.reject(error));
+				items.length = 0;
+			}
+
+		};
+
+
+		/**
+		 * The handler calls serving a batch: one per plan, in order of first request, each split into chunks of at
+		 * most `limit` requests in submission order, or left whole where the request type declares no limit.
+		 */
+		function batches(batch: readonly Deferred<R>[]): readonly (readonly Deferred<R>[])[] {
+
+			const groups = batch.reduce<readonly (readonly Deferred<R>[])[]>((groups, item) => {
+
+				const group = groups.find(([first]) => alike(first.request, item.request));
+
+				return group === undefined ? [...groups, [item]]
+					: groups.map(candidate => candidate === group ? [...group, item] : candidate);
+
+			}, []);
+
+			return groups.flatMap(group => limit === undefined ? [group]
+				: Array.from({ length: Math.ceil(group.length/limit) }, (_, index) =>
+					group.slice(index*limit, (index+1)*limit)
+				)
+			);
+
+		}
+
 	}
 
 }

@@ -18,114 +18,63 @@
  * Detail-pass driver.
  *
  * Materialises every queued {@link Detail} request in a batch with a single `select` query against the repository.
- * Single-valued properties are read from that query, while multi-valued properties are forwarded to the select pass
- * through the {@link Broker}, the only channel between passes. The handler returns without waiting for the
- * forwarded requests, so the select pass can run them within the same batching round.
+ * Single-valued properties are read from that query, while multi-valued properties are read off the collections
+ * the spine materialises through the {@link Broker}, the only channel between passes. The handler returns without
+ * waiting for those nested requests, so the select pass serves them in a later batching round of the same run.
  *
  * @module index
  */
 
-import type { ResourceShape } from "@metreeca/blue/resource";
-import type { Lazy } from "@metreeca/core";
-import { createScope } from "@metreeca/core/scope";
-import { equals } from "@metreeca/core/values";
-import { createFlake, type Flake, isModelBranch } from "@metreeca/keep-flake";
+import { createFlake } from "@metreeca/keep-flake";
 import type { Broker, Deferred, Detail } from "@metreeca/keep/batching";
-import type { Template } from "@metreeca/qest/model";
-import type { Reference } from "@metreeca/qest/state";
-import { type RepositoryClient, type Tuple, type Variable, variable as toVariable } from "@metreeca/wire-sparql";
-import { bounded, grouped } from "../index.core.js";
+import type { RepositoryClient } from "@metreeca/wire-sparql";
+import { read } from "../spine.js";
 import { decode } from "./decode.js";
 import { encode } from "./encode.js";
+import { schema } from "./schema.js";
 
 
 /**
- * The requests sharing one detail plan: the same shape and a structurally equal model.
- */
-type Group = {
-
-	readonly shape: Lazy<ResourceShape>;
-	readonly model: Template;
-	readonly flake: Flake;
-
-	readonly items: readonly Deferred<Detail>[];
-
-}
-
-
-/**
- * Resolves a batch of detail requests through shared `select` queries, binding at most `Chunk` entries each.
+ * Resolves a batch of detail requests through one shared `select` query.
  *
- * Requests sharing a shape and a structurally equal model form a group, planned once with {@link createFlake}. All
- * entries are read together, so the queries grow with the number of distinct plans and linearly with the number of
- * entries, never with their product, and a batch over the cap runs as several queries. Groups reading no
- * single-valued property join no query, and no query runs if none does. Their requests still resolve: `id` and
- * `type` come from the entry and the shape, multi-valued ones from the select pass.
+ * The batching layer hands over requests sharing a shape, a structurally equal model and a locale, planned once
+ * with {@link createFlake}, so all entries are read together. The query grows with the plan and linearly with the
+ * entries, never with their product. A plan reading no single-valued property runs no query. Its requests still
+ * resolve: `id` and `type` come from the entry and the shape, multi-valued properties from the select pass.
  *
- * @param batch The queued detail requests to resolve
+ * @param batch The queued detail requests to resolve, sharing one plan
  * @param client The repository the query runs against
  * @param broker The channel forwarding multi-valued properties to the select pass
  *
- * @returns A promise settling once the results of every query have been handed to the decoder
+ * @returns A promise settling once every request has been decoded or rejected, without waiting for the select
+ *     requests materialising multi-valued properties, which run in a later batching round
  */
-export async function detail(
+export function detail(
 	batch: readonly Deferred<Detail>[],
 	client: RepositoryClient,
 	broker: Broker
 ): Promise<void> {
 
-	const scope = createScope(toVariable);
+	const [{ request: { shape, model } }] = batch;
 
-	const groups = grouped<Deferred<Detail>, Group>(batch,
-		({ shape, model }, { request }) => shape === request.shape && equals(model, request.model),
-		item => ({
-			shape: item.request.shape,
-			model: item.request.model,
-			flake: createFlake(item.request.shape, item.request.model),
-			items: [item]
-		})
-	);
+	// the plan and its schema are derived once and handed to both sides, so they bind and read the same columns
 
-	// drop groups whose union arms would be empty (only id/type or collection slots) from the fetch;
-	// they still flow through delivery, where decode yields id/type inline and routes collections
+	const flake = createFlake(shape, model);
+	const columns = schema(flake);
 
-	const effective = groups.filter(({ flake }) =>
-		Object.values(flake.entries ?? {}).some(isModelBranch)
-	);
+	return read(batch, client, broker, {
 
-	const inert = groups.filter(group => !effective.includes(group));
+		// a plan binding no column (only id/type or collection slots) runs no query: its requests still reach the
+		// decoder, which yields id/type inline and reads collections off the select pass
 
-	await Promise.all(bounded(effective).map(query => client
-		.select(encode(scope, query.map(({ flake, items }) =>
-			({ entries: items.map(({ request }) => request.entry), flake })
-		)))
-		.then(tuples => deliver(query, tuples))
-	));
+		encode: scope => columns.size > 0
+			? encode(scope, batch.map(({ request }) => request.entry), flake, columns)
+			: undefined,
 
-	deliver(inert, []);
+		owner: scope => scope.resolve(flake),
 
+		decode: (scope, item, rows) => decode(scope, flake, columns, item, rows)
 
-	/**
-	 * Hands each request of `groups` to the decoder with the rows of `tuples` binding its own entry: the rows of
-	 * one query for the groups that query read, no rows for the groups that contributed to no query.
-	 */
-	function deliver(groups: readonly Group[], tuples: readonly Tuple[]): void {
-		decode(scope, groups.flatMap(({ flake, items }) => items.map(item =>
-			({ ...item, flake, tuples: rows(tuples, scope.resolve(flake), item.request.entry) })
-		)), broker);
-	}
-
-	/**
-	 * The solution rows of one request: the rows whose `subject` column binds `entry`.
-	 */
-	function rows(tuples: readonly Tuple[], subject: Variable, entry: Reference): readonly Tuple[] {
-		return tuples.filter(tuple => {
-
-			const bound = tuple[subject];
-
-			return bound !== undefined && bound.kind === "named" && bound.iri === entry;
-
-		});
-	}
+	});
 
 }

@@ -32,6 +32,7 @@ import {
 	createFlake,
 	createQueryFlake,
 	getFlakeProjection,
+	getFlakeTemplate,
 	getFlakeVariant,
 	isConstrainedFlake,
 	isDrainedFlake,
@@ -1526,6 +1527,36 @@ describe("flake methods", () => {
 				entries: { parent: child }
 			});
 			expect(Object.keys(getFlakeProjection(node)).sort()).toEqual(["c", "p", "r"]);
+		});
+
+	});
+
+	describe("getFlakeTemplate", () => {
+
+		it("rebuilds the template a node's branches request, criteria included", async () => {
+
+			const model: Template = { id: {}, name: {}, vendor: { code: {} }, reviews: { "#": 2 } };
+
+			expect(getFlakeTemplate(createFlake(Product, model))).toEqual(model);
+
+		});
+
+		it("leaves out a branch requesting nothing", async () => {
+
+			const flake = createQueryFlake(Product, { ">=price": 10, "name=name": {} });
+
+			expect(getFlakeTemplate(flake)).toEqual({ name: {} });
+
+		});
+
+		it("restricts the template to the branches one variant declares", async () => {
+
+			const address = at(createFlake(Vendor, { address: { "0": { city: {} }, "1": { latitude: {} } } }), "address");
+
+			const resources = getShapeBranches(address.range.shape).filter(variant => variant.kind === "resource");
+
+			expect(resources.map(variant => getFlakeTemplate(address, variant))).toEqual([{ city: {} }, { latitude: {} }]);
+
 		});
 
 	});

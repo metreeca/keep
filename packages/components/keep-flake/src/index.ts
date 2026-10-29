@@ -451,21 +451,6 @@ export function isAggregateFlake(flake: Flake): boolean {
 }
 
 /**
- * Checks whether a {@link Flake} is a scalar (non-aggregating) transform stage.
- *
- * True for a {@link isComputedFlake | computed} node whose leading {@link Flake.pipe | pipe} transform yields
- * one value per input rather than aggregating a group, such as a year or absolute-value transform. The
- * complement of {@link isAggregateFlake} among computed nodes. The test is local to the node.
- *
- * @param flake The flake to test
- *
- * @returns true when the node's leading transform is non-aggregating; false otherwise
- */
-export function isScalarFlake(flake: Flake): boolean {
-	return isComputedFlake(flake) && !isAggregate(flake.pipe[0]);
-}
-
-/**
  * Checks whether a {@link Flake} groups the query.
  *
  * True when any of the flake's {@link getFlakeProjections | projected flakes} carries an
@@ -815,6 +800,29 @@ export function getFlakeProjection(flake: Flake): { readonly [alias: Identifier]
 			...getFlakeEntries(flake).flatMap(projections)
 		];
 	}
+
+}
+
+/**
+ * Rebuilds the retrieval template a node's branches request.
+ *
+ * A connector expanding the resource a node reaches can retrieve it under the template the original request stated,
+ * with no need to rebuild that template from the tree. Each branch carrying a {@link Flake.drain | drain} maps its
+ * property name to the query it requests, criteria included, while a branch present only to carry constraints is
+ * left out. Given a variant `shape`, the template keeps only the branches that variant declares (qest §5.5).
+ *
+ * @param flake The node whose branches to read
+ * @param shape One of the range {@link @metreeca/blue/union!getShapeBranches | variants} to restrict the template to
+ *
+ * @returns The template `flake`'s branches request, keyed by property name
+ */
+export function getFlakeTemplate(flake: Flake, shape?: Shape): Template {
+
+	const branches = shape === undefined ? getFlakeEntries(flake) : getFlakeVariant(flake, shape);
+
+	return Object.fromEntries(branches.flatMap(branch => branch.drain === undefined ? []
+		: [[branch.path[branch.path.length-1], branch.drain.query]]
+	));
 
 }
 

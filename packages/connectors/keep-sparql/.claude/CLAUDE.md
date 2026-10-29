@@ -6,11 +6,17 @@ description: Development guidelines and conventions for the SPARQL store engine.
 # References
 
 - [SPARQL 1.1 Query](https://www.w3.org/TR/sparql11-query/) - W3C query language for RDF
+- [Pass contract](../src/index.md) - the layers, the spine, the schema rule and the clause structure of every pass
 
 # Design Principles
 
 - **SPARQL 1.1 standard**: Target SPARQL 1.1 Query and Update for all graph operations. Per-engine connectors handle
 	dialect differences where needed.
+
+- **Five layers**: `terms.ts` (value and term codecs, no SPARQL), `patterns.ts` (shape-aware emitters), a `schema.ts`
+	per reading pass (the columns encoder and decoder share), the pass folders (driver, encoder, decoder) and `spine.ts`
+	(the one round trip, the owner index, nested requests, per-request settlement). Each layer depends only on the one
+	below; the `connector-designer` skill holds the conventions and MUST be activated on pass work.
 
 - **Everything is a range**: Every value coordinate a flake exposes resolves to a
 	[`flake.range`](../../../components/keep-flake/src/index.ts): a `@metreeca/blue/value` `Range` whose `shape`
@@ -29,8 +35,8 @@ description: Development guidelines and conventions for the SPARQL store engine.
 	> **NEVER** filter dictionaries out of a range's variants (`variant.kind !== "dictionary"`) or treat them as a side
 	> channel.
 
-	The projection emits **one variable per variant**; merging those per-variant columns back into the single value
-	surfaced under a binding's alias is the **decoder's** responsibility, not the encoder's.
+	The schema of a pass emits **one column per variant**; reading the single value surfaced under a slot off the
+	column that bound is the **decoder's** responsibility, not the encoder's.
 
 # Encoder Conventions
 
@@ -38,26 +44,26 @@ Conventions for `src/**/encode.ts` modules. Existing encoders (`detect/encode.ts
 `modify/encode.ts`, `select/encode.ts`) follow these patterns: match them when adding new ones.
 
 > [!NOTE]
-> The language-agnostic emitter conventions (no second IR in the emit body, leaf-only target-text conversion,
-> identity-keyed variable allocation, phase isolation, IR minimality) live in the `connector-designer` skill and apply
-> to every connector. Only the SPARQL-specific instantiation below stays here.
+> The language-agnostic conventions (layer boundaries, the schema contract, pure decoders, leaf-only target-text
+> conversion, identity-keyed variable allocation, IR minimality) live in the `connector-designer` skill and apply to
+> every connector. Only the SPARQL-specific instantiation below stays here.
 
+- **Compose `patterns.ts`, add no emitter of your own**: an encoder assembles clauses from the shared emitters
+	(`link`, `forward`, `reverse`, `membership`, `textual`, `expression`, `coalesced`, `folded`); a helper rendering an
+	edge, a gate or a label that one pass needs belongs in `patterns.ts`, so the next pass composes it.
 - **Defer anchor → SPARQL conversion** (the SPARQL instance of the skill's "convert to target-language text only at the
   leaf" rule): thread edge endpoints (the request entry, focus and target nodes) as raw `Variable | Term` values,
 	typically `named(entry)` or a variable name, through every helper that just forwards them. Convert to SPARQL only at
-	the leaf: [`link([source, property, target])`](../src/index.core.ts) renders the triple pattern and picks the stored
-	direction, and the `select` encoder's local `anchor(...)` renders a bare edge owner. Don't call `variable(...)` /
-	`term(...)` at the top of `encode(...)` if the result is then handed straight to a helper; pass the value through and
-  let the leaf render it. Predicates and classes stay `named(property.forward)`, `named(rdf.type)` and the like:
-	those are already at the leaf.
-- **Key `scope.resolve` on the Flake node** (the SPARQL instance of the skill's identity-keyed variable allocation
-	rule): allocate a coordinate's variable with `scope.resolve(node)`, using the `Scope` from `@metreeca/core/scope`,
-	keyed on its immutable `Flake` / `Branch` node (plus the variant, where a union splits it), never on a path string. A
-  flake is frozen once through `immutable(...)`, so every node holds a stable identity: the same coordinate always
-	yields the same variable, and the same property name at distinct coordinates (`name` vs `vendor.name`) stays on
-	distinct variables without a path-string discriminator. A name declared by several variants of a union (`Person.name`
-  and `Organization.name` under `creator`) is one property by union coherence (qest §3.2), reached through a single
-  `Branch` and bound to a single variable.
+	the leaf: [`link([source, property, target])`](../src/patterns.ts) renders the triple pattern and picks the stored
+	direction, and `anchor(...)` renders a bare edge owner. Don't call `variable(...)` / `term(...)` at the top of
+	`encode(...)` if the result is then handed straight to a helper; pass the value through and let the leaf render it.
+	Predicates and classes stay `named(property.forward)`, `named(rdf.type)` and the like: those are already at the leaf.
+- **Resolve columns through the schema**: a column's variable comes from `column(scope, column)` of the pass's
+	`schema.ts`, keyed on the plan node and, for a union-typed node, on the variant; the owner column is keyed on the
+	batch record (`scope.resolve(group)`, `scope.resolve(flake)`), and only probes nobody reads are anonymous
+	(`scope.resolve()`). A flake is frozen once through `immutable(...)`, so every node holds a stable identity: the
+	same coordinate always yields the same variable, and the same property name at distinct coordinates (`name` vs
+	`vendor.name`) stays on distinct variables without a path-string discriminator.
 
 # Transaction Isolation and Mutation Event Declarations
 
@@ -75,9 +81,14 @@ TSDoc, following the format defined in the root `CLAUDE.md`.
 	`@metreeca/wire-sparql` `Repository` connectors carrying no tests of their own. The connectors are dev-only
 	dependencies pulled in solely for these conformance runs
 
+- Unit tests per layer pin what the oracle cannot see: `spine.test.ts` (owner indexing, settlement, nested requests,
+	failure isolation), `*/schema.test.ts` (the column list per discriminator), `*/decode.test.ts` (decoding from
+	literal tuples, holes included), `*/encode.test.ts` (query-size invariants: arm count, column count, bound entries),
+	`*/index.test.ts` (driver wiring, with an oxigraph-backed window check in the select driver)
+
 - **Quick interim oracle**: the in-process `oxigraph` block ([`src/index.test.ts`](../src/index.test.ts), the
 	`describe("oxigraph", …)` WebAssembly build) is the fast oracle for iterating on a change. Run just it with
-	`npx vitest run src/index.test.ts -t oxigraph` (whole conformance suite, ~13 s, no container). Use it to check every
+	`npx vitest run src/index.test.ts -t oxigraph` (whole conformance suite, ~3 s, no container). Use it to check every
 	edit before moving on; the container and remote backend blocks are for final cross-backend verification, not the edit
 	loop.
 

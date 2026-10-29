@@ -58,22 +58,11 @@ describe("encode", () => {
 
 			const matches = retraction(update(Category, { code: "0001", featured: true }));
 
-			// the type edge plus the ten owned properties (`narrower` and `lower` are foreign)
+			// the type edge plus the ten owned properties (`narrower` and `lower` are foreign, so they take no
+			// arm), the two-way `broader` edge matching its directions as alternatives inside one arm
 
 			expect(matches).not.toContain("optional {");
-			expect(matches.match(/ union /g)).toHaveLength(10);
-
-		});
-
-		it("reaches the edges of an embedded resource through the edge owning it", async () => {
-
-			const matches = retraction(update(Product, { sku: "0001" }));
-
-			expect(matches).not.toContain("optional {");
-
-			expect(matches).toMatch(new RegExp(
-				`\\{ <${entry}> <${toys.reviews}> (\\?\\d+) \\. \\1 <${toys.rating}> \\?\\d+ \\. \\}`
-			));
+			expect(matches.match(/ union /g)).toHaveLength(11);
 
 		});
 

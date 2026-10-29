@@ -15,17 +15,18 @@
  */
 
 import { getShapeProperties, type Property } from "@metreeca/blue/resource";
+import { xsd } from "@metreeca/core/datatype";
 import { createScope, type Scope } from "@metreeca/core/scope";
-import { createQueryFlake } from "@metreeca/keep-flake";
+import { createQueryFlake, getFlakeProjection } from "@metreeca/keep-flake";
 import { Category } from "@metreeca/keep-suite/toys";
-import type { Broker } from "@metreeca/keep/batching";
 import type { Query, Slot } from "@metreeca/qest/model";
 import type { Reference } from "@metreeca/qest/state";
-import { named, typed } from "@metreeca/trio";
+import { named, tagged, typed } from "@metreeca/trio";
 import { type Tuple, variable, type Variable } from "@metreeca/wire-sparql";
 import { describe, expect, it, vi } from "vitest";
 import { decode } from "./decode.js";
 import type { Group } from "./encode.js";
+import { column, schema } from "./schema.js";
 
 
 describe("decode", () => {
@@ -43,13 +44,6 @@ describe("decode", () => {
 		"http://example.com/categories/0030"
 	];
 
-	const broker: Broker = {
-		detect: vi.fn(),
-		detail: vi.fn(),
-		select: vi.fn(),
-		modify: vi.fn()
-	};
-
 
 	function property(name: string): Property {
 
@@ -64,120 +58,136 @@ describe("decode", () => {
 	}
 
 	function group(entries: readonly Reference[], query: Query<Slot> = {}): Group {
+
+		const flake = createQueryFlake(field.range.shape, query);
+
 		return {
 			field, query, locale: [],
-			flake: createQueryFlake(field.range.shape, query),
+			flake,
+			schema: schema(flake),
 			items: entries.map(entry => ({
 				request: { entry, shape: Category, field, query, locale: [] },
 				resolve: vi.fn(),
 				reject: vi.fn()
 			}))
 		};
+
 	}
 
 	/**
-	 * One solution row of `group` at `index`: the stamp, the owner and the member.
+	 * One solution row of `group`: the owner and the member.
 	 */
-	function row(scope: Scope<Variable>, groups: readonly Group[], index: number, owner: Reference, member: Reference): Tuple {
+	function row(scope: Scope<Variable>, group: Group, owner: Reference, member: Reference): Tuple {
 		return {
-			[scope.resolve(groups)]: typed(String(index)),
-			[scope.resolve(groups[index])]: named(owner),
-			[scope.resolve(groups[index].flake)]: named(member)
+			[scope.resolve(group)]: named(owner),
+			[scope.resolve(group.flake)]: named(member)
 		};
 	}
 
-	async function settled(group: Group, index: number): Promise<unknown> {
 
-		const { resolve } = group.items[index];
-
-		await vi.waitFor(() => expect(resolve).toHaveBeenCalled());
-
-		return vi.mocked(resolve).mock.calls[0]?.[0];
-
-	}
-
-
-	it("hands each owner its own rows in row order", async () => {
-
-		const scope = createScope(variable);
-
-		const [one, two] = owners;
-		const groups = [group(owners)];
-
-		decode(scope, groups, broker, [
-			row(scope, groups, 0, one, members[2]),
-			row(scope, groups, 0, one, members[0]),
-			row(scope, groups, 0, two, members[1])
-		]);
-
-		expect(await settled(groups[0], 0)).toEqual([members[2], members[0]]);
-		expect(await settled(groups[0], 1)).toEqual([members[1]]);
-
-	});
-
-	it("settles an owner without rows with an empty collection", async () => {
+	it("decodes an owner's members in row order", async () => {
 
 		const scope = createScope(variable);
 
 		const [one] = owners;
-		const groups = [group(owners)];
+		const batch = group(owners);
 
-		decode(scope, groups, broker, [
-			row(scope, groups, 0, one, members[0])
+		const { details, selects, build } = decode(scope, batch, batch.items[0], [
+			row(scope, batch, one, members[2]),
+			row(scope, batch, one, members[0])
 		]);
 
-		expect(await settled(groups[0], 1)).toEqual([]);
+		expect(build([], [])).toEqual([members[2], members[0]]);
+		expect(details).toEqual([]);
+		expect(selects).toEqual([]);
 
 	});
 
-	it("windows the rows of each owner of a sliced query", async () => {
+	it("decodes an owner without rows to an empty collection", async () => {
 
 		const scope = createScope(variable);
 
-		const [one, two] = owners;
-		const groups = [group(owners, { "@": 1, "#": 1 })];
+		const batch = group(owners);
 
-		decode(scope, groups, broker, [
-			row(scope, groups, 0, one, members[0]),
-			row(scope, groups, 0, one, members[1]),
-			row(scope, groups, 0, one, members[2]),
-			row(scope, groups, 0, two, members[0])
-		]);
-
-		expect(await settled(groups[0], 0)).toEqual([members[1]]);
-		expect(await settled(groups[0], 1)).toEqual([]);
+		expect(decode(scope, batch, batch.items[1], []).build([], [])).toEqual([]);
 
 	});
 
-	it("keeps the rows of a single owner as the server windowed them", async () => {
+	it("reads an expanded member off the resource its detail request materialises", async () => {
 
 		const scope = createScope(variable);
 
 		const [one] = owners;
-		const groups = [group([one], { "@": 1, "#": 1 })];
+		const batch = group(owners, { code: {}, featured: {} });
 
-		decode(scope, groups, broker, [
-			row(scope, groups, 0, one, members[1])
+		const { details, selects, build } = decode(scope, batch, batch.items[0], [
+			row(scope, batch, one, members[1])
 		]);
 
-		expect(await settled(groups[0], 0)).toEqual([members[1]]);
+		expect(details).toHaveLength(1);
+		expect(details[0]).toMatchObject({ entry: members[1], model: { code: {}, featured: {} } });
+		expect(selects).toEqual([]);
+
+		expect(build([{ code: "0002", featured: true }], [])).toEqual([{ code: "0002", featured: true }]);
 
 	});
 
-	it("tells the groups apart by their stamp", async () => {
+	it("decodes a localised binding to its coalesced label", async () => {
 
 		const scope = createScope(variable);
 
-		const [one, two] = owners;
-		const groups = [group([one]), group([two], { "#": 1 })];
+		const [one] = owners;
+		const batch = group(owners, { "title=title": {} });
 
-		decode(scope, groups, broker, [
-			row(scope, groups, 0, one, members[0]),
-			row(scope, groups, 1, two, members[1])
-		]);
+		const cell = column(scope, (batch.schema.get(getFlakeProjection(batch.flake)["title"]) ?? [])[0]);
 
-		expect(await settled(groups[0], 0)).toEqual([members[0]]);
-		expect(await settled(groups[1], 0)).toEqual([members[1]]);
+		expect(decode(scope, batch, batch.items[0], [{
+			[scope.resolve(batch)]: named(one),
+			[cell]: tagged("Title", "en")
+		}]).build([], [])).toEqual([{ title: "Title" }]);
+
+	});
+
+	it("reads a localised binding under a locale off the resource its detail request expands", async () => {
+
+		const scope = createScope(variable);
+
+		const [one] = owners;
+		const batch = group(owners, { "title=title": { "*": {} } });
+
+		const cell = column(scope, (batch.schema.get(getFlakeProjection(batch.flake)["title"]) ?? [])[0]);
+
+		const { details, build } = decode(scope, batch, batch.items[0], [{
+			[scope.resolve(batch)]: named(one),
+			[cell]: named(members[0])
+		}]);
+
+		expect(details).toHaveLength(1);
+		expect(details[0]).toMatchObject({ entry: members[0], model: { title: { "*": {} } } });
+
+		expect(build([{ title: { en: "Title", it: "Titolo" } }], [])).toEqual([{ title: { en: "Title", it: "Titolo" } }]);
+
+	});
+
+	it("decodes a projection row to a record of its bound cells, computed cells coerced", async () => {
+
+		const scope = createScope(variable);
+
+		const [one] = owners;
+		const batch = group(owners, { "item=id": {}, "total=count:": {}, "missing=code": {} });
+
+		const projection = getFlakeProjection(batch.flake);
+
+		const cell = (alias: string): Variable => column(scope, (batch.schema.get(projection[alias]) ?? [])[0]);
+
+		const { details, build } = decode(scope, batch, batch.items[0], [{
+			[scope.resolve(batch)]: named(one),
+			[cell("item")]: named(members[0]),
+			[cell("total")]: typed("3", xsd.integer)
+		}]);
+
+		expect(build([], [])).toEqual([{ item: members[0], total: 3 }]);
+		expect(details).toEqual([]);
 
 	});
 

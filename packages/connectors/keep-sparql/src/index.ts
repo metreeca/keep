@@ -73,6 +73,7 @@
  * @module index
  */
 
+import { assert } from "@metreeca/core";
 import type { Store, StoreClient } from "@metreeca/keep";
 import { createBatchingStore } from "@metreeca/keep/batching";
 import { createManagingStore } from "@metreeca/keep/managing";
@@ -91,6 +92,49 @@ import { select } from "./select/index.js";
 
 
 const logger = log(import.meta.url);
+
+/**
+ * The caps a {@link createSPARQLStore | SPARQL store} declares on how it queries its repository.
+ *
+ * Both are non-negative integers, and `0` lifts the cap it is set on.
+ */
+export type SPARQLStoreOptions = {
+
+	/**
+	 * The most entries one query binds through its `values` block, so no query outgrows what the backend accepts
+	 * however many requests a round accumulates: a larger accumulation reaches the repository as several queries.
+	 *
+	 * @defaultValue `500`, measured on the backends the package is verified against
+	 */
+	readonly batch?: number;
+
+	/**
+	 * The most queries in flight at once, so a backend with a connection limit, or one charging per concurrent query,
+	 * is never asked for more than the cap declares, whatever a round accumulates.
+	 *
+	 * @defaultValue `8`
+	 */
+	readonly burst?: number;
+
+};
+
+
+/**
+ * The default {@link SPARQLStoreOptions.batch | batch} cap.
+ */
+const Batch = 500;
+
+/**
+ * The default {@link SPARQLStoreOptions.burst | burst} cap.
+ */
+const Burst = 8;
+
+/**
+ * Checks whether a value is an admissible cap: a non-negative integer.
+ */
+function isCap(value: number): boolean {
+	return Number.isInteger(value) && value >= 0;
+}
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -120,10 +164,21 @@ const logger = log(import.meta.url);
  * > silently missing from a retrieved result, whatever tool loaded the graph into the repository.
  *
  * @param repository - The repository for SPARQL query, update, and transaction execution
+ * @param options - The caps on how the store queries the repository
  *
  * @returns An immutable {@link Store}
+ *
+ * @throws {@link !TypeError TypeError} If a cap is not a non-negative integer
  */
-export function createSPARQLStore(repository: Repository): Store {
+export function createSPARQLStore(repository: Repository, {
+
+	batch = Batch,
+	burst = Burst
+
+}: SPARQLStoreOptions = {}): Store {
+
+	const $batch = assert(batch, isCap, `illegal batch cap <${batch}>`);
+	const $burst = assert(burst, isCap, `illegal burst cap <${burst}>`);
 
 	const buffering = createBufferingRepository(
 		createLoggingRepository(repository, message => logger.debug`${message}`)
@@ -138,14 +193,25 @@ export function createSPARQLStore(repository: Repository): Store {
 	});
 
 
+	/**
+	 * The limit a cap declares to the batching layer: none for a lifted cap.
+	 */
+	function cap(value: number): undefined | number {
+		return value > 0 ? value : undefined;
+	}
+
 	function store(client: RepositoryClient): StoreClient {
 
 		return createValidatingStore(createBatchingStore({
 
-			detect: (batch) => detect(batch, client),
+			detect: (batch, broker) => detect(batch, client, broker),
 			detail: (batch, broker) => detail(batch, client, broker),
 			select: (batch, broker) => select(batch, client, broker),
 			modify: (batch) => modify(batch, client)
+
+		}, {
+
+			limit: { detail: cap($batch), select: cap($batch), burst: cap($burst) }
 
 		}), {
 

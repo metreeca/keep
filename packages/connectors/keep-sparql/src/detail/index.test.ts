@@ -20,7 +20,6 @@ import type { Template } from "@metreeca/qest/model";
 import type { Reference } from "@metreeca/qest/state";
 import type { RepositoryClient, SPARQL } from "@metreeca/wire-sparql";
 import { describe, expect, it, type Mock, vi } from "vitest";
-import { Chunk } from "../index.core.js";
 import { detail } from "./index.js";
 
 
@@ -31,7 +30,7 @@ describe("detail", () => {
 	const broker: Broker = {
 		detect: vi.fn(),
 		detail: vi.fn(),
-		select: vi.fn(),
+		select: vi.fn(async () => []),
 		modify: vi.fn()
 	};
 
@@ -67,31 +66,33 @@ describe("detail", () => {
 	}
 
 
-	it("binds at most a chunk of entries per query", async () => {
+	it("binds every entry of the batch in one query", async () => {
 
 		const repository = client();
 
-		await detail(entries(Chunk+1).map(entry => request(entry, model)), repository, broker);
+		await detail(entries(3).map(entry => request(entry, model)), repository, broker);
 
-		expect(repository.select.mock.calls.map(([query]) => bound(query))).toEqual([Chunk, 1]);
+		expect(repository.select.mock.calls.map(([query]) => bound(query))).toEqual([3]);
 
 	});
 
-	it("packs small groups into one query", async () => {
+	it("runs no query for a plan reading no single-valued property", async () => {
 
 		const repository = client();
 
-		const [one, two] = entries(2);
+		const batch = entries(2).map(entry => request(entry, { id: {}, narrower: {} }));
 
-		await detail([request(one, model), request(two, { featured: {} })], repository, broker);
+		await detail(batch, repository, broker);
 
-		expect(repository.select).toHaveBeenCalledTimes(1);
+		expect(repository.select).not.toHaveBeenCalled();
+
+		await vi.waitFor(() => batch.forEach(({ resolve }) => expect(resolve).toHaveBeenCalled()));
 
 	});
 
-	it("settles every request whatever query it ran in", async () => {
+	it("settles every request of the batch", async () => {
 
-		const batch = entries(Chunk+1).map(entry => request(entry, model));
+		const batch = entries(3).map(entry => request(entry, model));
 
 		await detail(batch, client(), broker);
 

@@ -24,6 +24,7 @@ import type { Reference } from "@metreeca/qest/state";
 import { type SPARQL, variable } from "@metreeca/wire-sparql";
 import { describe, expect, it, vi } from "vitest";
 import { encode, type Group } from "./encode.js";
+import { schema } from "./schema.js";
 
 
 describe("encode", () => {
@@ -50,9 +51,13 @@ describe("encode", () => {
 	}
 
 	function group(entries: readonly Reference[], query: Query<Slot> = {}, locale: readonly Tag[] = []): Group {
+
+		const flake = createQueryFlake(field.range.shape, query);
+
 		return {
 			field, query, locale,
-			flake: createQueryFlake(field.range.shape, query),
+			flake,
+			schema: schema(flake),
 			items: entries.map(entry => ({
 				request: { entry, shape: Category, field, query, locale },
 				resolve: vi.fn(),
@@ -61,8 +66,8 @@ describe("encode", () => {
 		};
 	}
 
-	function query(...groups: readonly Group[]): SPARQL {
-		return encode(createScope(variable), groups);
+	function query(group: Group): SPARQL {
+		return encode(createScope(variable), group);
 	}
 
 	function bindings(query: SPARQL): readonly string[] {
@@ -70,9 +75,9 @@ describe("encode", () => {
 	}
 
 
-	describe("with a single group", () => {
+	describe("with the owners", () => {
 
-		it("binds every owner in one arm", async () => {
+		it("binds every owner in one block", async () => {
 
 			const encoded = query(group(entries));
 
@@ -83,23 +88,24 @@ describe("encode", () => {
 
 		});
 
-		it("binds the owners of a sliced query in one arm", async () => {
+		it("binds each owner of a sliced query in an arm of its own", async () => {
 
 			const encoded = query(group(entries, { "@": 1, "#": 1 }));
 
-			expect(bindings(encoded)).toHaveLength(1);
-			expect(encoded).not.toContain(" union ");
+			expect(bindings(encoded)).toHaveLength(entries.length);
+			expect(encoded.match(/ union /g)).toHaveLength(entries.length-1);
+
+			bindings(encoded).forEach((binding, index) => expect(binding).toContain(`(<${entries[index]}>)`));
 
 		});
 
-		it("projects the owner next to the stamp and orders by it first", async () => {
+		it("projects the owner first and orders by it first", async () => {
 
 			const encoded = query(group(entries));
 
-			const stamp = encoded.match(/\(0 as (\?\d+)\)/)?.[1];
 			const owner = encoded.match(/values \((\?\d+)\)/)?.[1];
 
-			expect(encoded).toContain(`select distinct (0 as ${stamp}) ${owner} `);
+			expect(encoded).toContain(`select distinct ${owner} `);
 			expect(encoded).toContain(`order by asc(${owner}) `);
 
 		});
@@ -127,39 +133,11 @@ describe("encode", () => {
 
 		});
 
-		it("drops the server window for several owners", async () => {
+		it("windows every owner's arm on the server", async () => {
 
 			const encoded = query(group(entries, { "@": 1, "#": 2 }));
 
-			expect(encoded).not.toContain("offset ");
-			expect(encoded).not.toContain("limit ");
-
-		});
-
-	});
-
-	describe("with several groups", () => {
-
-		it("joins the groups under an outer query stamped and ordered by owner", async () => {
-
-			const [first, second, third] = entries;
-
-			const encoded = query(
-				group([first, second]),
-				group([third], { "#": 1 })
-			);
-
-			const [one, two] = bindings(encoded).map(binding => binding.match(/\?\d+/)?.[0]);
-			const stamp = encoded.match(/\(0 as (\?\d+)\)/)?.[1];
-
-			expect(bindings(encoded)).toHaveLength(2);
-			expect(encoded).toContain(" union ");
-			expect(one).not.toBe(two);
-
-			const outer = encoded.slice(encoded.lastIndexOf("order by "));
-
-			expect(outer).toContain(`order by asc(${stamp}) asc(${one}) `);
-			expect(outer).toContain(`asc(${two}) `);
+			expect(encoded.match(/offset 1 limit 2/g)).toHaveLength(entries.length);
 
 		});
 

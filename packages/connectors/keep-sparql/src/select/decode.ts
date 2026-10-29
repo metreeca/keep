@@ -17,17 +17,18 @@
 /**
  * Select-pass result decoder.
  *
- * Materialises each queued {@link Select} collection from the batched query's solution tuples, one member per row of
- * the request, in the returned order. A projection row becomes a record of its bindings, and a plain collection row
- * becomes its member. A cell retrieved as a union is read from the variant column that bound (§5.5), with no term
- * inspection.
+ * Materialises one queued {@link Select} collection from its own solution rows, one member per row, in the returned
+ * order. A projection row becomes a record of its bindings, and a plain collection row becomes its member. Every
+ * cell is read off the {@link Schema | columns} the group schema declares for it: the first column that bound
+ * settles the variant and the form of the value, with no term inspection, so a cell never misreads a stored term.
  *
- * A request reads only the rows of its {@link Group | group} carrying its own entry in the owner column. The decoder
- * applies the query window to those rows, unless the group has a single owner and the server already applied it.
+ * A request reads only the rows carrying its own entry in the owner column of its {@link Group | group}, already
+ * ordered and windowed by the server, so the decoder neither sorts nor slices and the row order is the result order.
  *
- * A resource or expanded reference is handed to the detail pass through the {@link Broker}, which fetches its
- * content. So is the owner of a localised property retrieved structurally (§5.4). Any other cell coerces its term.
- * The contract shared with the encoder is stated in `select/index.md`.
+ * A resource or expanded reference is read off the resource the detail pass materialises for it, as is the owner
+ * of a localised property retrieved structurally (§5.4); the decoded collection depends on those requests and the
+ * spine runs them. Any other cell coerces its term. The decoder issues no request itself. The contract shared with
+ * the encoder is stated in `src/index.md`, next to the clause structure of the query.
  *
  * @module
  */
@@ -35,221 +36,138 @@
 import { getShapeTarget } from "@metreeca/blue/reference";
 import { type ResourceShape } from "@metreeca/blue/resource";
 import { getShapeBranches } from "@metreeca/blue/union";
-import { type Shape } from "@metreeca/blue/value";
-import { type Identifier, opt } from "@metreeca/core";
-import type { Tag } from "@metreeca/core/language";
+import { opt } from "@metreeca/core";
 import type { Scope } from "@metreeca/core/scope";
-import {
-	type Branch,
-	type Drain,
-	type Flake,
-	getFlakeEntries,
-	getFlakeProjection,
-	getFlakeVariant,
-	isComputedFlake,
-	isDrainedFlake
-} from "@metreeca/keep-flake";
-import type { Broker } from "@metreeca/keep/batching";
-import type { Reference, Resource, Value } from "@metreeca/qest/state";
+import { type Flake, getFlakeEntries, getFlakeProjection, getFlakeTemplate, getFlakeVariant, isDrainedFlake } from "@metreeca/keep-flake";
+import type { Deferred, Select } from "@metreeca/keep/batching";
+import type { Value, Values } from "@metreeca/qest/state";
 import type { Term } from "@metreeca/trio";
 import type { Tuple, Variable } from "@metreeca/wire-sparql";
-import { computedToValue, termToReference, termToValue } from "../index.core.js";
+import { computedToValue, termToReference, termToValue } from "../terms.js";
+import { all, type Decoded, map, plain, resource } from "../spine.js";
 import type { Group } from "./encode.js";
+import { type Column, column } from "./schema.js";
 
 
 /**
- * Settles each batched select request with the collection decoded from the `select` solution.
+ * Decodes one batched select request from its own `select` solution rows.
  *
- * @param scope The variable scope shared with the encoder, recovering per-group tuple slots
- * @param groups The groups to settle, which must be the very records handed to the encoder: each group's owner
- * column is keyed on the record's identity, so a copy or a fresh equivalent would resolve to a different variable
- * @param broker The cross-pass channel expanding structured and localised cells through the detail pass
- * @param tuples The solution tuples returned by the batched `select` query
+ * @param scope The variable scope shared with the encoder, recovering the group's tuple slots
+ * @param group The group the request belongs to, which must be the very record handed to the encoder: its columns
+ * are keyed on the record's identity, so a copy or a fresh equivalent would resolve to different variables
+ * @param item The request to decode
+ * @param rows The solution rows binding the request's own entry, in solution order
+ *
+ * @returns The decoded collection, one value per row in row order, a row resolving to no value left out, depending
+ * on the detail requests its resource cells read their content from, in cell order
  */
 export function decode(
 	scope: Scope<Variable>,
-	groups: readonly Group[],
-	broker: Broker,
-	tuples: readonly Tuple[]
-): void {
+	group: Group,
+	{ request: { locale } }: Deferred<Select>,
+	rows: readonly Tuple[]
+): Decoded<readonly Value[]> {
 
-	const guard = scope.resolve(groups);
+	const { flake, schema } = group;
 
-	groups.forEach((group, index) => {
-
-		const { flake, items } = group;
-
-		const owner = scope.resolve(group);
-
-		// the server windowed the rows only where the group binds one owner (see select/index.md)
-
-		const windowed = items.length === 1;
-
-		const stamped = tuples.filter(tuple => {
-			const stamp = tuple[guard];
-			return stamp?.kind === "typed" && stamp.text === String(index);
-		});
-
-		items.forEach(({ request: { entry, locale }, resolve, reject }) => {
-
-			const owned = stamped.filter(tuple => {
-				const bound = tuple[owner];
-				return bound?.kind === "named" && bound.iri === entry;
-			});
-
-			const rows = windowed ? owned : window(flake, owned);
-
-			Promise.all(rows.map(row => flake.drain?.form === "projection"
-					? record(flake, row, locale)
-					: cell(flake, flake, row, locale)
-				))
-				.then(values => values.filter(value => value !== undefined))
-				.then(resolve)
-				.catch(reject);
-
-		});
-
-	});
-
-
-	/**
-	 * The rows within the window the query states, the rows coming already ordered.
-	 */
-	function window(flake: Flake, rows: readonly Tuple[]): readonly Tuple[] {
-
-		const from = flake.offset ?? 0;
-
-		return rows.slice(from, flake.limit === undefined ? undefined : from + flake.limit);
-
-	}
+	return map(all(rows.map(row => flake.drain?.form === "projection"
+		? record(flake, row)
+		: cell(flake, flake, row)
+	)), values => values.flatMap(value => value === undefined ? [] : [value]));
 
 
 	/**
 	 * One projection row: every binding the query projects, keyed by its alias, omitting a binding that
-	 * resolves to no value (§5.2).
+	 * resolves to no value (§5.2), so a record never carries an alias bound to no value at all.
 	 */
-	function record(root: Flake, row: Tuple, locale: readonly Tag[]): Promise<Resource> {
+	function record(root: Flake, row: Tuple): Decoded<Value> {
 
-		return Promise.all(Object.entries(getFlakeProjection(root)).map(([alias, node]) =>
-			cell(root, node, row, locale).then((value): readonly [Identifier, undefined | Value] => [alias, value])
-		)).then(cells =>
-			Object.fromEntries(cells.filter(([, value]) => value !== undefined))
+		const cells = Object.entries(getFlakeProjection(root)).map(([alias, node]) =>
+			map(cell(root, node, row), value => ({ alias, value }))
 		);
 
-	}
-
-	/**
-	 * One cell of a row: a transform stage coerces its computed literal; a cell retrieved as a union reads
-	 * the first requested variant whose column bound, a member of an unrequested variant resolving to no
-	 * value; any other cell reads its single column under its range's variant.
-	 */
-	function cell(root: Flake, node: Flake, row: Tuple, locale: readonly Tag[]): Promise<undefined | Value> {
-
-		const drain = node.drain;
-
-		if ( isComputedFlake(node) ) {
-
-			return Promise.resolve(opt(row[scope.resolve(node)], computedToValue));
-
-		} else if ( drain?.form === "union" ) {
-
-			const bound = [...drain.variants].flatMap(([variant, placeholder]) =>
-				opt(row[scope.resolve(node, variant)], term => [{ variant, placeholder, term }], [])
-			);
-
-			return bound.length === 0 ? Promise.resolve(undefined)
-				: value(root, node, bound[0].variant, bound[0].placeholder, getFlakeVariant(node, bound[0].variant), bound[0].term, locale);
-
-		} else {
-
-			const [variant] = getShapeBranches(node.range.shape);
-
-			return opt(row[scope.resolve(node)],
-				term => value(root, node, variant, drain, getFlakeEntries(node), term, locale),
-				() => Promise.resolve(undefined)
-			);
-
-		}
+		return map(all(cells), bindings => Object.fromEntries(bindings.flatMap(({ alias, value }) =>
+			value === undefined ? [] : [[alias, value]]
+		)));
 
 	}
 
 	/**
-	 * The value a cell's bound term stands for under `variant`: a localised variant is the label coalesced
-	 * by the encoder (§6.2) or, under a locale placeholder, the owner whose property the detail pass
-	 * expands tag by tag (§5.4); a resource or reference is expanded by the detail pass where the request
-	 * asks for its content, else kept as the reference naming it; a literal is coerced.
+	 * One cell of a row: the value of the first of its columns that bound, a row binding none of them, as a
+	 * member of an unrequested variant does, resolving to no value and so left out of the decoded collection.
 	 */
-	function value(
-		root: Flake,
-		node: Flake,
-		variant: Shape,
-		drain: undefined | Drain,
-		branches: readonly Branch[],
-		term: Term,
-		locale: readonly Tag[]
-	): Promise<undefined | Value> {
+	function cell(root: Flake, node: Flake, row: Tuple): Decoded<undefined | Value> {
 
-		if ( variant.kind === "dictionary" && drain?.form === "locale" ) {
+		const bound = (schema.get(node) ?? []).flatMap(candidate =>
+			opt(row[column(scope, candidate)], term => [{ column: candidate, term }], [])
+		);
+
+		return bound.length === 0 ? plain(undefined)
+			: value(root, bound[0].column, bound[0].term);
+
+	}
+
+	/**
+	 * The value a column's bound term stands for, by the column's form: a computed literal is coerced by its datatype;
+	 * the owner of a localised property retrieved structurally is read off the resource the detail pass expands tag by
+	 * tag (§5.4); a coalesced label is its string (§6.2); a stored value is coerced under the column's variant, a
+	 * resource or reference being read off the resource the detail pass materialises where the request asks for its
+	 * content, and kept as the bare reference naming it where it asks for the reference alone.
+	 */
+	function value(root: Flake, { node, variant, drain, form }: Column, term: Term): Decoded<undefined | Value> {
+
+		if ( form === "computed" ) {
+
+			return plain(computedToValue(term));
+
+		} else if ( form === "owner" ) {
 
 			const name = node.path[node.path.length-1];
 			const owner = owning(root, node);
 			const entry = termToReference(term);
 
-			return entry === undefined || owner === undefined ? Promise.resolve(undefined)
-				: broker.detail({
-					entry,
-					shape: owner,
-					model: { [name]: drain.query },
-					locale
-				}).then(resource =>
-					// ;(cast) the detailed resource carries the one localised field just requested, which decodes to a
-					// single structured value rather than to a set; the static inference no longer says either,
-					// reading leaf types off a notation that no longer carries them (see `@metreeca/blue/value`)
-					(resource as Resource)[name] as undefined | Value
+			return entry === undefined || owner === undefined || drain?.form !== "locale" ? plain(undefined)
+				: resource({ entry, shape: owner, model: { [name]: drain.query }, locale }, resource =>
+					opt(resource[name], value => isSingle(value) ? value : undefined, undefined)
 				);
 
-		} else if ( variant.kind === "dictionary" ) {
+		} else if ( form === "label" ) {
 
-			return Promise.resolve(termToValue(term, variant));
+			return plain(termToValue(term, variant));
 
 		} else if ( variant.kind === "resource" || variant.kind === "reference" ) {
 
 			const target = getShapeTarget(variant);
+			const branches = node.drain?.form === "union" ? getFlakeVariant(node, variant) : getFlakeEntries(node);
 			const expanded = drain?.form === "template" || branches.some(isDrainedFlake);
 			const entry = termToReference(term);
 
-			return entry === undefined ? Promise.resolve(undefined)
-				: expanded && target !== undefined ? expand(entry, target, branches, locale)
-					: Promise.resolve(entry);
+			// the member's own content is the detail pass's responsibility, under the template the request stated
+			// for it, and is never reconstructed from the returned tuples, which carry the bare reference alone
+
+			return entry === undefined ? plain(undefined)
+				: expanded && target !== undefined ? resource({
+						entry,
+						shape: target,
+						model: node.drain?.form === "union" ? getFlakeTemplate(node, variant) : getFlakeTemplate(node),
+						locale
+					}, resource => resource)
+					: plain(entry);
 
 		} else {
 
-			return Promise.resolve(termToValue(term, variant));
+			return plain(termToValue(term, variant));
 
 		}
 
 	}
 
 	/**
-	 * Expands a structured member through the detail pass: reassembles its retrieval template from the
-	 * requested branches and hands it to the broker, keyed on the member entry, so the member's own content
-	 * is the detail handler's responsibility and never reconstructed from the returned tuples.
+	 * Checks whether a value set holds a single value: a localised property retrieved structurally yields its
+	 * dictionary, a single value the cell takes as it is, never a list of values to fan out across rows.
 	 */
-	function expand(entry: Reference, shape: ResourceShape, branches: readonly Branch[], locale: readonly Tag[]): Promise<Resource> {
-
-		return broker.detail({
-
-			entry,
-			shape,
-
-			model: Object.fromEntries(branches.flatMap(branch => branch.drain === undefined ? []
-				: [[branch.path[branch.path.length-1], branch.drain.query]]
-			)),
-
-			locale
-
-		});
-
+	function isSingle(values: Values): values is Value {
+		return !Array.isArray(values);
 	}
 
 	/**
