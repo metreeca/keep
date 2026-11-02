@@ -82,6 +82,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   entries; `getFlakeTemplate` leaves out the branches bound by the enclosing projection, since they are bindings of
   their own rather than part of the template the node is expanded under, however deep they descend through the node
 
+### Security
+
+- Upgrade `undici` to `8.12.3` (GHSA-xjj6-f33q-929c, GHSA-2m5v-pch6-74hx, GHSA-9fm3-97px-rjf6, GHSA-qrxm-fqhp-jwvm): development dependency, no consumer impact
+
 ## [0.12.2](https://github.com/metreeca/keep/compare/v0.12.1...v0.12.2) - 2026-10-22
 
 ### Fixed
