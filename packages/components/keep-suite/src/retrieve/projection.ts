@@ -707,6 +707,27 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 			}));
 
+			it("should project reference-typed binding as id beside a binding descending through it", factory(async ({ store }) => {
+
+				// `name=vendor.name` is a binding of its own (§5.2), not a template expanding `vendor`, so the
+				// reference stays bare next to the sibling value it is paired with (metreeca/keep#24)
+
+				const expected = [...new Set(products.map(p => p.vendor))].sort();
+
+				const result = projected(members(await store.lookup({
+					entry: Catalogue,
+					shape: Products,
+					model: catalogue({ "vendor=vendor": {}, "name=vendor.name": {} })
+				})));
+
+				expect(result?.map(p => p.vendor).sort()).toEqual(expected);
+				result?.forEach(p => {
+					const vendor = lookup(vendors, v => v.id === p.vendor);
+					expect(p.name).toEqual(vendor?.name);
+				});
+
+			}));
+
 			it("should project embedded-template binding inline", factory(async ({ store }) => {
 
 				// the id binding keeps one row per product (§5.2): without it the shared vendors would
@@ -741,6 +762,23 @@ export function testRetrieveProjection(factory: TestFactory): void {
 				})));
 
 				expect(result?.map(p => p.product).sort()).toEqual(expected);
+
+			}));
+
+			it("should project the item itself as id beside a binding descending through it (§5.2, §5.8.1)", factory(async ({ store }) => {
+
+				// `sku=sku` is a binding of its own, not a template expanding the item (metreeca/keep#24)
+
+				const expected = products.map(p => ({ product: p.id, sku: p.sku }));
+
+				const result = projected(members(await store.lookup({
+					entry: Catalogue,
+					shape: Products,
+					model: catalogue({ "product=": {}, "sku=sku": {} })
+				})));
+
+				expect(result).toEqual(expect.arrayContaining(expected));
+				expect(result).toHaveLength(expected.length);
 
 			}));
 

@@ -38,7 +38,7 @@ import { type ResourceShape } from "@metreeca/blue/resource";
 import { getShapeBranches } from "@metreeca/blue/union";
 import { opt } from "@metreeca/core";
 import type { Scope } from "@metreeca/core/scope";
-import { type Flake, getFlakeEntries, getFlakeProjection, getFlakeTemplate, getFlakeVariant, isDrainedFlake } from "@metreeca/keep-flake";
+import { type Flake, getFlakeProjection, getFlakeTemplate } from "@metreeca/keep-flake";
 import type { Deferred, Select } from "@metreeca/keep/batching";
 import type { Value, Values } from "@metreeca/qest/state";
 import type { Term } from "@metreeca/trio";
@@ -112,7 +112,10 @@ export function decode(
 	 * the owner of a localised property retrieved structurally is read off the resource the detail pass expands tag by
 	 * tag (§5.4); a coalesced label is its string (§6.2); a stored value is coerced under the column's variant, a
 	 * resource or reference being read off the resource the detail pass materialises where the request asks for its
-	 * content, and kept as the bare reference naming it where it asks for the reference alone.
+	 * content, and kept as the bare reference naming it where it asks for the reference alone. The content is the
+	 * template the request states for the cell; for the item itself bound through an empty path (§5.8.1), it is the
+	 * template folded into the root. A sibling binding descending through the cell asks for no content, so
+	 * `"v=vendor": {}` beside `"n=vendor.name": {}` keeps `v` a bare reference (metreeca/keep#24).
 	 */
 	function value(root: Flake, { node, variant, drain, form }: Column, term: Term): Decoded<undefined | Value> {
 
@@ -138,20 +141,15 @@ export function decode(
 		} else if ( variant.kind === "resource" || variant.kind === "reference" ) {
 
 			const target = getShapeTarget(variant);
-			const branches = node.drain?.form === "union" ? getFlakeVariant(node, variant) : getFlakeEntries(node);
-			const expanded = drain?.form === "template" || branches.some(isDrainedFlake);
+			const model = node.drain?.form === "union" ? getFlakeTemplate(node, variant) : getFlakeTemplate(node);
+			const expanded = drain?.form === "template" || Object.keys(model).length > 0;
 			const entry = termToReference(term);
 
 			// the member's own content is the detail pass's responsibility, under the template the request stated
 			// for it, and is never reconstructed from the returned tuples, which carry the bare reference alone
 
 			return entry === undefined ? plain(undefined)
-				: expanded && target !== undefined ? resource({
-						entry,
-						shape: target,
-						model: node.drain?.form === "union" ? getFlakeTemplate(node, variant) : getFlakeTemplate(node),
-						locale
-					}, resource => resource)
+				: expanded && target !== undefined ? resource({ entry, shape: target, model, locale }, resource => resource)
 					: plain(entry);
 
 		} else {

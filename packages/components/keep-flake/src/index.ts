@@ -808,8 +808,11 @@ export function getFlakeProjection(flake: Flake): { readonly [alias: Identifier]
  *
  * A connector expanding the resource a node reaches can retrieve it under the template the original request stated,
  * with no need to rebuild that template from the tree. Each branch carrying a {@link Flake.drain | drain} maps its
- * property name to the query it requests, criteria included, while a branch present only to carry constraints is
- * left out. Given a variant `shape`, the template keeps only the branches that variant declares (qest §5.5).
+ * property name to the query it requests, criteria included. A branch present only to carry constraints is left out.
+ * A {@link isProbeBranch | projected} branch is left out too: it is a binding of the enclosing projection (qest §5.2),
+ * not part of the node's template. A node reached only by such bindings thus gets an empty template, and its value
+ * is returned as a bare reference. Given a variant `shape`, the template keeps only the branches that variant
+ * declares (qest §5.5), so each variant of a union is expanded under its own template.
  *
  * @param flake The node whose branches to read
  * @param shape One of the range {@link @metreeca/blue/union!getShapeBranches | variants} to restrict the template to
@@ -820,7 +823,7 @@ export function getFlakeTemplate(flake: Flake, shape?: Shape): Template {
 
 	const branches = shape === undefined ? getFlakeEntries(flake) : getFlakeVariant(flake, shape);
 
-	return Object.fromEntries(branches.flatMap(branch => branch.drain === undefined ? []
+	return Object.fromEntries(branches.flatMap(branch => branch.drain === undefined || branch.drain.alias !== undefined ? []
 		: [[branch.path[branch.path.length-1], branch.drain.query]]
 	));
 

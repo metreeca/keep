@@ -72,6 +72,15 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `@metreeca/keep-sparql` — a collection query under an explicitly empty language priority matches no localised
   text, taking the supplied priority literally as the specification requires, instead of falling back to `und`;
   the `und` default still applies where a request states no priority at all, as it does on every other lookup
+- `@metreeca/keep-sparql` — a reference projected under the atomic placeholder beside a binding descending through
+  it, as in `"value=university": {}, "label=university.label": {}`, now comes back as the bare reference naming
+  the resource, where it previously came back as an object holding the sibling's value and no identifier, leaving
+  facets over linked resources with no value to offer ([#24](https://github.com/metreeca/keep/issues/24)); the
+  item itself bound through an empty path beside a binding is kept bare the same way
+- `@metreeca/keep-flake` — a bare template key in a collection query no longer gives its node an alias, so
+  `isProbeBranch` picks out projected nodes alone and `isModelBranch` no longer misses single-valued template
+  entries; `getFlakeTemplate` leaves out the branches bound by the enclosing projection, since they are bindings of
+  their own rather than part of the template the node is expanded under, however deep they descend through the node
 
 ## [0.12.2](https://github.com/metreeca/keep/compare/v0.12.1...v0.12.2) - 2026-10-22
 

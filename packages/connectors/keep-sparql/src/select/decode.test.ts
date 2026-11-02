@@ -169,6 +169,52 @@ describe("decode", () => {
 
 	});
 
+	it("keeps a reference bound beside a binding descending through it bare", async () => {
+
+		// `n=narrower.code` is a binding of its own, not a template expanding `v` (metreeca/keep#24)
+
+		const scope = createScope(variable);
+
+		const [one] = owners;
+		const batch = group(owners, { "v=narrower": {}, "n=narrower.code": {} });
+
+		const projection = getFlakeProjection(batch.flake);
+
+		const cell = (alias: string): Variable => column(scope, (batch.schema.get(projection[alias]) ?? [])[0]);
+
+		const { details, build } = decode(scope, batch, batch.items[0], [{
+			[scope.resolve(batch)]: named(one),
+			[cell("v")]: named(members[0]),
+			[cell("n")]: typed("0010", xsd.string)
+		}]);
+
+		expect(details).toEqual([]);
+		expect(build([], [])).toEqual([{ v: members[0], n: "0010" }]);
+
+	});
+
+	it("keeps the item bound through an empty path beside a binding bare", async () => {
+
+		const scope = createScope(variable);
+
+		const [one] = owners;
+		const batch = group(owners, { "item=": {}, "n=code": {} });
+
+		const projection = getFlakeProjection(batch.flake);
+
+		const cell = (alias: string): Variable => column(scope, (batch.schema.get(projection[alias]) ?? [])[0]);
+
+		const { details, build } = decode(scope, batch, batch.items[0], [{
+			[scope.resolve(batch)]: named(one),
+			[cell("item")]: named(members[0]),
+			[cell("n")]: typed("0010", xsd.string)
+		}]);
+
+		expect(details).toEqual([]);
+		expect(build([], [])).toEqual([{ item: members[0], n: "0010" }]);
+
+	});
+
 	it("decodes a projection row to a record of its bound cells, computed cells coerced", async () => {
 
 		const scope = createScope(variable);

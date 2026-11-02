@@ -757,7 +757,7 @@ describe("createFlake", () => {
 				// key "0" is opaque: the { city } placeholder structurally singles out the PostalAddress
 				// variant (member index 1), not the string variant the key would positionally name
 				expect(hasVariant(flake, 1)).toBe(true);
-				expect(variant(flake, 1)["city"]?.drain).toEqual({ alias: "city", form: "atomic", query: {} });
+				expect(variant(flake, 1)["city"]?.drain).toEqual({ form: "atomic", query: {} });
 
 			});
 
@@ -771,7 +771,7 @@ describe("createFlake", () => {
 				// alternative (§5.5), so neither kind is decided by inspecting one key in isolation
 
 				expect(flake.limit).toBe(10);
-				expect(variant(flake, 1)["city"]?.drain).toEqual({ alias: "city", form: "atomic", query: {} });
+				expect(variant(flake, 1)["city"]?.drain).toEqual({ form: "atomic", query: {} });
 
 			});
 
@@ -1543,9 +1543,28 @@ describe("flake methods", () => {
 
 		it("leaves out a branch requesting nothing", async () => {
 
-			const flake = createQueryFlake(Product, { ">=price": 10, "name=name": {} });
+			const flake = createQueryFlake(Product, { ">=price": 10, name: {} });
 
 			expect(getFlakeTemplate(flake)).toEqual({ name: {} });
+
+		});
+
+		it("leaves out a branch bound by the enclosing projection", async () => {
+
+			// `n=name` is a binding of the projection descending through the item, not part of the template the
+			// empty-path binding expands the item under, so only the folded `id` branch is kept
+
+			const flake = createQueryFlake(Product, { "item=": { id: {} }, "n=name": {} });
+
+			expect(getFlakeTemplate(flake)).toEqual({ id: {} });
+
+		});
+
+		it("rebuilds an empty template for a reference bound beside a binding descending through it", async () => {
+
+			const flake = createQueryFlake(Product, { "v=vendor": {}, "n=vendor.name": {} });
+
+			expect(getFlakeTemplate(at(flake, "vendor"))).toEqual({});
 
 		});
 

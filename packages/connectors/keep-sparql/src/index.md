@@ -227,8 +227,9 @@ A cell is read off the first of its schema columns that bound, by the column's f
 	the parent range declaring the property as localised, so every tag the owner carries comes back (§5.4)
 - a **label** column reads the coalesced label as a string (§6.2)
 - a **value** column coerces its literal under the column's variant, or, for a resource or reference, reads the resource
-	off the detail pass where the request asks for its content (a template, or drained branches) and keeps the bare
-	reference naming it where the request asks for the reference alone, with no content under it
+	off the detail pass where the request asks for its content (a template, or the branches folded into the root by an
+	empty-path binding) and keeps the bare reference naming it where the request asks for the reference alone, with no
+	content under it; a sibling binding descending through the cell asks only for its own value, not for cell content
 
 A row binding none of a cell's columns is a member of an unrequested variant and yields nothing. A blank node bound
 where a resource is expected fails the request with a `RangeError`: the store reads embedded resources only when the
