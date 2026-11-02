@@ -102,6 +102,10 @@ export type Detect = {
  * Carries a single resource (`entry` of `shape`), the `model` to materialise it against, and the `locale` priority
  * for coalescing its localised content (QEST §6.2). Resolves to the materialised resource.
  *
+ * A `virtual` request materialises a resource derived from the store rather than held in it, and resolves even if
+ * `entry` is not stored. Its single-valued members come from whatever `entry` holds. Each multi-valued member the
+ * model reaches is retrieved as a `virtual` {@link Select}, while expanded resources are retrieved as held.
+ *
  * @typeParam T The resource model selecting the members of the result
  * @typeParam S The shape describing the resource
  */
@@ -109,6 +113,13 @@ export type Detail<
 	T extends Template = Template,
 	S extends Lazy<ResourceShape> = Lazy<ResourceShape>
 > = {
+
+	/**
+	 * Whether the resource is derived from the store rather than held in it.
+	 *
+	 * @defaultValue `false` (held as it stands)
+	 */
+	readonly virtual?: boolean;
 
 	readonly entry: Reference;
 	readonly shape: S;
@@ -125,9 +136,19 @@ export type Detail<
  * `locale` priority for coalescing its localised content (QEST §6.2). Resolves to the materialised collection: items
  * for a template query, rows for a projection.
  *
+ * A `virtual` request materialises the collection from every stored instance of the classes the range of `field`
+ * declares, rather than from the resources `entry` links to. The `query` applies to them as to a held collection.
+ *
  * @typeParam T The collection query selecting the form of the result
  */
 export type Select<T extends Query<Slot> = Query<Slot>> = {
+
+	/**
+	 * Whether the collection is derived from the store rather than held in it.
+	 *
+	 * @defaultValue `false` (held as it stands)
+	 */
+	readonly virtual?: boolean;
 
 	readonly entry: Reference;
 	readonly shape: Lazy<ResourceShape>;
@@ -172,9 +193,10 @@ export type Modify = {
  *
  * Every batch shares one plan, so a handler reads the plan off any of its requests and never compares them. Every
  * {@link Detail} in a batch names the same `shape`, a structurally equal `model` and an equal `locale`. Every
- * {@link Select} names the same `field`, a structurally equal `query` and an equal `locale`. {@link Detect} and
- * {@link Modify} batches are not split by plan, and a modify batch keeps submission order. A batch is never empty
- * and never holds more requests than the {@link Limits | limit} declared for its type.
+ * {@link Select} names the same `field`, a structurally equal `query`, an equal `locale` and the same `virtual` flag.
+ * A detail batch may mix virtual and held requests, so a detail handler reads `virtual` off each request.
+ * {@link Detect} and {@link Modify} batches are not split by plan, and a modify batch keeps submission order. A batch
+ * is never empty and never holds more requests than the {@link Limits | limit} declared for its type.
  *
  * @typeParam R The request variant handled
  */
@@ -313,8 +335,9 @@ export type Broker = {
  *
  * Coalesces concurrent {@link StoreClient} calls into batches, each served by the matching `handlers` entry. The
  * client adds conditional CRUD semantics on top of the handlers: `create`, `update` and `delete` probe for existence
- * through the `detect` handler before handing the mutation to `modify`. `create` mints the identifier of the new
- * resource, if its state names none, and links it to the collecting resource.
+ * through the `detect` handler before handing the mutation to `modify`. `lookup` probes for existence the same way,
+ * except for a `virtual` lookup, which goes straight to the `detail` handler. `create` mints the identifier of the new
+ * resource, if its state names none, and links it to the collecting resource as a new collection member.
  *
  * The `modify` handler receives only requests whose `state` carries no `id` other than their `entry`. A request
  * failing this check is rejected on its own, and the rest of the batch still applies. If the `modify` handler throws,
@@ -394,7 +417,9 @@ export function createBatchingStore(handlers: {
 
 	return immutable({
 
-		async lookup<S extends Lazy<ResourceShape>, T extends Template>({ entry, shape, model }: {
+		async lookup<S extends Lazy<ResourceShape>, T extends Template>({ virtual = false, entry, shape, model }: {
+
+			virtual?: boolean,
 
 			entry: Reference,
 			shape: S,
@@ -410,8 +435,10 @@ export function createBatchingStore(handlers: {
 
 		} = {}): Promise<Optional<Match<S, T>>> {
 
-			return await broker.detect({ entry })
-				? broker.detail({ entry, shape, model, locale })
+			// a virtual resource is derived rather than held, so it is detailed without probing its presence
+
+			return virtual || await broker.detect({ entry })
+				? broker.detail({ virtual, entry, shape, model, locale })
 				: undefined;
 
 		},

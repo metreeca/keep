@@ -74,14 +74,23 @@ property, in the `tagged` or `value` form. Multi-valued properties bind no colum
 the select request for it materialises, and a collection resolving to no content leaves the property out (§4). A plan
 binding no column runs no query, and its requests still decode: `id` and `type` come from the entry and the shape.
 
+A `virtual` request reads the same arms. Every edge is optional, so an entry holding nothing still decodes. Its own
+multi-valued properties go to the select pass as virtual collections. Only the entry is virtual: the resources it
+expands are decoded as held, and the collections nested under them are read off their stored links as usual.
+
 # Select
 
 Contract between [`select/encode.ts`](./select/encode.ts), which folds a batch of collection queries into one SPARQL
 `select`, and [`select/decode.ts`](./select/decode.ts), which decodes each request from its own rows. The batching
-layer hands the driver the requests sharing a field, a structurally equal query and the same locale, and the driver
-pairs them in a `Group` record carrying the one [`Flake`](../../../components/keep-flake/src/index.ts) its
-`createQueryFlake(shape, query)` produces and the schema derived from it. Both sides read only that tree and that
+layer hands the driver the requests sharing a field, a structurally equal query, a locale and a `virtual` flag, and
+the driver pairs them in a `Group` record carrying the one [`Flake`](../../../components/keep-flake/src/index.ts)
+its `createQueryFlake(shape, query)` produces and the schema derived from it. Both sides read only that tree and that
 schema, never the raw `Query` or `Shape`, and share nothing but the group record and a `Scope`.
+
+A **virtual** group replaces the member edge with the extension of the field's range: a `union` with one class
+membership arm per variant. The owners are still bound and projected, so each request decodes its own rows as usual.
+Classless and literal variants bind no member, as only an edge could reach them, and the shards of a union root
+likewise drop the edge, so each arm is gated by the membership of its variant and binds its column.
 
 ## Terminology
 
@@ -155,7 +164,8 @@ Every clause is a recursive descent over the nodes the query reads, assembled in
 select [distinct] ?owner <columns…> [(aggregate as ?stage)…]
 where {
   values (?owner) { (<entry>) … }   the entries of the group's requests
-  ?owner <field> ?root .            the member edge, optional for whole-collection aggregates
+  ?owner <field> ?root .            the member edge, optional for whole-collection aggregates; for a virtual
+                                    group `{ ?root a <class> } union …`, one arm per classed range variant
   <patterns>                        stages, shards and branches under the root
   <admitted>                        filter(bound(shard) || …) for a union root retrieving a proper subset of variants
   <filters>                         the row constraints, at group level

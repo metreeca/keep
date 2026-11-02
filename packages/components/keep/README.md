@@ -85,6 +85,21 @@ const catalogue = await store.lookup({
 		}
 	}
 });
+
+// virtual retrieval: the entry needn't be stored and its collections are
+// read off every resource their range describes, not off stored links
+
+const listing = await store.lookup({
+	virtual: true,
+	entry: "http://example.com/listings/products/",
+	shape: CatalogueShape,
+	model: {
+		products: {
+			id: {},
+			name: {}
+		}
+	}
+});
 ```
 
 ## Creating and Updating Resources

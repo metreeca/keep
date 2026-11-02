@@ -62,7 +62,7 @@ describe("decode", () => {
 		const flake = createQueryFlake(field.range.shape, query);
 
 		return {
-			field, query, locale: [],
+			virtual: false, field, query, locale: [],
 			flake,
 			schema: schema(flake),
 			items: entries.map(entry => ({

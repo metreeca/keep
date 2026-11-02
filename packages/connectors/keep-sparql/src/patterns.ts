@@ -35,7 +35,7 @@
 import { getShapeClass, type Property } from "@metreeca/blue/resource";
 import { getShapeBranches } from "@metreeca/blue/union";
 import { type Shape } from "@metreeca/blue/value";
-import { isString, opt } from "@metreeca/core";
+import { isString, type Lazy, opt } from "@metreeca/core";
 import { xsd } from "@metreeca/core/datatype";
 import type { Tag } from "@metreeca/core/language";
 import type { Scope } from "@metreeca/core/scope";
@@ -85,6 +85,7 @@ import {
 	sum,
 	term,
 	ucase,
+	union,
 	variable,
 	year
 } from "@metreeca/wire-sparql/builder";
@@ -247,6 +248,22 @@ export function membership(anchor: Variable, shape: Shape): SPARQL {
 
 	}
 
+}
+
+/**
+ * Generates the SPARQL patterns binding the values a range describes, with no edge reaching them.
+ *
+ * Binds every stored instance of the classes the range variants declare, as the extension a virtual collection reads.
+ * Each variant contributes a `union` arm through its {@link membership}. Literal and classless variants bind nothing,
+ * as only an edge reaches them, so a range declaring no class leaves a virtual collection empty.
+ *
+ * @param anchor The variable holding the value
+ * @param shape The range to bind, possibly a union
+ *
+ * @returns The binding patterns, one arm per variant
+ */
+export function extension(anchor: Variable, shape: Lazy<Shape>): SPARQL {
+	return union(getShapeBranches(shape).map(variant => membership(anchor, variant)));
 }
 
 /**

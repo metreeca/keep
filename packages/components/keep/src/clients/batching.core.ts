@@ -69,17 +69,33 @@ export function createBroker(handlers: {
 
 	const queues = {
 
-		detect: queue(handlers.detect, () => true, limits.detect),
-
-		detail: queue(handlers.detail, (x, y) =>
-			x.shape === y.shape && equals(x.model, y.model) && equals(x.locale, y.locale), limits.detail
+		detect: queue(
+			handlers.detect,
+			() => true,
+			limits.detect
 		),
 
-		select: queue(handlers.select, (x, y) =>
-			x.field === y.field && equals(x.query, y.query) && equals(x.locale, y.locale), limits.select
+		detail: queue(
+			handlers.detail,
+			(x, y) => x.shape === y.shape
+				&& equals(x.model, y.model)
+				&& equals(x.locale, y.locale),
+			limits.detail
 		),
 
-		modify: queue(handlers.modify, () => true, limits.modify)
+		select: queue(
+			handlers.select,
+			(x, y) => x.field === y.field && equals(x.query, y.query)
+				&& equals(x.locale, y.locale)
+				&& (x.virtual ?? false) === (y.virtual ?? false),
+			limits.select
+		),
+
+		modify: queue(
+			handlers.modify,
+			() => true,
+			limits.modify
+		)
 
 	};
 
@@ -93,9 +109,13 @@ export function createBroker(handlers: {
 			);
 		},
 
-		detail<S extends Lazy<ResourceShape>, T extends Template>(request: Detail<T, S>) { // ;(cast) the handler resolves Match<S, T> at runtime
+		detail<S extends Lazy<ResourceShape>, T extends Template>(request: Detail<T, S>) {
 			return new Promise<Match<S, T>>((resolve, reject) =>
-				queues.detail.items.push({ request, resolve, reject } as Deferred<Detail>)
+				queues.detail.items.push({
+					request,
+					resolve: resolve as Deferred<Detail>["resolve"], // ;(cast) Match<S, T> by handler contract
+					reject
+				})
 			);
 		},
 

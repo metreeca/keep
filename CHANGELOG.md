@@ -9,6 +9,19 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `@metreeca/keep` — `lookup` takes a `virtual` flag retrieving a resource derived from the store rather than held
+  in it: the entry needn't be present, its single-valued members are read off whatever it holds and its collections
+  off the resources their range shapes describe by class rather than off stored links, so a listing over every
+  instance of a class is served without a stored container; `createBatchingStore` forwards the flag to its `detail`
+  and `select` requests, never sharing a `select` batch across the two, and `createCachingStore` keys on it
+- `@metreeca/keep-sparql` — `createSPARQLStore` serves virtual lookups, binding the members of a virtual collection
+  by the class membership their range declares in place of the owner edge, and reading the resources they reach as
+  held, so expansion below them stays link-driven while the listing itself needs no stored container or links
+- `@metreeca/keep-rest` — `createRESTStore` rejects a `virtual` lookup with a `RangeError` before any request is
+  sent, as the REST contract carries no such flag and the service alone decides which resources it derives
+- `@metreeca/keep-suite` — a `RetrieveVirtual` sub-suite requires connectors to serve virtual lookups: presence
+  without a stored entry, special fields, stored single-valued members, collections read by class whatever the
+  stored links and spanning subtypes, criteria over them, link-driven expansion below them and empty ones omitted
 - `@metreeca/keep` — `createBatchingStore` hands each handler a batch of requests sharing one plan (the same shape,
   model and locale for a detail, the same field, query and locale for a selection), so connectors read the plan off
   any request and never compare them, and takes a `limit` option capping the requests per batch and type, so a

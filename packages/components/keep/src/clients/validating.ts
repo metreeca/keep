@@ -83,9 +83,11 @@ export function createValidatingStore(store: StoreClient, {
 
 	return immutable({
 
-		async lookup({ entry, shape, model }, opts) {
+		async lookup({ virtual, entry, shape, model }, opts) {
 
 			return store.lookup({
+
+				virtual,
 
 				entry: assertEntry(entry),
 				shape,

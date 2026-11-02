@@ -54,7 +54,7 @@ export function select(
 	broker: Broker
 ): Promise<void> {
 
-	const [{ request: { field, query, locale } }] = batch;
+	const [{ request: { virtual = false, field, query, locale } }] = batch;
 
 	// the query is decoded with the very group record it was encoded from, which keys its owner variable, and
 	// with the schema derived once from its plan, so both sides project and read the same columns
@@ -62,7 +62,7 @@ export function select(
 	const flake = createQueryFlake(field.range.shape, query);
 
 	const group: Group = {
-		field, query, locale,
+		virtual, field, query, locale,
 		flake,
 		schema: schema(flake),
 		items: batch

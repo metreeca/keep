@@ -57,6 +57,10 @@ import { column, entries, type Schema } from "./schema.js";
  * decoded resource depends on one select request per such property and the spine runs them; a collection
  * resolving to no content leaves the property out (§4). The decoder issues no request itself.
  *
+ * A `virtual` request reads its own multi-valued properties as virtual collections, gathered by the class their range
+ * declares rather than by stored links. Only the top-level resource is virtual: every resource it expands, through a
+ * single-valued property or a virtual collection, is decoded as held, with nested collections read off stored links.
+ *
  * The request must carry only the solution rows whose subject column binds its own entry. Entries sharing a plan
  * share its columns too, so passing the rows of the whole batch would mix the values of different entries.
  *
@@ -72,7 +76,7 @@ export function decode(
 	scope: Scope<Variable>,
 	flake: Flake,
 	schema: Schema,
-	{ request: { entry, locale } }: Deferred<Detail>,
+	{ request: { virtual = false, entry, locale } }: Deferred<Detail>,
 	tuples: readonly Tuple[]
 ): Decoded<Resource> {
 
@@ -82,16 +86,20 @@ export function decode(
 	function decodeResource(entry: Reference, flake: Flake, tuples: readonly Tuple[]): Decoded<Resource> {
 
 		return merge(getShapeBranches(flake.range.shape).flatMap(variant =>
-			variant.kind !== "resource" ? [] : [decodeVariant(entry, variant, getFlakeVariant(flake, variant), tuples)]
+			variant.kind !== "resource" ? [] : [decodeVariant(entry, variant, getFlakeVariant(flake, variant), tuples, virtual)]
 		));
 
 	}
 
+	/**
+	 * Decodes the resource `entry` holds under one variant of its shape, with collections virtual if `virtual` is set.
+	 */
 	function decodeVariant(
 		entry: Reference,
 		shape: ResourceShape,
 		branches: readonly Branch[],
-		tuples: readonly Tuple[]
+		tuples: readonly Tuple[],
+		virtual: boolean
 	): Decoded<Resource> {
 
 		return merge(branches.map(branch => {
@@ -102,7 +110,7 @@ export function decode(
 			// property is omitted from the decoded resource instead, constrained collections included
 
 			return isQueryBranch(branch) ? collection(
-					{ entry, shape, field: branch.entry, query: branch.drain.query, locale },
+					{ virtual, entry, shape, field: branch.entry, query: branch.drain.query, locale },
 					values => isEmpty(values) ? {} : { [name]: values }
 				)
 
@@ -202,15 +210,16 @@ export function decode(
 
 			case "reference":
 
-				// the atomic keeps the bare references
+				// the atomic keeps the bare references; an expanded resource is held as it stands, whatever the
+				// request derives, so its collections are read off its links rather than off the class of their range
 
 				return drain?.form === "template"
-					? references().map(entry => decodeVariant(entry, eager(shape.target), branches, tuples))
+					? references().map(entry => decodeVariant(entry, eager(shape.target), branches, tuples, false))
 					: references().map(plain);
 
 			case "resource":
 
-				return references().map(entry => decodeVariant(entry, shape, branches, tuples));
+				return references().map(entry => decodeVariant(entry, shape, branches, tuples, false));
 
 			case "dictionary": // a localised variant is decoded from its tagged columns, never from a bound column
 

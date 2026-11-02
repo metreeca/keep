@@ -119,7 +119,7 @@ import {
 	variable,
 	where
 } from "@metreeca/wire-sparql/builder";
-import { anchor, coalesced, type Edge, expression, folded, link, membership, textual } from "../patterns.js";
+import { anchor, coalesced, type Edge, expression, extension, folded, link, membership, textual } from "../patterns.js";
 import { optionsToTerms, valueToTerm } from "../terms.js";
 import { type Column, column, columns as derive, type Schema } from "./schema.js";
 
@@ -132,6 +132,11 @@ import { type Column, column, columns as derive, type Schema } from "./schema.js
  * decoder must receive the very same records, never copies or fresh equivalents.
  */
 export type Group = {
+
+	/**
+	 * Whether the requests read a virtual collection, binding its members by class rather than by the owner edge.
+	 */
+	readonly virtual: boolean;
 
 	/**
 	 * The multi-valued property the requests read.
@@ -444,17 +449,17 @@ function ordered(context: Context, head: readonly SPARQL[]): readonly SPARQL[] {
 }
 
 /**
- * The patterns binding everything the query reads: the member edge, the patterns and shards under the member,
- * the filter admitting its variants and the row filters, in the order the `where` clause of the query states them.
+ * The patterns binding everything the query reads, in `where` clause order: the member edge, or the extension of the
+ * range for a virtual collection, the patterns and shards under the member, the admitted variants and the row filters.
  */
 function body(context: Context): readonly SPARQL[] {
 
-	const { group: { flake, field }, owner, root } = context;
+	const { group: { flake, field, virtual }, owner, root } = context;
 
 	const edge: Edge = { owner, property: field, object: root };
 
 	return [
-		link([edge.owner, edge.property, edge.object]),
+		virtual ? extension(root, flake.range.shape) : link([edge.owner, edge.property, edge.object]),
 		patterns(context, flake, root),
 		shards(context, flake, edge),
 		admitted(context),
@@ -715,11 +720,14 @@ function patterns(context: Context, node: Flake, value: Variable): SPARQL {
  * (§6.2) or, under a locale placeholder, the owning resource the decoder expands. The arms stand beside
  * the edge rather than inside it, so a folded or coalesced edge admitting no value under the request
  * priority leaves the variant columns to bind on their own, and a member of another variant still surfaces.
+ * The root of a virtual collection has no edge to restate, so its membership alone gates each arm.
  */
 function shards(context: Context, node: Flake, edge: Edge): SPARQL {
 
-	const { scope, group: { locale } } = context;
+	const { scope, group: { flake, locale, virtual } } = context;
 	const { owner, property, object } = edge;
+
+	const held = !virtual || node !== flake;
 
 	return node.drain?.form !== "union" || isComputedFlake(node) ? nil() : fragment(...shard(context, node).map(shard => {
 
@@ -729,7 +737,7 @@ function shards(context: Context, node: Flake, edge: Edge): SPARQL {
 			? optional(link([owner, property, object]), filter(and(isLiteral(variable(object)), ne(lang(variable(object)), string("")))), bind(anchor(owner), target))
 			: shard.form === "label"
 				? optional(coalesced(scope, edge, target, locale))
-				: optional(link([owner, property, object]), membership(object, shard.variant), bind(variable(object), target));
+				: optional(held ? link([owner, property, object]) : nil(), membership(object, shard.variant), bind(variable(object), target));
 
 	}));
 

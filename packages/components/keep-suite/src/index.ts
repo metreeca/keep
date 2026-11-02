@@ -69,6 +69,7 @@ import { testRetrieveExpression } from "./retrieve/expression.js";
 import { testRetrieveLocalised } from "./retrieve/localised.js";
 import { testRetrieveProjection } from "./retrieve/projection.js";
 import { testRetrieveTemplate } from "./retrieve/template.js";
+import { testRetrieveVirtual } from "./retrieve/virtual.js";
 
 
 /**
@@ -99,6 +100,7 @@ export type StoreTestPatterns =
 	| "RetrieveProjection"
 	| "RetrieveExpression"
 	| "RetrieveLocalised"
+	| "RetrieveVirtual"
 
 	| "Persist"
 	| "PersistCreate"
@@ -265,6 +267,7 @@ export function testStore(options: StoreTestOptions<Store>): void {
 		testRetrieveProjection,
 		testRetrieveExpression,
 		testRetrieveLocalised,
+		testRetrieveVirtual,
 
 		testPersistCreate,
 		testPersistUpdate,

@@ -120,6 +120,18 @@ describe("createBatchingStore", () => {
 
 		});
 
+		it("details a virtual resource without detecting it", async () => {
+
+			const { store, detected, detailed, instance } = batchedStore([]);
+
+			const result = await store.lookup({ virtual: true, entry, shape, model: {} });
+
+			expect(result).toBe(instance);
+			expect(detected).toEqual([]);
+			expect(detailed[0].virtual).toBe(true);
+
+		});
+
 		it("defaults the locale to und when none is supplied", async () => {
 
 			const { store, detailed } = batchedStore([entry]);
@@ -127,6 +139,16 @@ describe("createBatchingStore", () => {
 			await store.lookup({ entry, shape, model: {} });
 
 			expect(detailed[0].locale).toEqual(["und"]);
+
+		});
+
+		it("defaults virtual to false when none is supplied", async () => {
+
+			const { store, detailed } = batchedStore([entry]);
+
+			await store.lookup({ entry, shape, model: {} });
+
+			expect(detailed[0].virtual).toBe(false);
 
 		});
 
@@ -624,6 +646,33 @@ describe("createBroker", () => {
 			]);
 
 			expect(sizes).toEqual([2]);
+
+		});
+
+		it("serves virtual and held selections in separate handler calls", async () => {
+
+			const sizes: number[] = [];
+
+			const loader = createBroker({
+				async detail() {},
+				async select(batch, _) {
+					sizes.push(batch.length);
+					batch.forEach(d => d.resolve([]));
+				},
+				async modify() {},
+				async detect() {}
+			});
+
+			// a virtual selection binds its members by class rather than by the owner edge, so it never
+			// shares the plan of a held one, while an omitted flag reads as held and shares the plan of a false one
+
+			await Promise.all([
+				loader.select(selectRequest({ virtual: true, entry: "http://example.com/a" })),
+				loader.select(selectRequest({ virtual: false, entry: "http://example.com/b" })),
+				loader.select(selectRequest({ entry: "http://example.com/c" }))
+			]);
+
+			expect([...sizes].sort()).toEqual([1, 2]);
 
 		});
 

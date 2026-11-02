@@ -18,7 +18,7 @@ import { getShapeProperties, type Property } from "@metreeca/blue/resource";
 import type { Tag } from "@metreeca/core/language";
 import { createScope } from "@metreeca/core/scope";
 import { createQueryFlake } from "@metreeca/keep-flake";
-import { Category } from "@metreeca/keep-suite/toys";
+import { Category, toys } from "@metreeca/keep-suite/toys";
 import type { Query, Slot } from "@metreeca/qest/model";
 import type { Reference } from "@metreeca/qest/state";
 import { type SPARQL, variable } from "@metreeca/wire-sparql";
@@ -50,16 +50,16 @@ describe("encode", () => {
 
 	}
 
-	function group(entries: readonly Reference[], query: Query<Slot> = {}, locale: readonly Tag[] = []): Group {
+	function group(entries: readonly Reference[], query: Query<Slot> = {}, locale: readonly Tag[] = [], virtual: boolean = false): Group {
 
 		const flake = createQueryFlake(field.range.shape, query);
 
 		return {
-			field, query, locale,
+			virtual, field, query, locale,
 			flake,
 			schema: schema(flake),
 			items: entries.map(entry => ({
-				request: { entry, shape: Category, field, query, locale },
+				request: { virtual, entry, shape: Category, field, query, locale },
 				resolve: vi.fn(),
 				reject: vi.fn()
 			}))
@@ -117,6 +117,32 @@ describe("encode", () => {
 			const owner = encoded.match(/values \((\?\d+)\)/)?.[1];
 
 			expect(encoded).toContain(`group by ${owner}`);
+
+		});
+
+	});
+
+	describe("with a virtual collection", () => {
+
+		// the member class the range declares, which a held query never states and a virtual one binds
+		// the members by, in place of the edge off the owner, so its IRI tells the two query forms apart
+
+		const clazz = `<${toys.Category}>`;
+
+		it("binds the members by the class of the range rather than by the owner edge", async () => {
+
+			const encoded = query(group(entries, {}, [], true));
+
+			expect(encoded).toContain(clazz);
+			expect(bindings(encoded)).toHaveLength(1);
+
+			entries.forEach(entry => expect(encoded).toContain(`(<${entry}>)`));
+
+		});
+
+		it("binds the members of a held collection by the owner edge alone", async () => {
+
+			expect(query(group(entries))).not.toContain(clazz);
 
 		});
 
