@@ -7,6 +7,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased](https://github.com/metreeca/keep/compare/v0.12.2...HEAD)
 
+### Security
+
+- Upgrade `undici` to `8.12.3` (GHSA-xjj6-f33q-929c, GHSA-2m5v-pch6-74hx, GHSA-9fm3-97px-rjf6, GHSA-qrxm-fqhp-jwvm): development dependency, no consumer impact
+
 ## [0.12.2](https://github.com/metreeca/keep/compare/v0.12.1...v0.12.2) - 2026-10-22
 
 ### Fixed
