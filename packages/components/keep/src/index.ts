@@ -348,6 +348,12 @@ export interface StoreClient {
 	 * returns rows of computed values, keyed by the names of its bindings. A collection with no matching item is
 	 * omitted from the result, like any other member without a value.
 	 *
+	 * A `virtual` request retrieves a resource derived from the store rather than held in it, such as a listing of
+	 * every instance of a class with no stored container. The resource is returned even if `entry` is not stored.
+	 * Its `id` and `type` come from `entry` and the shape, and its single-valued members from whatever `entry` holds.
+	 * Its collections gather every stored instance of the classes their range declares, whatever `entry` links to,
+	 * and accept the same constraints as held collections. Resources expanded from them are retrieved as held.
+	 *
 	 * > [!NOTE]
 	 * > `shape` and `model` are kept distinct so that a single `shape` can serve many retrieval templates. For
 	 * > example, a server may wire one `shape` at startup and accept any admissible `model` decoded from each client
@@ -366,9 +372,9 @@ export interface StoreClient {
 	 * @param scope - The {@link StoreScope | retrieval scope}, bounding `model` and setting the locale priority
 	 *
 	 * @returns A promise resolving to an immutable copy of the resource data narrowed to the members `model` names,
-	 * or to `undefined` if the resource is not present in the store; rejects with a {@link !RangeError RangeError} if
-	 * `entry` is not an absolute IRI, a {@link TraceError} if `model` doesn't {@link validate} against the shape,
-	 * or a {@link Problem} on network, storage, or other processing errors
+	 * or to `undefined` if a held resource is not present in the store; rejects with a {@link !RangeError RangeError}
+	 * if `entry` is not an absolute IRI or `virtual` is unsupported, a {@link TraceError} if `model` doesn't
+	 * {@link validate} against the shape, or a {@link Problem} on network, storage, or other processing errors
 	 *
 	 * @throws {@link !Error Error} if the store has been {@link Store.close closed}
 	 */
@@ -606,6 +612,16 @@ export interface StoreObserver {
  * @typeParam T - The retrieval template, naming only members the shape carries
  */
 export type StoreLookup<S extends Lazy<ResourceShape>, T extends Model<S, T>> = {
+
+	/**
+	 * Whether the resource is derived from the store rather than held in it.
+	 *
+	 * When `true`, the resource is returned even if `entry` is not stored, and its collections gather every stored
+	 * instance of the classes their range declares, rather than the resources `entry` links to.
+	 *
+	 * @defaultValue `false` (retrieved as held)
+	 */
+	readonly virtual?: boolean;
 
 	/**
 	 * Absolute identifier of the resource to be retrieved.

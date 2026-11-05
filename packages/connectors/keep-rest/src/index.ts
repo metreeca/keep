@@ -23,7 +23,7 @@
  *
  * | Operation | HTTP | `Prefer` | Behaviour | Validated |
  * |---|---|---|---|---|
- * | {@link Store.lookup lookup} | `GET` | — | Template in query string; `404` → `undefined` | `model`, response |
+ * | {@link Store.lookup lookup} | `GET` | — | Template in query string; `404` → `undefined`; `virtual` rejected | `model`, response |
  * | {@link Store.create create} | `POST` | — | Child IRI from `Location`; `409` → `undefined` | `model`, `state` |
  * | {@link Store.update update} | `PUT` | — | Conditional; `404` → `undefined` | `state` |
  * | {@link Store.delete delete} | `DELETE` | — | Conditional; `404` → `undefined` | — |
@@ -62,7 +62,9 @@
  * {@link Store.lookup lookup} carries its `model` as a base64url query string, so any template (filter operators
  * such as `~name` and `>=price`, nested shapes, aggregates, collection pagination) survives transport intact. An
  * empty template omits the query string. The scope `locale` is forwarded as an `Accept-Language` header, with a
- * trailing `*` fallback so the service may answer in any language when none of the listed ones is available.
+ * trailing `*` fallback so the service may answer in any language when none of the listed ones is available. A
+ * `virtual` lookup is rejected with a {@link !RangeError RangeError} before any request is sent: the REST contract
+ * carries no such flag, and the service alone decides which resources it derives rather than holds.
  *
  * IRIs on the origin of `entry` travel in root-relative form (`/…`), both in request templates and states and in
  * {@link Store.lookup lookup} responses. Root-relative references in a response are resolved against the origin of
@@ -202,9 +204,14 @@ export function createRESTStore({
 
 	const client = createValidatingStore(immutable({
 
-		lookup({ entry, model }, opts) {
+		lookup({ virtual, entry, model }, opts) {
 
-			return retrieve(entry, model, opts);
+			// the REST contract carries no virtual flag and the service alone decides what it derives, so the
+			// request is refused before any call rather than silently served as held, which the caller couldn't tell
+
+			return virtual === true
+				? Promise.reject(new RangeError(`unsupported virtual lookup of <${entry}>`))
+				: retrieve(entry, model, opts);
 
 		},
 

@@ -95,6 +95,17 @@ describe("StoreClient", () => {
 			}>>();
 		});
 
+		test("admits a virtual request typed as a held one", async () => {
+			(client: StoreClient) => expectTypeOf(client.lookup({
+				virtual: true,
+				entry,
+				shape: Product,
+				model: { vendors: { name: {} } }
+			})).resolves.toEqualTypeOf<Optional<{
+				readonly vendors?: undefined | readonly { readonly name: string }[]
+			}>>();
+		});
+
 		test("types the rows of a collection by a projection, criteria included", async () => {
 			(client: StoreClient) => expectTypeOf(client.lookup({
 				entry,

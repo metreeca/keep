@@ -19,6 +19,12 @@ interface to support a new SPARQL backend.
 > **Mutation Events** — Limited to mutations issued through the store; mutations from other clients on the underlying
 > repository are not observed.
 
+> [!IMPORTANT]
+> **Embedded Resources** — Named by IRIs in the repository, never by blank nodes. The store skolemises the embedded
+> resources it writes, and a graph loaded by other means must be skolemised before the store reads it. A blank node
+> found where an embedded resource is expected fails the whole retrieval with a `RangeError`, so no embedded resource
+> and none of the content requested under it ever goes silently missing from a retrieved result.
+
 # Installation
 
 Install the framework together with a backend connector from the
@@ -57,6 +63,15 @@ const product = await store.lookup({
 });
 ```
 
+The store caps how it queries the repository: `batch` is the most entries one query binds (default `500`) and `burst`
+the most queries in flight at once (default `8`); `0` lifts a cap. Lower them for a backend behind a gateway with a
+short request limit or a tight connection pool, and raise them where the backend takes more and a round trip costs more
+than a larger query, as it does over a slow link to a remote backend serving few clients:
+
+```typescript
+const store = createSPARQLStore(createOxiRepository(), { batch: 200, burst: 4 });
+```
+
 ## Implementing a Connector
 
 A backend connector is a [@metreeca/wire-sparql](https://github.com/metreeca/wire/tree/main/packages/wire-sparql)
@@ -73,31 +88,22 @@ This SPARQL connector has been exercised against the
 [@metreeca/keep-suite](https://github.com/metreeca/keep/tree/main/packages/components/keep-suite) conformance suite on
 the backends and versions below, through the listed connectors.
 
-| Engine                       | Version                                                  | Storage       | Connectors                                      |
-|------------------------------|----------------------------------------------------------|---------------|-------------------------------------------------|
-| [Eclipse RDF4J][rdf4j]       | 5.3.1                                                    | MemoryStore   | `createHTTPRepository`, `createRDF4JRepository` |
-| [Eclipse RDF4J][rdf4j]       | 5.3.1                                                    | NativeStore   | `createHTTPRepository`, `createRDF4JRepository` |
-| [Eclipse RDF4J][rdf4j]       | 5.3.1                                                    | LmdbStore     | `createHTTPRepository`, `createRDF4JRepository` |
-| [Apache Jena Fuseki][fuseki] | 6.1.0                                                    | MemoryDataset | `createHTTPRepository`                          |
-| [Apache Jena Fuseki][fuseki] | 6.1.0                                                    | TDB1          | `createHTTPRepository`                          |
-| [Apache Jena Fuseki][fuseki] | 6.1.0                                                    | TDB2          | `createHTTPRepository`                          |
-| [Oxigraph][oxigraph]         | 0.5.8                                                    | in-memory     | `createOxiRepository`                           |
-| [Oxigraph][oxigraph]         | 0.5.8                                                    | disk          | `createHTTPRepository`                          |
-| [QLever][qlever]             | [*upcoming*](https://github.com/metreeca/keep/issues/8)  | disk          |                                                 |
-| [Fluree][fluree]             | [*upcoming*](https://github.com/metreeca/keep/issues/13) | disk          |                                                 |
-| [Virtuoso][virtuoso]         | [*upcoming*](https://github.com/metreeca/keep/issues/9)  | disk          |                                                 |
+| Engine                       | Version | Storage       | Connectors                                      |
+|------------------------------|---------|---------------|-------------------------------------------------|
+| [Eclipse RDF4J][rdf4j]       | 6.1.0   | MemoryStore   | `createHTTPRepository`, `createRDF4JRepository` |
+| [Eclipse RDF4J][rdf4j]       | 6.1.0   | NativeStore   | `createHTTPRepository`, `createRDF4JRepository` |
+| [Eclipse RDF4J][rdf4j]       | 6.1.0   | LmdbStore     | `createHTTPRepository`, `createRDF4JRepository` |
+| [Apache Jena Fuseki][fuseki] | 6.2.0   | MemoryDataset | `createHTTPRepository`                          |
+| [Apache Jena Fuseki][fuseki] | 6.2.0   | TDB1          | `createHTTPRepository`                          |
+| [Apache Jena Fuseki][fuseki] | 6.2.0   | TDB2          | `createHTTPRepository`                          |
+| [Oxigraph][oxigraph]         | 0.5.13  | in-memory     | `createOxiRepository`                           |
+| [Oxigraph][oxigraph]         | 0.5.13  | disk          | `createHTTPRepository`                          |
 
 [rdf4j]: https://rdf4j.org/
 
 [fuseki]: https://jena.apache.org/
 
 [oxigraph]: https://oxigraph.org/
-
-[qlever]: https://qlever.dev/
-
-[virtuoso]: https://virtuoso.openlinksw.com/
-
-[fluree]: https://flur.ee/
 
 # Support
 

@@ -63,8 +63,8 @@ import { type Branch, type Drain, type Entries, type Flake, type Transforms } fr
 
 
 /**
- * Operator-symbol to {@link Flake} slot mapping. A probe `target` absent from this table is a
- * projection alias (`alias=expr` keys) rather than an operator.
+ * Operator-symbol to {@link Flake} slot mapping. An entry `target` absent from this table is a
+ * projection alias (`alias=expr` keys) rather than an operator; a bare path carries no `target` at all.
  */
 const Operators: Readonly<Record<string, keyof Flake>> = {
 
@@ -94,9 +94,12 @@ const Operators: Readonly<Record<string, keyof Flake>> = {
  * {@link queryNodeOf}.
  *
  * Extends the qest {@link Probe} (its `path`, `pipe`, and the `target` naming an operator or a
- * projection alias) with the probed `value`.
+ * projection alias) with the probed `value`. A bare path naming a template entry neither constrains nor binds,
+ * so it carries no `target`: its node gets no alias and stays part of the template of the node above it.
  */
-type Entry = Probe & {
+type Entry = Omit<Probe, "target"> & {
+
+	readonly target?: Probe["target"];
 
 	readonly value: unknown;
 
@@ -126,11 +129,19 @@ export function createQueryFlake(shape: Shape, query: Query<Slot>): Flake {
 	// the root range describes one member, while the root drain is the query over the collection of them, so it
 	// is settled against the collection's cardinality
 
+	const drain = getDrain({ ...range, minCount: 0, maxCount: undefined }, query);
+
+	// an empty-path binding projects the member itself (§5.8.1): the root keeps the collection's drain and takes
+	// the binding alias, the binding's nested template being already folded into the root entries by the walk
+
+	const node = queryNodeOf(range, [], queryEntriesOf(shape, query));
+	const alias = node.drain?.alias;
+
 	return immutable({
 
-		drain: getDrain({ ...range, minCount: 0, maxCount: undefined }, query),
+		...node,
 
-		...queryNodeOf(range, [], queryEntriesOf(shape, query))
+		drain: alias === undefined ? drain : { ...drain, alias }
 
 	});
 
@@ -211,19 +222,20 @@ function isVariantKey(key: string): boolean {
 const VariantKeys = /^(0|[1-9]\d*)$/;
 
 /**
- * Decodes a query key into a {@link Probe}.
+ * Decodes a query key into a {@link Probe}, or into a bare path descent.
  *
- * A bare identifier path (`name`, `vendor.name`) is a self-projecting path descent whose leaf identifier
- * names the target. qest's {@link @metreeca/qest/model!decodeProbe | decodeProbe} accepts only explicit
- * `alias=expression` bindings, so the descent is decoded locally. Binding (`alias=expr`) and operator
- * (`>price`) keys route through `decodeProbe`.
+ * A bare identifier path (`name`, `vendor.name`) is a template entry retrieved by descent. It names no
+ * binding, so it carries no target and its node gets no alias: an alias marks a projected node alone. qest's
+ * {@link @metreeca/qest/model!decodeProbe | decodeProbe} accepts only explicit `alias=expression` bindings, so
+ * the descent is decoded locally, while binding (`alias=expr`) and operator (`>price`) keys route through
+ * `decodeProbe`, which rejects a malformed key as a contract violation of the query.
  */
-function queryProbeOf(key: string): Probe {
+function queryProbeOf(key: string): Omit<Entry, "value"> {
 
 	const path = key.split(".");
 
 	return path.every(isIdentifier)
-		? { target: path[path.length-1], pipe: [], path }
+		? { pipe: [], path }
 		: decodeProbe(key);
 
 }
@@ -344,7 +356,7 @@ function queryLocusOf(
 function queryConstraintsOf(entries: readonly Entry[]): Partial<Flake> {
 	return Object.fromEntries(
 		entries.flatMap(e => {
-			const slot = Operators[e.target];
+			const slot = e.target === undefined ? undefined : Operators[e.target];
 			return slot === undefined ? [] : [[slot, slot === "order" ? orderOf(e.value) : e.value] as const];
 		})
 	);
@@ -358,14 +370,17 @@ function orderOf(value: unknown): unknown {
 }
 
 /**
- * Extracts the projection from a locus's entries.
+ * Extracts the drain from a locus's entries.
  *
- * The first entry whose `target` is an alias rather than an {@link Operators | operator} binds that
- * alias to its requested `Query<Slot>`; returns the empty object when none is present.
+ * The first entry that names no {@link Operators | operator} sets the drain to its requested `Query<Slot>`.
+ * A binding gives the drain its alias, while a bare path descent leaves it without one. Returns the empty
+ * object on a locus with no such entry, as one carrying constraints alone or nothing at all.
+ *
+ * @throws {@link !RangeError RangeError} If the entry value is not a `Query<Slot>`
  */
 function queryProjectionOf(range: Range, entries: readonly Entry[]): { drain?: Drain } {
 
-	const bound = entries.find(e => Operators[e.target] === undefined);
+	const bound = entries.find(e => e.target === undefined || Operators[e.target] === undefined);
 
 	if ( bound === undefined ) {
 

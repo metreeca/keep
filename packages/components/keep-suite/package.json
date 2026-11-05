@@ -1,6 +1,6 @@
 {
   "name": "@metreeca/keep-suite",
-  "version": "0.11.1",
+  "version": "0.13.0",
   "description": "Connector conformance test suite for @metreeca/keep.",
   "keywords": [
     "typescript",
@@ -45,15 +45,16 @@
     "node": ">=22.22.0"
   },
   "scripts": {
-    "clean": "rm dist docs node_modules",
-    "build": "rm dist && tsc -p tsconfig.build.json",
+    "clean": "ush rm dist docs node_modules",
+    "build": "ush rm dist && tsc -p tsconfig.build.json",
     "check": "npx vitest --typecheck run"
   },
   "dependencies": {
-    "@metreeca/blue": "^0.12.1",
-    "@metreeca/core": "^0.12.1",
-    "@metreeca/keep": "^0.11.0",
-    "@metreeca/qest": "^0.12.1"
+    "@metreeca/blue": "^0.13.0",
+    "@metreeca/core": "^0.13.0",
+    "@metreeca/keep": "^0.13.0",
+    "@metreeca/qest": "^0.13.0",
+    "@metreeca/trio": "^0.2.0"
   },
   "peerDependencies": {
     "vitest": ">=4.0.0"

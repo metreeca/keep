@@ -107,8 +107,11 @@ export type Flake = {
 	 * The retrieval requested at this node, in a model- or query-mode flake.
 	 *
 	 * On the root, the drain holds the whole retrieval. On a {@link Branch}, it holds the query requested for the
-	 * property. A projected node, including a transform stage, also carries the binding `alias`. Absent where
-	 * nothing is requested.
+	 * property; a requested {@link Id} / {@link Type} marker takes the atomic form. A projected node, including a
+	 * transform stage, also carries the binding `alias`. A query root carries one when an empty-path binding (qest
+	 * §5.8.1) projects the member itself: its drain remains the projection over the collection, and the properties
+	 * the binding requests of the member appear among its {@link Flake.entries | entries}. Absent where nothing is
+	 * requested, as on a branch or marker present only to carry the constraints the query states for it.
 	 */
 	readonly drain?: Drain;
 
@@ -124,7 +127,8 @@ export type Flake = {
 	 * Absent where the node has none: scalar and localised ranges, {@link Id} / {@link Type} markers, and
 	 * transform stages. In a shape-mode flake, references other than captive ones carry none either. In a
 	 * model-mode flake, properties retrieved as atomics carry none, and neither do multi-valued properties, whose
-	 * drain holds the nested retrieval.
+	 * drain holds the nested retrieval. In a query-mode flake, the root holds a branch for every path the query
+	 * addresses, including the properties an empty-path binding requests of the member through its template.
 	 */
 	readonly entries?: Entries;
 
@@ -395,6 +399,9 @@ export function createFlake(shape: Lazy<Shape>, model?: Template): Flake {
  * need this factory: unlike the plain {@link @metreeca/qest/model!Template | template} that {@link createFlake}
  * accepts, a query merges its {@link @metreeca/qest/model!Criteria | criteria} with its retrieval keys.
  *
+ * An empty-path binding (qest §5.8.1) projects each member itself. The root then carries the binding alias, so
+ * {@link getFlakeProjection} indexes the root under it and a grouped query uses the member as a grouping key.
+ *
  * @param shape The {@link Lazy | lazy} member shape of the collection's elements
  * @param query The query retrieving the collection, criteria included
  *
@@ -441,21 +448,6 @@ export function isComputedFlake(flake: Flake): boolean {
  */
 export function isAggregateFlake(flake: Flake): boolean {
 	return isComputedFlake(flake) && isAggregate(flake.pipe[0]);
-}
-
-/**
- * Checks whether a {@link Flake} is a scalar (non-aggregating) transform stage.
- *
- * True for a {@link isComputedFlake | computed} node whose leading {@link Flake.pipe | pipe} transform yields
- * one value per input rather than aggregating a group, such as a year or absolute-value transform. The
- * complement of {@link isAggregateFlake} among computed nodes. The test is local to the node.
- *
- * @param flake The flake to test
- *
- * @returns true when the node's leading transform is non-aggregating; false otherwise
- */
-export function isScalarFlake(flake: Flake): boolean {
-	return isComputedFlake(flake) && !isAggregate(flake.pipe[0]);
 }
 
 /**
@@ -808,6 +800,32 @@ export function getFlakeProjection(flake: Flake): { readonly [alias: Identifier]
 			...getFlakeEntries(flake).flatMap(projections)
 		];
 	}
+
+}
+
+/**
+ * Rebuilds the retrieval template a node's branches request.
+ *
+ * A connector expanding the resource a node reaches can retrieve it under the template the original request stated,
+ * with no need to rebuild that template from the tree. Each branch carrying a {@link Flake.drain | drain} maps its
+ * property name to the query it requests, criteria included. A branch present only to carry constraints is left out.
+ * A {@link isProbeBranch | projected} branch is left out too: it is a binding of the enclosing projection (qest §5.2),
+ * not part of the node's template. A node reached only by such bindings thus gets an empty template, and its value
+ * is returned as a bare reference. Given a variant `shape`, the template keeps only the branches that variant
+ * declares (qest §5.5), so each variant of a union is expanded under its own template.
+ *
+ * @param flake The node whose branches to read
+ * @param shape One of the range {@link @metreeca/blue/union!getShapeBranches | variants} to restrict the template to
+ *
+ * @returns The template `flake`'s branches request, keyed by property name
+ */
+export function getFlakeTemplate(flake: Flake, shape?: Shape): Template {
+
+	const branches = shape === undefined ? getFlakeEntries(flake) : getFlakeVariant(flake, shape);
+
+	return Object.fromEntries(branches.flatMap(branch => branch.drain === undefined || branch.drain.alias !== undefined ? []
+		: [[branch.path[branch.path.length-1], branch.drain.query]]
+	));
 
 }
 

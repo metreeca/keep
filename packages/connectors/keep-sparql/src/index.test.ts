@@ -15,6 +15,7 @@
  */
 
 
+import { dictionary } from "@metreeca/blue/dictionary";
 import { reference } from "@metreeca/blue/reference";
 import {
 	getShapeClass,
@@ -22,6 +23,7 @@ import {
 	getShapeType,
 	id,
 	multiple,
+	optional,
 	required,
 	resource as shaped,
 	type ResourceShape
@@ -48,7 +50,6 @@ import {
 	Place,
 	PostalAddress,
 	Product,
-	rdfs,
 	Resources,
 	Review,
 	toys,
@@ -58,7 +59,7 @@ import {
 } from "@metreeca/keep-suite/toys";
 import { type Reference, type Resource } from "@metreeca/qest/state";
 import { log } from "@metreeca/tape";
-import { blank, skolemize, tagged, type Tagged, type Triple, typed } from "@metreeca/trio";
+import { blank, named, rdfs, skolemize, tagged, type Tagged, triple, type Triple, typed } from "@metreeca/trio";
 import { data, description as resource, link, property, resource as about, term } from "@metreeca/trio/builder";
 import type { Repository } from "@metreeca/wire-sparql";
 import { createHTTPRepository } from "@metreeca/wire-sparql-http";
@@ -108,7 +109,7 @@ describe("oxigraph", () => {
  */
 describe("rdf4j-memory", () => {
 
-	const image = "eclipse/rdf4j-workbench:5.3.1-tomcat";
+	const image = "eclipse/rdf4j-workbench:6.1.0-tomcat";
 
 	const port = 8080;
 	const repo = "test";
@@ -203,7 +204,7 @@ describe("rdf4j-memory", () => {
  */
 describe.skipIf(!process.env.RDF4J_NATIVE)("rdf4j-native", () => {
 
-	const image = "eclipse/rdf4j-workbench:5.3.1-tomcat";
+	const image = "eclipse/rdf4j-workbench:6.1.0-tomcat";
 
 	const port = 8080;
 	const repo = "test";
@@ -298,7 +299,7 @@ describe.skipIf(!process.env.RDF4J_NATIVE)("rdf4j-native", () => {
  */
 describe.skipIf(!process.env.RDF4J_LMDB)("rdf4j-lmdb", () => {
 
-	const image = "eclipse/rdf4j-workbench:5.3.1-tomcat";
+	const image = "eclipse/rdf4j-workbench:6.1.0-tomcat";
 
 	const port = 8080;
 	const repo = "test";
@@ -394,7 +395,7 @@ describe.skipIf(!process.env.RDF4J_LMDB)("rdf4j-lmdb", () => {
  */
 describe.skipIf(!process.env.FUSEKI_MEMORY)("fuseki-memory", () => {
 
-	const image = "ghcr.io/kurrawong/fuseki:6.1.0-0";
+	const image = "ghcr.io/kurrawong/fuseki:6.2.0-0";
 
 	const port = 3030;
 	const dataset = "ds";
@@ -419,6 +420,14 @@ describe.skipIf(!process.env.FUSEKI_MEMORY)("fuseki-memory", () => {
 			<#mem> rdf:type ja:MemoryDataset .
 		`;
 
+	// the image guards every endpoint behind basic auth by default, so supply an open shiro
+	// policy; the entrypoint materialises it into the runtime base (/fuseki/shiro.ini)
+
+	const shiro = `
+			[urls]
+			/** = anon
+		`;
+
 
 	let base: string;
 	let container: StartedTestContainer;
@@ -432,6 +441,9 @@ describe.skipIf(!process.env.FUSEKI_MEMORY)("fuseki-memory", () => {
 			.withCopyContentToContainer([{
 				content: assembler,
 				target: "/opt/fuseki/configuration/assembler.ttl"
+			}, {
+				content: shiro,
+				target: "/opt/fuseki/shiro.ini"
 			}])
 			.withExposedPorts(port)
 			.withWaitStrategy(Wait.forHttp("/$/ping", port))
@@ -472,7 +484,7 @@ describe.skipIf(!process.env.FUSEKI_MEMORY)("fuseki-memory", () => {
  */
 describe.skipIf(!process.env.FUSEKI_TDB1)("fuseki-tdb1", () => {
 
-	const image = "ghcr.io/kurrawong/fuseki:6.1.0-0";
+	const image = "ghcr.io/kurrawong/fuseki:6.2.0-0";
 
 	const port = 3030;
 	const dataset = "ds";
@@ -498,6 +510,14 @@ describe.skipIf(!process.env.FUSEKI_TDB1)("fuseki-tdb1", () => {
 				tdb:location "/fuseki/databases/tdb" .
 		`;
 
+	// the image guards every endpoint behind basic auth by default, so supply an open shiro
+	// policy; the entrypoint materialises it into the runtime base (/fuseki/shiro.ini)
+
+	const shiro = `
+			[urls]
+			/** = anon
+		`;
+
 
 	let base: string;
 	let container: StartedTestContainer;
@@ -511,6 +531,9 @@ describe.skipIf(!process.env.FUSEKI_TDB1)("fuseki-tdb1", () => {
 			.withCopyContentToContainer([{
 				content: assembler,
 				target: "/opt/fuseki/configuration/assembler.ttl"
+			}, {
+				content: shiro,
+				target: "/opt/fuseki/shiro.ini"
 			}])
 			.withExposedPorts(port)
 			.withWaitStrategy(Wait.forHttp("/$/ping", port))
@@ -551,7 +574,7 @@ describe.skipIf(!process.env.FUSEKI_TDB1)("fuseki-tdb1", () => {
  */
 describe.skipIf(!process.env.FUSEKI_TDB2)("fuseki-tdb2", () => {
 
-	const image = "ghcr.io/kurrawong/fuseki:6.1.0-0";
+	const image = "ghcr.io/kurrawong/fuseki:6.2.0-0";
 
 	const port = 3030;
 	const dataset = "ds";
@@ -577,6 +600,14 @@ describe.skipIf(!process.env.FUSEKI_TDB2)("fuseki-tdb2", () => {
 				tdb2:location "/fuseki/databases/tdb2" .
 		`;
 
+	// the image guards every endpoint behind basic auth by default, so supply an open shiro
+	// policy; the entrypoint materialises it into the runtime base (/fuseki/shiro.ini)
+
+	const shiro = `
+			[urls]
+			/** = anon
+		`;
+
 
 	let base: string;
 	let container: StartedTestContainer;
@@ -590,6 +621,9 @@ describe.skipIf(!process.env.FUSEKI_TDB2)("fuseki-tdb2", () => {
 			.withCopyContentToContainer([{
 				content: assembler,
 				target: "/opt/fuseki/configuration/assembler.ttl"
+			}, {
+				content: shiro,
+				target: "/opt/fuseki/shiro.ini"
 			}])
 			.withExposedPorts(port)
 			.withWaitStrategy(Wait.forHttp("/$/ping", port))
@@ -628,7 +662,7 @@ describe.skipIf(!process.env.FUSEKI_TDB2)("fuseki-tdb2", () => {
  */
 describe.skipIf(!process.env.OXIGRAPH)("oxigraph", () => {
 
-	const image = "oxigraph/oxigraph:0.5.8";
+	const image = "oxigraph/oxigraph:0.5.13";
 
 	const port = 7878;
 
@@ -1039,6 +1073,25 @@ function testSPARQLStore(factory: () => Repository, {
 	}));
 
 
+	describe("store options", () => {
+
+		it("should reject a cap that is not a non-negative integer", async () => {
+
+			expect(() => createSPARQLStore(factory(), { batch: 1.5 })).toThrow(TypeError);
+			expect(() => createSPARQLStore(factory(), { batch: -1 })).toThrow(TypeError);
+			expect(() => createSPARQLStore(factory(), { burst: 1.5 })).toThrow(TypeError);
+			expect(() => createSPARQLStore(factory(), { burst: -1 })).toThrow(TypeError);
+
+		});
+
+		it("should accept a lifted cap", async () => {
+
+			expect(() => createSPARQLStore(factory(), { batch: 0, burst: 0 })).not.toThrow();
+
+		});
+
+	});
+
 	describe("sparql storage", () => {
 
 		it("should store und-tagged text as an und-tagged literal", async () => {
@@ -1098,6 +1151,137 @@ function testSPARQLStore(factory: () => Repository, {
 
 			expect(created?.startsWith(`${holder}/`)).toBe(true);
 			expect(await probe.ask(`ask { <${holder}> <${base}toys#note> <${created}> }`)).toBe(true);
+
+		});
+
+		describe("embedded resources", () => {
+
+			// embedded resources carry no identity, so a graph authored outside the store names them with blank
+			// nodes: the repository holds them skolemised, under any IRI scheme, and the store rejects a blank node
+			// outright rather than silently dropping the embedded resource the blank node names
+
+			const Cadence = shaped({
+				strategic: required(string(), { forward: `${base}toys#strategic` })
+			});
+
+			const State = shaped({
+				id: id()
+			});
+
+			const Limit = shaped({
+				limit: required(string(), { forward: `${base}toys#limit` }),
+				label: optional(dictionary({ uniqueLang: true }), { forward: rdfs.label }),
+				state: optional(reference(State), { forward: `${base}toys#state` })
+			});
+
+			const Portfolio = shaped({
+				id: id(),
+				cadence: optional(Cadence, { forward: `${base}toys#cadence` }),
+				limits: multiple(Limit, { forward: `${base}toys#limits` })
+			});
+
+			const Portfolios = shaped({
+				id: id(),
+				members: multiple(reference(Portfolio), { forward: `${base}toys#member` })
+			});
+
+			const portfolios: Reference = `${base}portfolios/`;
+			const portfolio: Reference = `${portfolios}1`;
+			const open: Reference = `${base}states/open`;
+
+			// the portfolio as an external loader authors it, its embedded resources named by blank nodes
+
+			const graph: readonly Triple[] = [
+				triple(named(portfolios), named(`${base}toys#member`), named(portfolio)),
+				triple(named(portfolio), named(`${base}toys#cadence`), blank("cadence")),
+				triple(blank("cadence"), named(`${base}toys#strategic`), typed("P42D")),
+				triple(named(portfolio), named(`${base}toys#limits`), blank("wip")),
+				triple(blank("wip"), named(`${base}toys#limit`), typed("wip")),
+				triple(blank("wip"), named(rdfs.label), tagged("WIP", "en")),
+				triple(blank("wip"), named(`${base}toys#state`), named(open)),
+				triple(named(portfolio), named(`${base}toys#limits`), blank("budget")),
+				triple(blank("budget"), named(`${base}toys#limit`), typed("budget")),
+				triple(blank("budget"), named(rdfs.label), tagged("Budget", "en"))
+			];
+
+			// a repository holding the graph alone, cleared first as a backend block may hand out one shared
+			// repository; skolemised as the loader must, or raw to probe the store on the blank nodes it rejects
+
+			async function seed(graph: readonly Triple[]): Promise<Repository> {
+
+				const probe = factory();
+
+				await probe.update("clear all");
+				await probe.update(`insert data { ${triples(graph)} }`);
+
+				return probe;
+
+			}
+
+
+			describe("skolemised", () => {
+
+				it("should read a single-valued embedded resource", async () => {
+
+					expect(await createSPARQLStore(await seed(skolemize(graph))).lookup({
+						entry: portfolio,
+						shape: Portfolio,
+						model: { cadence: { strategic: {} } }
+					})).toEqual({ cadence: { strategic: "P42D" } });
+
+				});
+
+				it("should read multi-valued embedded resources", async () => {
+
+					const limits = (await createSPARQLStore(await seed(skolemize(graph))).lookup({
+						entry: portfolio,
+						shape: Portfolio,
+						model: { limits: { limit: {}, label: { "*": {} }, state: { id: {} } } }
+					}))?.limits;
+
+					expect(limits).toHaveLength(2);
+					expect(limits).toEqual(expect.arrayContaining([
+						{ limit: "wip", label: { en: "WIP" }, state: { id: open } },
+						{ limit: "budget", label: { en: "Budget" } }
+					]));
+
+				});
+
+				it("should read embedded resources of collection members", async () => {
+
+					expect(await createSPARQLStore(await seed(skolemize(graph))).lookup({
+						entry: portfolios,
+						shape: Portfolios,
+						model: { members: { id: {}, cadence: { strategic: {} } } }
+					})).toEqual({ members: [{ id: portfolio, cadence: { strategic: "P42D" } }] });
+
+				});
+
+			});
+
+			describe("blank", () => {
+
+				it("should reject a single-valued embedded resource", async () => {
+
+					await expect(createSPARQLStore(await seed(graph)).lookup({
+						entry: portfolio,
+						shape: Portfolio,
+						model: { cadence: { strategic: {} } }
+					})).rejects.toThrow(RangeError);
+
+				});
+
+				it("should reject multi-valued embedded resources", async () => {
+
+					await expect(createSPARQLStore(await seed(graph)).lookup({
+						entry: portfolio,
+						shape: Portfolio,
+						model: { limits: { limit: {} } }
+					})).rejects.toThrow(RangeError);
+
+				});
+
+			});
 
 		});
 

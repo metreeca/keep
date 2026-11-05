@@ -17,7 +17,7 @@
 import { validate } from "@metreeca/blue";
 import { getShapeId, type ResourceShape } from "@metreeca/blue/resource";
 import { eager, type State } from "@metreeca/blue/value";
-import { error, isString, type Lazy, map, type Optional } from "@metreeca/core";
+import { error, isString, type Lazy, lazy, map, type Optional } from "@metreeca/core";
 import { getIRIParent } from "@metreeca/core/resource";
 import { TraceError } from "@metreeca/core/trace";
 import { immutable } from "@metreeca/core/values";
@@ -55,7 +55,15 @@ export const collections: {
 
 } = (() => {
 
-	let cache: undefined | typeof collections;
+	const load = lazy(() => immutable({
+
+		categories: verify(json.categories, Category),
+		vendors: verify(json.vendors, Vendor),
+		products: verify(json.products, Product),
+		images: verify(json.images, Image),
+		videos: verify(json.videos, Video)
+
+	}));
 
 	return immutable({
 
@@ -67,18 +75,6 @@ export const collections: {
 
 	});
 
-
-	function load() {
-		return cache ??= immutable({
-
-			categories: verify(json.categories, Category),
-			vendors: verify(json.vendors, Vendor),
-			products: verify(json.products, Product),
-			images: verify(json.images, Image),
-			videos: verify(json.videos, Video)
-
-		});
-	}
 
 	function verify<T extends Lazy<ResourceShape>>(resources: readonly unknown[], shape: T): readonly State<T>[] {
 		return resources.map(resource => validate(resource, { shape, depth: 0 })({
@@ -109,7 +105,21 @@ export const catalogues: {
 
 } = (() => {
 
-	let cache: undefined | typeof catalogues;
+	const load = lazy(() => immutable({
+
+		resources: catalogue(Resources, `${base}resources/`, "Resources", [
+			...collections.categories,
+			...collections.vendors,
+			...collections.products,
+			...collections.images,
+			...collections.videos
+		]),
+
+		categories: catalogue(Categories, `${base}categories/`, "Categories", collections.categories),
+		vendors: catalogue(Vendors, `${base}vendors/`, "Vendors", collections.vendors),
+		products: catalogue(Products, `${base}products/`, "Products", collections.products)
+
+	}));
 
 	return immutable({
 
@@ -120,24 +130,6 @@ export const catalogues: {
 
 	});
 
-
-	function load() {
-		return cache ??= immutable({
-
-			resources: catalogue(Resources, `${base}resources/`, "Resources", [
-				...collections.categories,
-				...collections.vendors,
-				...collections.products,
-				...collections.images,
-				...collections.videos
-			]),
-
-			categories: catalogue(Categories, `${base}categories/`, "Categories", collections.categories),
-			vendors: catalogue(Vendors, `${base}vendors/`, "Vendors", collections.vendors),
-			products: catalogue(Products, `${base}products/`, "Products", collections.products)
-
-		});
-	}
 
 	function catalogue<S extends Lazy<ResourceShape>>(
 		shape: S,

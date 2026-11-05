@@ -18,8 +18,8 @@
  * Detect-pass query encoder.
  *
  * Folds a batch of candidate entries into one `select distinct` query returning exactly the entries that are the
- * subject of at least one stored triple. Variables are allocated through the {@link Scope} shared with the decoder,
- * so both sides agree on the subject variable.
+ * subject of at least one stored triple. The subject variable is keyed on the batch in the {@link Scope} shared with
+ * the driver, which reads the rows of each request off that column and resolves it to true if any row binds it.
  *
  * @module
  */
@@ -33,7 +33,7 @@ import { distinct, edge, reference, select, values, variable, where } from "@met
 /**
  * Encodes the batched existence query for a set of candidate entries.
  *
- * @param scope The shared variable scope, also threaded into the decoder
+ * @param scope The variable scope shared with the driver, keying the subject column on `batch`
  * @param batch The candidate items to probe, each carrying the `request` whose `entry` is tested for existence
  *
  * @returns A `select distinct` query projecting the subject variable for every entry that is the

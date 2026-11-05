@@ -139,6 +139,24 @@ describe("createRESTStore", () => {
 
 		});
 
+		it("should reject a virtual lookup with RangeError without calling the service", async () => {
+
+			// the REST contract carries no virtual flag, so the request is refused rather than silently served held
+
+			const fetcher = mockFetcher(() => jsonResponse({ items: [] }));
+			const store = createRESTStore({ fetch: fetcher });
+
+			await expect(store.lookup({
+				virtual: true,
+				entry: `${base}/products/`,
+				shape: Catalogue,
+				model: { items: { id: {} } }
+			})).rejects.toBeInstanceOf(RangeError);
+
+			expect(fetcher).not.toHaveBeenCalled();
+
+		});
+
 		it("should return the collection a collecting resource holds", async () => {
 
 			const catalogue = `${base}/products/`;

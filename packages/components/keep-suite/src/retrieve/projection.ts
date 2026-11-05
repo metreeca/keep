@@ -15,7 +15,7 @@
  */
 
 import { isObject } from "@metreeca/core";
-import { ascending, by, compound, descending } from "@metreeca/core/order";
+import { ascending, by, compound, descending, locale } from "@metreeca/core/order";
 import type { Criteria, Projection } from "@metreeca/qest/model";
 import type { Resource } from "@metreeca/qest/state";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -630,20 +630,25 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 			})());
 
-			it.each([
-				["duplicate binding names", Catalogue, Products,
-					{ "foo=price": {}, "foo=stock": {} }],
-				["shorthand and explicit bindings sharing a name", VendorsCatalogue, Vendors,
-					{ "name": {}, "name=email": {} }]
-			] as const)("should reject %s", (_label, entry, shape, projection) => factory(async ({ store }) => {
+			it("should reject duplicate binding names", factory(async ({ store }) => {
 
 				await expect(store.lookup({
-					entry,
-					shape,
-					model: catalogue(projection)
+					entry: Catalogue,
+					shape: Products,
+					model: catalogue({ "foo=price": {}, "foo=stock": {} })
 				})).rejects.toThrow();
 
-			})());
+			}));
+
+			it("should reject shorthand and explicit bindings sharing a name", factory(async ({ store }) => {
+
+				await expect(store.lookup({
+					entry: VendorsCatalogue,
+					shape: Vendors,
+					model: catalogue({ "name": {}, "name=email": {} })
+				})).rejects.toThrow();
+
+			}));
 
 			it("should project multi-transform pipe over multi-step path", factory(async ({ store }) => {
 
@@ -702,6 +707,27 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 			}));
 
+			it("should project reference-typed binding as id beside a binding descending through it", factory(async ({ store }) => {
+
+				// `name=vendor.name` is a binding of its own (§5.2), not a template expanding `vendor`, so the
+				// reference stays bare next to the sibling value it is paired with (metreeca/keep#24)
+
+				const expected = [...new Set(products.map(p => p.vendor))].sort();
+
+				const result = projected(members(await store.lookup({
+					entry: Catalogue,
+					shape: Products,
+					model: catalogue({ "vendor=vendor": {}, "name=vendor.name": {} })
+				})));
+
+				expect(result?.map(p => p.vendor).sort()).toEqual(expected);
+				result?.forEach(p => {
+					const vendor = lookup(vendors, v => v.id === p.vendor);
+					expect(p.name).toEqual(vendor?.name);
+				});
+
+			}));
+
 			it("should project embedded-template binding inline", factory(async ({ store }) => {
 
 				// the id binding keeps one row per product (§5.2): without it the shared vendors would
@@ -719,6 +745,78 @@ export function testRetrieveProjection(factory: TestFactory): void {
 					const expected = isObject(vendor) && lookup(vendors, v => v.name === vendor.name);
 					expect(expected).toBeDefined();
 				});
+
+			}));
+
+			it("should project the item itself through an empty-path atomic binding (§5.2, §5.8.1)", factory(async ({ store }) => {
+
+				// an empty path leaves the working set unchanged (§5.8.1), so the binding projects each item
+				// itself, delivered as the reference naming it under the atomic placeholder (§5.3)
+
+				const expected = products.map(p => p.id).sort();
+
+				const result = projected(members(await store.lookup({
+					entry: Catalogue,
+					shape: Products,
+					model: catalogue({ "product=": {} })
+				})));
+
+				expect(result?.map(p => p.product).sort()).toEqual(expected);
+
+			}));
+
+			it("should project the item itself as id beside a binding descending through it (§5.2, §5.8.1)", factory(async ({ store }) => {
+
+				// `sku=sku` is a binding of its own, not a template expanding the item (metreeca/keep#24)
+
+				const expected = products.map(p => ({ product: p.id, sku: p.sku }));
+
+				const result = projected(members(await store.lookup({
+					entry: Catalogue,
+					shape: Products,
+					model: catalogue({ "product=": {}, "sku=sku": {} })
+				})));
+
+				expect(result).toEqual(expect.arrayContaining(expected));
+				expect(result).toHaveLength(expected.length);
+
+			}));
+
+			it("should expand the item itself through an empty-path template binding (§5.2, §5.8.1)", factory(async ({ store }) => {
+
+				// the nested template expands the bound item under the binding name, never at row level
+
+				const expected = products.map(p => ({ id: p.id, sku: p.sku }));
+
+				const result = projected(members(await store.lookup({
+					entry: Catalogue,
+					shape: Products,
+					model: catalogue({ "product=": { id: {}, sku: {} } })
+				})));
+
+				expect(result?.map(p => p.product)).toEqual(expect.arrayContaining(expected));
+				expect(result).toHaveLength(expected.length);
+
+			}));
+
+			it("should group by the item itself next to a per-item aggregate (§5.2, §5.8.2.1)", factory(async ({ store }) => {
+
+				// the empty-path binding is the grouping key (§5.8.2.1), so each row carries the expanded item
+				// next to the count of its own products, rather than a total over the whole collection
+
+				const expected = vendors.map(v => ({
+					vendor: { id: v.id, name: v.name },
+					size: products.filter(p => p.vendor === v.id).length
+				}));
+
+				const result = projected(members(await store.lookup({
+					entry: VendorsCatalogue,
+					shape: Vendors,
+					model: catalogue({ "vendor=": { id: {}, name: {} }, "size=count:products": {} })
+				})));
+
+				expect(result).toEqual(expect.arrayContaining(expected));
+				expect(result).toHaveLength(expected.length);
 
 			}));
 
@@ -753,9 +851,8 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 			it("should project the text variant of a declared union through a locale alternative (§5.5)", factory(async ({ store }) => {
 
-				// §5.5: within a projection binding a locale alternative addresses the text variant of
-				// `Vendor.origin` structurally, the region name occupying its cell as a dictionary, while the
-				// template alternative expands the Place variant of the vendors carrying one
+				// §5.5: a locale alternative returns the region name of `Vendor.origin` as a dictionary cell, while
+				// the template alternative expands the Place of the vendors carrying one instead of a region name
 
 				const result = projected(members(await store.lookup({
 					entry: VendorsCatalogue,
@@ -1872,6 +1969,7 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 					const priceThreshold = 50;
 					const countThreshold = 2;
+					const collation = locale();
 
 					const countsByCondition = new Map<string, number>();
 					products
@@ -1879,7 +1977,7 @@ export function testRetrieveProjection(factory: TestFactory): void {
 						.forEach(p => countsByCondition.set(p.condition, (countsByCondition.get(p.condition) ?? 0)+1));
 					const expected = [...countsByCondition.entries()]
 						.filter(([, n]) => n >= countThreshold)
-						.sort(([a], [b]) => a.localeCompare(b));
+						.sort(by(([condition]) => condition, collation));
 
 					const result = projected(members(await store.lookup({
 						entry: Catalogue,
@@ -1891,7 +1989,7 @@ export function testRetrieveProjection(factory: TestFactory): void {
 					})));
 
 					expect(result?.length).toBe(expected.length);
-					expect(result?.map(r => [r.condition, r.cnt] as const).sort(([a], [b]) => String(a).localeCompare(String(b))))
+					expect(result?.map(r => [r.condition, r.cnt] as const).sort(by(([condition]) => String(condition), collation)))
 						.toEqual(expected);
 
 				}));
@@ -1979,6 +2077,25 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 				}));
 
+				it("should sort groups on a grouping key over a multi-valued property (§5.7.5, §5.8.2.1)", factory(async ({ store }) => {
+
+					// §5.7.5 + §5.8.2.1: each group holds one value per grouping key, so a sort key matching
+					// the multi-valued `documents` grouping key is admitted and sorts the groups by key value
+
+					const expected = [...new Set(products.flatMap(p => p.documents))].sort();
+
+					const result = projected(members(await store.lookup({
+						entry: Catalogue,
+						shape: Products,
+						model: catalogue({ "document=documents": {}, "cnt=count:": {} }, {
+							"^documents": 1
+						})
+					})));
+
+					expect(result?.map(r => r.document)).toEqual(expected);
+
+				}));
+
 				const rejectKeyCases: ReadonlyArray<readonly [string, Criteria]> = [
 					["ordering", { "^vendor": 1 }],
 					["focus", { "+vendor": [vendors[0].id] }]
@@ -2019,6 +2136,35 @@ export function testRetrieveProjection(factory: TestFactory): void {
 						})));
 
 						expect(result).toHaveLength(products.length);
+
+					}));
+
+				it("should rank focused groups first on a grouping key over a multi-valued property (§5.7.4, §5.8.2.1)",
+					factory(async ({ store }) => {
+
+						// §5.7.4 + §5.8.2.1: the faceted listing shape; each group holds one value per grouping
+						// key, so a focus matching the multi-valued `categories` grouping key is admitted and
+						// ranks the selected category first, the remaining groups following by descending count.
+						// The least populated category is focused, so the ranking can't follow from the counts.
+
+						const counts = countBy(products.flatMap(p => p.categories), category => category);
+						const [focused] = Object.keys(counts).sort(by(category => counts[category], ascending));
+
+						const result = projected(members(await store.lookup({
+							entry: Catalogue,
+							shape: Products,
+							model: catalogue({ "category=categories": {}, "cnt=count:": {} }, {
+								"^count:": -2,
+								"+categories": [focused]
+							})
+						}))) ?? [];
+
+						const [head, ...tail] = result;
+						const rest = tail.map(r => r.cnt);
+
+						expect(result).toHaveLength(Object.keys(counts).length);
+						expect(head?.category).toBe(focused);
+						expect(rest).toEqual([...rest].sort(descending));
 
 					}));
 

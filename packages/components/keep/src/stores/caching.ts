@@ -38,12 +38,16 @@ import type { Store } from "../index.js";
  * be reused. This cuts latency and backend load for read-heavy workloads, while writes and eviction keep cached
  * results coherent and bounded.
  *
- * Results are cached by `entry`, `model`, and the `locale` and `limit` of the {@link Store.lookup lookup} retrieval scope.
- * Templates differing only in member or element order share a cached result.
+ * Results are cached by `entry`, `model` and `virtual`, and by the `locale` and `limit` of the retrieval scope of
+ * {@link Store.lookup lookup}. Templates differing only in member or element order share a cached result.
  *
  * > [!IMPORTANT]
- * > `shape` is not part of the cache key. A retrieval result MUST depend only on `entry`, `model`, `locale` and
- * > `limit`, with `shape` supplying structural metadata that does not affect the returned payload.
+ * > `shape` is not part of the cache key. A retrieval result MUST depend only on `entry`, `model`, `virtual`,
+ * > `locale` and `limit`, with `shape` supplying structural metadata that does not affect the returned payload.
+ *
+ * > [!IMPORTANT]
+ * > The request `virtual` flag is part of the cache key, because virtual and held retrievals of the same entry
+ * > return different collections. An omitted and a `false` flag share a single cached result.
  *
  * > [!IMPORTANT]
  * > The scope `locale` is part of the cache key, because it selects which localised content a retrieval returns.
@@ -165,9 +169,9 @@ export function createCachingStore(store: Store, {
 
 	return immutable<Store>({
 
-		lookup({ entry, shape, model }, opts) {
+		lookup({ virtual, entry, shape, model }, opts) {
 
-			return memoise(entry, model, opts, () => store.lookup({ entry, shape, model }, opts));
+			return memoise(entry, model, { ...opts, virtual }, () => store.lookup({ virtual, entry, shape, model }, opts));
 
 		},
 
@@ -245,9 +249,10 @@ export function createCachingStore(store: Store, {
 	 * @param entry - Resource identifier; paired with the canonicalised model and varying scope members to form the
 	 *     cache key
 	 * @param model - Retrieval model, canonicalised so that equivalent models in different orderings share a key
-	 * @param vary  - Retrieval scope members whose values vary the returned payload, folded into the key: `locale`
-	 *   order-significantly (an omitted or empty list collapsing to a single key) and `limit` because it caps each
-	 *   collection's `#` pagination bound (an omitted or `0` unbounded value collapsing to a single key)
+	 * @param vary  - Request and retrieval scope members whose values vary the returned payload, folded into the key:
+	 *   `locale` order-significantly (an omitted or empty list collapsing to a single key), `limit` because it caps
+	 *   each collection's `#` pagination bound (an omitted or `0` unbounded value collapsing to a single key) and
+	 *   `virtual` because it derives collections by class rather than by links (omitted and `false` collapsing to one)
 	 * @param miss  - Fetcher invoked on cache miss, on TTL expiration, or while the entry has an in-flight write
 	 *
 	 * @returns The memoised, freshly-fetched, or bypass-fetched promise
@@ -255,7 +260,7 @@ export function createCachingStore(store: Store, {
 	function memoise<V>(
 		entry: Reference,
 		model: unknown,
-		vary: { readonly locale?: readonly Tag[]; readonly limit?: number } = {},
+		vary: { readonly locale?: readonly Tag[]; readonly limit?: number; readonly virtual?: boolean } = {},
 		miss: () => Promise<Optional<V>>
 	): Promise<Optional<V>> {
 
@@ -269,15 +274,18 @@ export function createCachingStore(store: Store, {
 
 		} else {
 
-			// Cache key layout: `<entry>\x00<canonical-model>\x00<locale>\x00<limit>`. `canonical` walks the
-			// model bottom-up, sorting object keys and (already-canonical) array elements, so models differing only
-			// in ordering share a key. The locale segment is serialised verbatim (order preserved, since the priority
-			// list is order-significant) with omitted and empty lists collapsing to `[]`. The limit segment is
-			// keyed because it caps each collection's `#` and so changes the payload, with omitted and `0` (both
-			// unbounded) collapsing to `0`. `\x00` is safe as a separator: IRIs cannot contain it and JSON always
-			// escapes it inside string payloads.
+			// Cache key layout: `<entry>\x00<canonical-model>\x00<locale>\x00<limit>\x00<virtual>`. `canonical`
+			// walks the model bottom-up, sorting object keys and (already-canonical) array elements, so models
+			// differing only in ordering share a key. The locale segment is serialised verbatim (order preserved,
+			// since the priority list is order-significant) with omitted and empty lists collapsing to `[]`. The
+			// limit segment is keyed because it caps each collection's `#` and so changes the payload, with omitted
+			// and `0` (both unbounded) collapsing to `0`. The virtual segment is keyed because it derives collections
+			// by class rather than by stored links, with omitted and `false` collapsing to `false`. `\x00` is safe
+			// as a separator: IRIs cannot contain it and JSON always escapes it inside string payloads.
 
-			const key = [entry, canonical(model), JSON.stringify(vary.locale ?? []), vary.limit ?? 0].join("\x00");
+			const key = [
+				entry, canonical(model), JSON.stringify(vary.locale ?? []), vary.limit ?? 0, vary.virtual ?? false
+			].join("\x00");
 
 			const cached = cache.get(key);
 

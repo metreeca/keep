@@ -22,12 +22,12 @@
  * @module index
  */
 
-import { createScope } from "@metreeca/core/scope";
 import { createFlake } from "@metreeca/keep-flake";
 import type { Deferred, Modify } from "@metreeca/keep/batching";
-import { type RepositoryClient, variable as toVariable } from "@metreeca/wire-sparql";
-import { decode } from "./decode.js";
+import type { RepositoryClient } from "@metreeca/wire-sparql";
+import { write } from "../spine.js";
 import { encode } from "./encode.js";
+
 
 /**
  * Applies a batch of {@link Modify} requests against a repository as a single update.
@@ -39,26 +39,28 @@ import { encode } from "./encode.js";
  *
  * Every request is applied unconditionally: the batching layer has already rejected any request whose `state`
  * carries an `id` other than its `entry` (§4.1). Each {@link Deferred} resolves to its entry once the update
- * completes. A backend failure propagates, and the batching layer settles it as a rejection across the batch.
+ * completes, and a backend failure rejects every request of the batch, since the one update carried them all.
  *
  * @param batch The modify requests to apply
  * @param client The repository the mutations are applied against
  *
  * @returns A promise settling once the batched update has been applied
  */
-export async function modify(
+export function modify(
 	batch: readonly Deferred<Modify>[],
 	client: RepositoryClient
 ): Promise<void> {
 
-	const scope = createScope(toVariable);
-
-	const items = batch.map(modify =>
-		({ ...modify, flake: createFlake(modify.request.shape) })
+	const items = batch.map(item =>
+		({ ...item, flake: createFlake(item.request.shape) })
 	);
 
-	decode(scope, items, await client.update(
-		encode(scope, items)
-	));
+	return write(batch, client, {
+
+		encode: scope => encode(scope, items),
+
+		decode: (_, { request: { entry } }) => entry
+
+	});
 
 }

@@ -705,6 +705,37 @@ export function testRetrieveCollection(factory: TestFactory): void {
 
 		});
 
+
+		describe("windowed slots across members — §5.7.6", () => {
+
+			// expanding every member of a catalogue through one template reads the same windowed slot under many
+			// owners at once: each owner's window applies to its own values, in its own order, never to the values
+			// of every owner pooled together, whatever the connector does to serve the owners in one go
+
+			it("should window each member's slot on its own values", factory(async ({ store }) => {
+
+				const result = members(await store.lookup({
+					entry: Catalogue,
+					shape: Products,
+					model: catalogue({ id: {}, documents: collection({}, { "^": 1, "@": 1, "#": 2 }) })
+				})) ?? [];
+
+				expect(result).toHaveLength(products.length);
+
+				result.forEach(member => {
+
+					const product = lookup(products, { id: member.id });
+
+					if ( product === undefined ) { return; }
+
+					expect(member.documents ?? []).toEqual([...product.documents].sort().slice(1, 3));
+
+				});
+
+			}));
+
+		});
+
 	});
 
 }

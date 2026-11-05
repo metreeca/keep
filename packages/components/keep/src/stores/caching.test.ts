@@ -463,6 +463,49 @@ describe("createCachingStore", () => {
 	});
 
 
+	describe("virtual keying", () => {
+
+		it("should cache independently for virtual and held retrievals of the same entry and model", async () => {
+
+			// a virtual retrieval derives its collections by class where a held one reads stored links, so the
+			// two resolve to different payloads for the same entry and model and must not share a cache entry
+
+			const mock = MockStore();
+			const store = createCachingStore(mock);
+
+			await store.lookup({ entry: "/x", shape, model: {} });
+			await store.lookup({ virtual: true, entry: "/x", shape, model: {} });
+
+			expect(mock.calls).toEqual(["lookup", "lookup"]);
+
+		});
+
+		it("should return cached result for identical virtual retrievals", async () => {
+
+			const mock = MockStore();
+			const store = createCachingStore(mock);
+
+			await store.lookup({ virtual: true, entry: "/x", shape, model: {} });
+			await store.lookup({ virtual: true, entry: "/x", shape, model: {} });
+
+			expect(mock.calls).toEqual(["lookup"]);
+
+		});
+
+		it("should share cache for omitted and false virtual", async () => {
+
+			const mock = MockStore();
+			const store = createCachingStore(mock);
+
+			await store.lookup({ entry: "/x", shape, model: {} });
+			await store.lookup({ virtual: false, entry: "/x", shape, model: {} });
+
+			expect(mock.calls).toEqual(["lookup"]);
+
+		});
+
+	});
+
 	describe("limit keying", () => {
 
 		it("should cache independently for different limits on same entry and model", async () => {

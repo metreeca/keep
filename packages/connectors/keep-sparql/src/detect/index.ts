@@ -22,10 +22,9 @@
  * @module index
  */
 
-import { createScope } from "@metreeca/core/scope";
-import type { Deferred, Detect } from "@metreeca/keep/batching";
-import { type RepositoryClient, variable } from "@metreeca/wire-sparql";
-import { decode } from "./decode.js";
+import type { Broker, Deferred, Detect } from "@metreeca/keep/batching";
+import type { RepositoryClient } from "@metreeca/wire-sparql";
+import { plain, read } from "../spine.js";
 import { encode } from "./encode.js";
 
 
@@ -37,18 +36,23 @@ import { encode } from "./encode.js";
  *
  * @param batch The queued detect requests to resolve
  * @param client The repository the existence query runs against
+ * @param broker The channel for nested requests, which the pass never issues
  *
  * @returns A promise settling once every request in the batch has been resolved
  */
-export async function detect(
+export function detect(
 	batch: readonly Deferred<Detect>[],
-	client: RepositoryClient
+	client: RepositoryClient,
+	broker: Broker
 ): Promise<void> {
 
-	const scope = createScope(variable);
+	return read(batch, client, broker, {
 
-	decode(scope, batch, await client.select(
-		encode(scope, batch)
-	));
+		encode: scope => encode(scope, batch),
+		owner: scope => scope.resolve(batch),
+
+		decode: (_, __, rows) => plain(rows.length > 0)
+
+	});
 
 }

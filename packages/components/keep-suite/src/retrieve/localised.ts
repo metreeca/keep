@@ -34,7 +34,7 @@ import type { Criteria } from "@metreeca/qest/model";
 import { beforeAll, describe, expect, it } from "vitest";
 import { lookup, type TestFactory } from "../index.core.js";
 import { collections } from "../toys.core.js";
-import { Products, Vendors } from "../toys.js";
+import { Products, Vendor, Vendors } from "../toys.js";
 import { catalogue, members } from "./index.js";
 
 
@@ -158,6 +158,31 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 
 				expect(omitted).toEqual(und);
 				expect(omitted).not.toEqual(en);
+
+			}));
+
+			it("should take an explicitly empty locale priority literally (§6.2)", factory(async ({ store }) => {
+
+				// §6.2: a supplied priority is taken literally and the `und` default applies only where none is
+				// supplied at all, so an empty priority names no tag and every localised property coalesces to
+				// `undefined`, the und-tagged vendor `label` included, on a collection row and a detailed resource alike
+
+				const rows = members(await store.lookup({
+					entry: VendorCatalogue,
+					shape: Vendors,
+					model: catalogue({ id: {}, label: {} })
+				}, { locale: [] })) ?? [];
+
+				expect(rows).toHaveLength(vendors.length);
+				rows.forEach(row => expect(row.label).toBeUndefined());
+
+				const [vendor] = vendors;
+
+				expect(await store.lookup({
+					entry: vendor.id,
+					shape: Vendor,
+					model: { id: {}, label: {} }
+				}, { locale: [] })).toEqual({ id: vendor.id });
 
 			}));
 
@@ -867,8 +892,8 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 
 			it.each(rejectedKeys)("should reject a direct %s over a coalesced array-per-tag property as a multi-valued target", (_label, selection) => factory(async ({ store }) => {
 
-				// §5.7.4/§5.7.5: sort and focus are single-valued contexts, so a multi-valued coalesced
-				// set is no more a sort or focus key than any other multi-valued property.
+				// §5.7.4/§5.7.5: outside grouped queries, sort and focus are single-valued contexts, so a
+				// multi-valued coalesced set is no more a sort or focus key than any other multi-valued property.
 
 				await expect(store.lookup({
 					entry: ProductCatalogue,

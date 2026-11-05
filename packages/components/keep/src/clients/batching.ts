@@ -35,6 +35,9 @@
  * resource its query reaches. Each request thus descends exactly as deep as its `model` or `query` nests, however
  * deep the underlying graph runs.
  *
+ * A connector may declare {@link Limits | caps} matching its backend: the most requests one handler call receives,
+ * and the most handler calls in flight at once. A larger accumulation then runs as several smaller batches.
+ *
  * > [!IMPORTANT]
  * > Handlers run concurrently and exchange nested requests through the {@link Broker}. A handler must not assume any
  * > ordering between handlers, and must await every nested request it issues before settling the request that
@@ -99,6 +102,10 @@ export type Detect = {
  * Carries a single resource (`entry` of `shape`), the `model` to materialise it against, and the `locale` priority
  * for coalescing its localised content (QEST §6.2). Resolves to the materialised resource.
  *
+ * A `virtual` request materialises a resource derived from the store rather than held in it, and resolves even if
+ * `entry` is not stored. Its single-valued members come from whatever `entry` holds. Each multi-valued member the
+ * model reaches is retrieved as a `virtual` {@link Select}, while expanded resources are retrieved as held.
+ *
  * @typeParam T The resource model selecting the members of the result
  * @typeParam S The shape describing the resource
  */
@@ -106,6 +113,13 @@ export type Detail<
 	T extends Template = Template,
 	S extends Lazy<ResourceShape> = Lazy<ResourceShape>
 > = {
+
+	/**
+	 * Whether the resource is derived from the store rather than held in it.
+	 *
+	 * @defaultValue `false` (held as it stands)
+	 */
+	readonly virtual?: boolean;
 
 	readonly entry: Reference;
 	readonly shape: S;
@@ -122,9 +136,19 @@ export type Detail<
  * `locale` priority for coalescing its localised content (QEST §6.2). Resolves to the materialised collection: items
  * for a template query, rows for a projection.
  *
+ * A `virtual` request materialises the collection from every stored instance of the classes the range of `field`
+ * declares, rather than from the resources `entry` links to. The `query` applies to them as to a held collection.
+ *
  * @typeParam T The collection query selecting the form of the result
  */
 export type Select<T extends Query<Slot> = Query<Slot>> = {
+
+	/**
+	 * Whether the collection is derived from the store rather than held in it.
+	 *
+	 * @defaultValue `false` (held as it stands)
+	 */
+	readonly virtual?: boolean;
 
 	readonly entry: Reference;
 	readonly shape: Lazy<ResourceShape>;
@@ -162,12 +186,17 @@ export type Modify = {
 /**
  * Batch handler for a single request type.
  *
- * Supplied by the connector to {@link createBatchingStore}, one per request type. A handler receives every request of
- * its type accumulated since the previous batch, together with a {@link Broker} for issuing nested requests. It
- * settles each {@link Deferred} in the batch with its result or error. The returned promise must resolve only once
- * every request in the batch has settled, including any nested requests issued through the broker.
+ * Supplied by the connector to {@link createBatchingStore}, one per request type. A handler receives requests of its
+ * type accumulated since the previous batch, together with a {@link Broker} for issuing nested requests. It settles
+ * each {@link Deferred} in the batch with its result or error. The returned promise must resolve only once every
+ * request in the batch has settled, including any nested requests issued through the broker.
  *
- * Batches are never empty, so handlers need not guard against an empty one.
+ * Every batch shares one plan, so a handler reads the plan off any of its requests and never compares them. Every
+ * {@link Detail} in a batch names the same `shape`, a structurally equal `model` and an equal `locale`. Every
+ * {@link Select} names the same `field`, a structurally equal `query`, an equal `locale` and the same `virtual` flag.
+ * A detail batch may mix virtual and held requests, so a detail handler reads `virtual` off each request.
+ * {@link Detect} and {@link Modify} batches are not split by plan, and a modify batch keeps submission order. A batch
+ * is never empty and never holds more requests than the {@link Limits | limit} declared for its type.
  *
  * @typeParam R The request variant handled
  */
@@ -176,6 +205,45 @@ export type Handler<R extends Request> = {
 	(batch: readonly Deferred<R>[], broker: Broker): Promise<void>
 
 }
+
+/**
+ * The caps a connector declares on how its {@link Handler | handlers} are called.
+ *
+ * The caps keep a connector within what its backend accepts: no batch outgrows what the backend takes in one query,
+ * and no more handler calls run at once than the backend serves concurrently. An omitted cap sets no limit.
+ */
+export type Limits = {
+
+	/**
+	 * The most {@link Detect} requests one handler call receives; a larger accumulation runs as several batches.
+	 */
+	readonly detect?: number;
+
+	/**
+	 * The most {@link Detail} requests one handler call receives. A larger accumulation of one plan runs as several
+	 * batches of that plan, so the cap bounds the entries a backend query has to read at once.
+	 */
+	readonly detail?: number;
+
+	/**
+	 * The most {@link Select} requests one handler call receives. A larger accumulation of one plan runs as several
+	 * batches of that plan, so the cap bounds the owners a backend query has to read at once.
+	 */
+	readonly select?: number;
+
+	/**
+	 * The most {@link Modify} requests one handler call receives. A larger accumulation runs as several batches,
+	 * which may run concurrently, so submission order holds only within each batch.
+	 */
+	readonly modify?: number;
+
+	/**
+	 * The most handler calls in flight at once, counted across all request types. A call beyond the cap starts as
+	 * soon as one in flight settles, so a backend with a connection limit is never asked for more.
+	 */
+	readonly burst?: number;
+
+};
 
 /**
  * A queued request paired with its promise-resolution hooks.
@@ -267,14 +335,16 @@ export type Broker = {
  *
  * Coalesces concurrent {@link StoreClient} calls into batches, each served by the matching `handlers` entry. The
  * client adds conditional CRUD semantics on top of the handlers: `create`, `update` and `delete` probe for existence
- * through the `detect` handler before handing the mutation to `modify`. `create` mints the identifier of the new
- * resource, if its state names none, and links it to the collecting resource.
+ * through the `detect` handler before handing the mutation to `modify`. `lookup` probes for existence the same way,
+ * except for a `virtual` lookup, which goes straight to the `detail` handler. `create` mints the identifier of the new
+ * resource, if its state names none, and links it to the collecting resource as a new collection member.
  *
  * The `modify` handler receives only requests whose `state` carries no `id` other than their `entry`. A request
  * failing this check is rejected on its own, and the rest of the batch still applies. If the `modify` handler throws,
  * the error rejects every request in its batch.
  *
  * @param handlers The batch handlers, one per request type
+ * @param options The caps on how `handlers` are called
  *
  * @returns An immutable {@link StoreClient} serving its requests in batches through `handlers`
  *
@@ -288,7 +358,20 @@ export function createBatchingStore(handlers: {
 	select: Handler<Select>
 	modify: Handler<Modify>
 
-}): StoreClient {
+}, {
+
+	limit = {}
+
+}: {
+
+	/**
+	 * The caps on batch size per request type and on handler calls in flight, matched to what the backend accepts.
+	 *
+	 * @defaultValue No limit: each handler receives its whole accumulation and every call of a round runs at once
+	 */
+	readonly limit?: Limits
+
+} = {}): StoreClient {
 
 	const broker = createBroker({
 
@@ -330,11 +413,13 @@ export function createBatchingStore(handlers: {
 
 		}
 
-	});
+	}, limit);
 
 	return immutable({
 
-		async lookup<S extends Lazy<ResourceShape>, T extends Template>({ entry, shape, model }: {
+		async lookup<S extends Lazy<ResourceShape>, T extends Template>({ virtual = false, entry, shape, model }: {
+
+			virtual?: boolean,
 
 			entry: Reference,
 			shape: S,
@@ -350,8 +435,10 @@ export function createBatchingStore(handlers: {
 
 		} = {}): Promise<Optional<Match<S, T>>> {
 
-			return await broker.detect({ entry })
-				? broker.detail({ entry, shape, model, locale })
+			// a virtual resource is derived rather than held, so it is detailed without probing its presence
+
+			return virtual || await broker.detect({ entry })
+				? broker.detail({ virtual, entry, shape, model, locale })
 				: undefined;
 
 		},

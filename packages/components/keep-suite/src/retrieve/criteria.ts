@@ -2504,8 +2504,8 @@ export function testRetrieveCriteria(factory: TestFactory): void {
 			const rejected: ReadonlyArray<readonly [string, Criteria]> = [
 				["text search over a numeric target", { "~price": "10" }],
 				["comparison over a reference target", { "<vendor": "a" }],
-				["sort over a multi-valued target", { "^documents": 1 }],
-				["focus over a multi-valued target", { "+categories": ["https://data.example.net/categories/1000"] }],
+				["ungrouped sort over a multi-valued target", { "^documents": 1 }],
+				["ungrouped focus over a multi-valued target", { "+categories": ["https://data.example.net/categories/1000"] }],
 				["a numeric bound over a string target", { ">=condition": 5 }],
 				["a mismatched option type over a string target", { "?condition": [42] }],
 				["a negative offset", { "@": -1 }],

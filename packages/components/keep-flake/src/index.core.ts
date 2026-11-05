@@ -313,14 +313,14 @@ export function getDrain(range: Range, query: Query<Slot>, alias?: Identifier): 
  * declares. A multi-variant range reads the query as a union (§5.5): each alternative is matched against the
  * variants by form. A single-variant range folds the whole model against that variant. Either way each reachable
  * variant resolves its target and folds every model entry against the target's declared properties: names the target
- * does not declare are dropped, `id` and `type` entries become terminal branches, and property entries carry their
- * requested query as their {@link Flake.drain | drain}. A name declared by several variants is one property (union
- * coherence, §3.2): the requests reaching it fold through {@link mergeQueries} into one branch, entered through the
- * first declaring variant's member and ranging over the disjunction of the per-variant declarations (§5.8.1). Only a
- * single-valued property expanded by a non-atomic request is descended for nested properties. An atomic request
- * (§5.3) or a multi-valued property, whose nested retrieval stays in its {@link @metreeca/qest/model!Query | query}
- * (§5.6), holds none. `path` accumulates the branch path to this node and is prefixed onto every emitted child
- * branch.
+ * does not declare are dropped, every requested entry carries its query as its {@link Flake.drain | drain}, and `id`
+ * and `type` entries become terminal branches in the atomic form. A name declared by several variants is one
+ * property (union coherence, §3.2): the requests reaching it fold through {@link mergeQueries} into one branch,
+ * entered through the first declaring variant's member and ranging over the disjunction of the per-variant
+ * declarations (§5.8.1). Only a single-valued property expanded by a non-atomic request is descended for nested
+ * properties. An atomic request (§5.3) or a multi-valued property, whose nested retrieval stays in its
+ * {@link @metreeca/qest/model!Query | query} (§5.6), holds none. `path` accumulates the branch path to this node
+ * and is prefixed onto the path of every emitted child branch, so each branch carries its full address.
  *
  * @param range The effective {@link Range} of the node whose properties are assembled
  * @param path  The branch path accumulated to this node, prefixed onto every emitted child branch
@@ -374,6 +374,11 @@ export function getEntries(range: Range, path: readonly Identifier[], model: Que
 
 		if ( member.kind === "id" || member.kind === "type" ) {
 
+			// a requested marker is a retrieval like any other property, so a consumer rebuilding a template from
+			// a node's drained branches keeps it; its IRI range admits the atomic form alone
+
+			const child = getPropertyRange(range, name);
+
 			return [[name, {
 
 				entry: member,
@@ -381,7 +386,8 @@ export function getEntries(range: Range, path: readonly Identifier[], model: Que
 				path: lower,
 				pipe: [],
 
-				range: getPropertyRange(range, name)
+				range: child,
+				drain: getDrain(child, query)
 
 			}]];
 
