@@ -845,6 +845,45 @@ export function testRetrieveExpression(factory: TestFactory): void {
 
 				}));
 
+				// A total aggregate (`sum`/`avg`) accepts the numeric variant alone, so the grades drop from the
+				// reduction rather than voiding it (§5.8.2, Appendix A.4.2): the total reads the numeric scores alone
+
+				it("should sum the numeric variant alone of a union-typed property", factory(async ({ store }) => {
+
+					const numeric = vendors.map(v => v.score).filter(score => typeof score === "number");
+
+					const expected = numeric.reduce((total, score) => total+score, 0);
+
+					const result = members(await store.lookup({
+						entry: VendorCatalogue,
+						shape: Vendors,
+						model: catalogue({ "total=sum:score": {} })
+					}));
+
+					expect(numeric.length).toBeGreaterThan(0);
+					expect(numeric.length).toBeLessThan(vendors.length);
+					expect(result).toEqual([{ total: expected }]);
+
+				}));
+
+				it("should average the numeric variant alone of a union-typed property", factory(async ({ store }) => {
+
+					const numeric = vendors.map(v => v.score).filter(score => typeof score === "number");
+
+					const expected = numeric.reduce((total, score) => total+score, 0)/numeric.length;
+
+					const result = members(await store.lookup({
+						entry: VendorCatalogue,
+						shape: Vendors,
+						model: catalogue({ "mean=avg:score": {} })
+					}));
+
+					expect(numeric.length).toBeGreaterThan(0);
+					expect(numeric.length).toBeLessThan(vendors.length);
+					expect(result).toEqual([{ mean: expected }]);
+
+				}));
+
 			});
 
 

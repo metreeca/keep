@@ -88,6 +88,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   ([#27](https://github.com/metreeca/keep/issues/27)), whether over the whole collection, within groups, under row
   and group filters or wrapped in a scalar transform; `@metreeca/keep-suite` checks connectors for these sparse
   reductions, including groups keyed on an optional property, whose values never leak into other groups
+- `@metreeca/keep-sparql` — `sum` and `avg` over a union-typed property, such as a score held as either a decimal or
+  a letter grade, now reduce the numeric values alone, as the specification requires. A single value on the string
+  branch previously voided the aggregate on Oxigraph and Jena, so `sum` read as `0` and `avg` as undefined
+  ([#28](https://github.com/metreeca/keep/issues/28)). `min` and `max` over a union mixing literals with references,
+  such as an origin held as either a text or a linked place, likewise reduce the literals alone. `@metreeca/keep-suite`
+  now checks that connectors total and average the numeric variant of a union-typed property alone
 - `@metreeca/keep-flake` — a bare template key in a collection query no longer gives its node an alias, so
   `isProbeBranch` picks out projected nodes alone and `isModelBranch` no longer misses single-valued template
   entries; `getFlakeTemplate` leaves out the branches bound by the enclosing projection, since they are bindings of

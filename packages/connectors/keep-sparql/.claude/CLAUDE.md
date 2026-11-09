@@ -49,7 +49,7 @@ Conventions for `src/**/encode.ts` modules. Existing encoders (`detect/encode.ts
 > every connector. Only the SPARQL-specific instantiation below stays here.
 
 - **Compose `patterns.ts`, add no emitter of your own**: an encoder assembles clauses from the shared emitters
-	(`link`, `forward`, `reverse`, `membership`, `textual`, `expression`, `coalesced`, `folded`); a helper rendering an
+	(`link`, `forward`, `reverse`, `membership`, `admission`, `textual`, `expression`, `coalesced`, `folded`); a helper rendering an
 	edge, a gate or a label that one pass needs belongs in `patterns.ts`, so the next pass composes it.
 - **Defer anchor → SPARQL conversion** (the SPARQL instance of the skill's "convert to target-language text only at the
   leaf" rule): thread edge endpoints (the request entry, focus and target nodes) as raw `Variable | Term` values,

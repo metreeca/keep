@@ -18,7 +18,7 @@ import { getShapeProperties, type Property } from "@metreeca/blue/resource";
 import type { Tag } from "@metreeca/core/language";
 import { createScope } from "@metreeca/core/scope";
 import { createQueryFlake } from "@metreeca/keep-flake";
-import { Category, toys } from "@metreeca/keep-suite/toys";
+import { Category, toys, Vendors } from "@metreeca/keep-suite/toys";
 import type { Query, Slot } from "@metreeca/qest/model";
 import type { Reference } from "@metreeca/qest/state";
 import { type SPARQL, variable } from "@metreeca/wire-sparql";
@@ -202,6 +202,84 @@ describe("encode", () => {
 			const encoded = query(group(entries, { "cnt=count:broader": {} }));
 
 			expect(encoded).not.toContain("if(bound(");
+
+		});
+
+		describe("over a union-typed value", () => {
+
+			// `Vendor.score` is `union(decimal, string)`: `sum`/`avg` accept its number variant alone, `min`/`max`
+			// and `count` accept both, so only the former need the subselect to guard the branch (Appendix A.4.2)
+
+			const members = getShapeProperties(Vendors)["members"];
+
+			function guards(query: SPARQL): readonly string[] {
+				return query.match(/filter\(\(bound\(\?\d+\) && isnumeric\(\?\d+\)\)\)/g) ?? [];
+			}
+
+			function vendors(query: Query<Slot>): Group {
+
+				if ( members?.kind !== "property" ) {
+					throw new Error("undefined property <members>");
+				}
+
+				const flake = createQueryFlake(members.range.shape, query);
+
+				return {
+					virtual: false, field: members, query, locale: [],
+					flake,
+					schema: schema(flake),
+					items: entries.map(entry => ({
+						request: { virtual: false, entry, shape: Vendors, field: members, query, locale: [] },
+						resolve: vi.fn(),
+						reject: vi.fn()
+					}))
+				};
+
+			}
+
+
+			it("guards the variants a reduction accepts", async () => {
+
+				const encoded = query(vendors({ "total=sum:score": {}, "mean=avg:score": {} }));
+
+				expect(subselects(encoded)).toHaveLength(1);
+				expect(guards(encoded)).toHaveLength(1);
+				expect(requirements(encoded)).toHaveLength(0);
+
+			});
+
+			it("requires the value alone where a reduction accepts every variant", async () => {
+
+				const encoded = query(vendors({ "cnt=count:score": {}, "low=min:score": {} }));
+
+				expect(subselects(encoded)).toHaveLength(1);
+				expect(guards(encoded)).toHaveLength(0);
+				expect(requirements(encoded)).toHaveLength(1);
+
+			});
+
+			it("guards the coalesced text of a union mixing it with a resource", async () => {
+
+				// `Vendor.origin` is `union(dictionary, Place)`: `min` accepts the text alone, which reaches the
+				// reduction coalesced to a plain string (§6.2), so the guard is the plain string test
+
+				const encoded = query(vendors({ "least=min:origin": {} }));
+
+				expect(subselects(encoded)).toHaveLength(1);
+				expect(encoded.match(/filter\(\(bound\(\?\d+\) && \(isliteral\(\?\d+\) && lang\(\?\d+\) = ""/g)).toHaveLength(1);
+				expect(requirements(encoded)).toHaveLength(0);
+
+			});
+
+			it("keeps apart the subselects of reductions accepting different variants", async () => {
+
+				const encoded = query(vendors({ "total=sum:score": {}, "low=min:score": {} }));
+
+				expect(subselects(encoded)).toHaveLength(2);
+				expect(guards(encoded)).toHaveLength(1);
+				expect(requirements(encoded)).toHaveLength(1);
+
+			});
 
 		});
 

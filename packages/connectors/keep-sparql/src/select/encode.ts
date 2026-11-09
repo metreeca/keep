@@ -35,10 +35,11 @@
  *  - the **whole**-collection aggregation (§5.2): a keyless aggregation keeps an owner without members, so the
  *    member edge turns optional and the owner row survives an empty member set.
  *
- * Every reduced value is aggregated in a subselect of its own over the members carrying it, so a member lacking the
- * value never voids an aggregate (QEST Appendix A.4.2). Strict engines, Oxigraph and Jena among them, read SPARQL
- * 1.1 §18.5.1 as voiding `min`, `max`, `sum` and `avg` over an unbound input. A group whose members all lack the
- * value leaves `min`, `max` and `avg` unbound, while `count` and `sum` come to `0` as the protocol requires.
+ * Every reduced value is aggregated in a subselect of its own, over the members carrying it in a variant the
+ * aggregate accepts. Neither a missing value nor one held in an incompatible variant of a union therefore voids the
+ * aggregate (QEST Appendix A.4.2, A.4.5). Strict engines, Oxigraph and Jena among them, read SPARQL 1.1 §18.5.1 as
+ * voiding `min`, `max`, `sum` and `avg` over an unbound or mistyped input. A group whose members all lack the value
+ * leaves `min`, `max` and `avg` unbound, while `count` and `sum` come to `0` as the protocol requires.
  *
  * The contract shared with the decoder is stated in `src/index.md`.
  *
@@ -70,7 +71,7 @@ import {
 	isRequiredFlake
 } from "@metreeca/keep-flake";
 import type { Deferred, Select } from "@metreeca/keep/batching";
-import { getOrderDirection, isAggregate, type Query, type Slot } from "@metreeca/qest/model";
+import { type Aggregate, getOrderDirection, isAggregate, type Query, type Slot, Transforms } from "@metreeca/qest/model";
 import type { Literal } from "@metreeca/qest/state";
 import { named, rdf, type Term } from "@metreeca/trio";
 import type { SPARQL, Variable } from "@metreeca/wire-sparql";
@@ -125,7 +126,7 @@ import {
 	variable,
 	where
 } from "@metreeca/wire-sparql/builder";
-import { anchor, coalesced, type Edge, expression, extension, folded, link, membership, textual } from "../patterns.js";
+import { admission, anchor, coalesced, type Edge, expression, extension, folded, link, membership, textual } from "../patterns.js";
 import { optionsToTerms, valueToTerm } from "../terms.js";
 import { type Column, column, columns as derive, type Schema } from "./schema.js";
 
@@ -226,9 +227,10 @@ type Context = {
 /**
  * A value the query reduces, with the aggregating stages reading it and the subselect columns they settle in.
  *
- * The stages reducing the same origin share one subselect, which admits only the members carrying the origin. Each
- * stage is projected there under a column distinct from the stage variable. The head binds the stage variable from
- * the column, and restores `count` and `sum` to `0` for a group lacking the value, which has no subselect row.
+ * The stages reducing the same origin under the same guard share one subselect, which admits only the members
+ * carrying the origin in a variant the stages accept. Each stage is projected there under a column distinct from the
+ * stage variable. The head binds the stage variable from the column, and restores `count` and `sum` to `0` for a
+ * group lacking the value, which has no subselect row, as the protocol requires over an empty set (Appendix A.4.3).
  */
 type Reduction = {
 
@@ -236,6 +238,12 @@ type Reduction = {
 	 * The member value the stages reduce.
 	 */
 	readonly origin: Variable;
+
+	/**
+	 * The branch guard admitting the origin into the subselect (Appendix A.4.2): the disjunction of the
+	 * {@link admission} tests of the variants the stages accept, or the empty fragment where they accept every variant.
+	 */
+	readonly guard: SPARQL;
 
 	/**
 	 * The reducing stages, each paired with the subselect column carrying its reduced value.
@@ -374,45 +382,65 @@ function grouping(flake: Flake): readonly Flake[] {
 }
 
 /**
- * The reductions a query reads, one per reduced value, each giving every stage reducing that value a subselect
- * column of its own. `min`/`max`/`sum`/`avg` over references are left out and their cells stay unbound (Appendix
- * A.4.1), while `count` still reduces references, counting them by presence alone.
+ * The reductions a query reads, one per reduced value and branch guard. Each stage reducing the value under the guard
+ * gets a subselect column of its own. A stage whose aggregate accepts no variant of the value, as `min`/`max`/`sum`/
+ * `avg` over references, is left out and its cell stays unbound (Appendix A.4.1). `count` accepts every value, so it
+ * still reduces references, counting them by presence alone, and takes no branch guard (§5.8.2.1).
  */
 function reducing(scope: Scope<Variable>, flake: Flake, read: (node: Flake) => boolean): readonly Reduction[] {
 
-	const stages = reduced(flake, scope.resolve(flake));
+	const stages = reduced(flake, scope.resolve(flake)).map(([stage, origin, guard]) =>
+		({ stage, origin, guard, key: `${origin} ${guard}` })
+	);
 
-	return unique(stages.map(([, origin]) => origin)).map(origin => ({
+	return stages
+		.filter(({ key }, index) => stages.findIndex(stage => stage.key === key) === index)
+		.map(({ origin, guard, key }) => ({
 
-		origin,
+			origin,
+			guard,
 
-		stages: stages
-			.filter(([, reduced]) => reduced === origin)
-			.map(([stage]): readonly [Flake, Variable] => [stage, scope.resolve()])
+			stages: stages
+				.filter(stage => stage.key === key)
+				.map(({ stage }): readonly [Flake, Variable] => [stage, scope.resolve()])
 
-	}));
+		}));
 
 
-	function reduced(node: Flake, origin: Variable): readonly (readonly [Flake, Variable])[] {
+	function reduced(node: Flake, origin: Variable): readonly (readonly [Flake, Variable, SPARQL])[] {
 
 		return [
 
-			...getFlakeTransforms(node).filter(read).flatMap(stage => {
-
-				const reduction: readonly [Flake, Variable] = [stage, origin];
-
-				return [
-					...(isReduction(stage) && (stage.pipe.find(isAggregate) === "count" || !isReferential(node)) ? [reduction] : []),
-					...reduced(stage, origin)
-				];
-
-			}),
+			...getFlakeTransforms(node).filter(read).flatMap(stage => [
+				...opt(stage.pipe.find(isAggregate), aggregate => reduction(stage, aggregate), []),
+				...reduced(stage, origin)
+			]),
 
 			...getFlakeEntries(node).filter(read).flatMap(branch =>
 				reduced(branch, scope.resolve(branch))
 			)
 
 		];
+
+
+		/**
+		 * The stage paired with its origin and branch guard, or nothing if its aggregate accepts no variant of the
+		 * value. The guard admits the variants the aggregate accepts, and is empty if the aggregate accepts them all.
+		 * A localised variant reaches the reduction coalesced to a string (§6.2), so its guard is the string test.
+		 */
+		function reduction(stage: Flake, aggregate: Aggregate): readonly (readonly [Flake, Variable, SPARQL])[] {
+
+			const variants = getShapeBranches(node.range.shape);
+			const admitted = accepted(node, aggregate);
+
+			return admitted.length === 0 ? [] : [[stage, origin, admitted.length === variants.length ? nil()
+				: or(...admitted.map(variant => variant.kind === "dictionary"
+					? textual(variable(origin))
+					: admission(variable(origin), variant)
+				))
+			]];
+
+		}
 
 	}
 
@@ -536,22 +564,23 @@ function joins({ joins }: Context): SPARQL {
 }
 
 /**
- * The reduction subselects of a reducing query, one per reduced value (Appendix A.4.2). Each restates the owner
- * `binding` and the member pattern, admits only the members carrying the value, and reduces them per owner and join
- * variables. The query left-joins each subselect on the owner and the join variables, so a group lacking the value
- * reads its reductions as unbound rather than losing its row or borrowing another group's values.
+ * The reduction subselects of a reducing query, one per reduced value and branch guard (Appendix A.4.2). Each
+ * restates the owner `binding` and the member pattern, admits only the members carrying the value in a variant the
+ * stages accept, and reduces them per owner and join variables. The query left-joins each subselect on the owner and
+ * the join variables. A group lacking the value thus reads its reductions as unbound: it neither loses its row nor
+ * borrows the values of another group, since the join variables of two groups never match, even for an absent key.
  */
 function reductions(context: Context, binding: SPARQL): readonly SPARQL[] {
 
 	const { owner, reductions, joins: joined } = context;
 
-	return reductions.map(({ origin, stages }) => optional(block(select(
+	return reductions.map(({ origin, guard, stages }) => optional(block(select(
 		[
 			variable(owner),
 			...joined.map(([, join]) => variable(join)),
 			...stages.map(([stage, column]) => as(expression(variable(origin), stage.pipe), variable(column)))
 		],
-		where(binding, ...body(context), joins(context), filter(isBound(variable(origin)))),
+		where(binding, ...body(context), joins(context), filter(and(isBound(variable(origin)), guard))),
 		groupBy(variable(owner), joined.map(([, join]) => variable(join)))
 	))));
 
@@ -1022,11 +1051,20 @@ function isMixed(branch: Branch): boolean {
 }
 
 /**
- * Checks whether a node resolves to references alone: a marker (an IRI-typed string) or a reference or
- * resource property, outside the domain of every aggregate but `count` (§5.8.2.1).
+ * The variants of a node's range in the domain of an `aggregate` (§5.8.2): every variant for `count`, the literal
+ * variants for `min` and `max`, the number variants for `sum` and `avg`. A marker (an IRI-typed string), a
+ * reference and a resource lie outside every domain but `count`'s. A localised variant counts as a literal one,
+ * since the query reads it coalesced to a plain string (§6.2), which `min` and `max` order as any other string.
  */
-function isReferential(node: Flake): boolean {
-	return getShapeBranches(node.range.shape).every(variant =>
-		variant.kind === "reference" || variant.kind === "resource" || (variant.kind === "string" && variant.datatype === sh.IRI)
+function accepted(node: Flake, aggregate: Aggregate): readonly Shape[] {
+
+	const { accepts } = Transforms[aggregate];
+
+	return getShapeBranches(node.range.shape).filter(variant =>
+		accepts === "any" ? true
+			: accepts === "numeric" ? variant.kind === "number"
+				: variant.kind === "boolean" || variant.kind === "number" || variant.kind === "dictionary"
+				|| (variant.kind === "string" && variant.datatype !== sh.IRI)
 	);
+
 }

@@ -192,9 +192,8 @@ export function anchor(owner: Variable | Named): SPARQL {
  * Generates the SPARQL clause admitting only the values belonging to a union variant.
  *
  * A classed resource or reference variant is gated by its stored `rdf:type` triple, and a classless one by an IRI
- * test. A boolean, number or string variant is gated by a `filter` on the literal kind. A localised `dictionary`
- * variant is gated by a language-tagged literal test, disjoint from the plain string test. Union variants are disjoint
- * by contract, so at most one variant admits a given value and a stored value never surfaces under two of them.
+ * test. A literal variant is gated by a `filter` over its {@link admission} test. Union variants are disjoint by
+ * contract, so at most one variant admits a given value and a stored value never surfaces under two of them.
  *
  * @param anchor The variable holding the value
  * @param shape The variant to gate on
@@ -210,26 +209,11 @@ export function membership(anchor: Variable, shape: Shape): SPARQL {
 	switch ( shape.kind ) {
 
 		case "boolean":
-
-			return filter(and(
-				isLiteral(value),
-				eq(datatype(value), reference(xsd.boolean))
-			));
-
 		case "number":
-
-			return filter(isNumeric(value));
-
 		case "string":
-
-			return filter(textual(value));
-
 		case "dictionary":
 
-			return filter(and(
-				isLiteral(value),
-				ne(lang(value), string(""))
-			));
+			return filter(admission(value, shape));
 
 		case "reference":
 		case "resource":
@@ -242,6 +226,57 @@ export function membership(anchor: Variable, shape: Shape): SPARQL {
 		case "union": // a range variant is always a flattened branch, never a union
 
 			throw new RangeError(`unsupported union variant`);
+
+	}
+
+}
+
+/**
+ * Generates the SPARQL test admitting a value into a literal variant of a union (§5.5).
+ *
+ * The test is the expression form of the {@link membership} gate. It composes into larger filter expressions where a
+ * clause cannot go, such as the branch guard keeping incompatible variants out of an aggregate (Appendix A.4.5). A
+ * localised `dictionary` variant differs from a plain `string` one by its language tag, so no value passes both tests.
+ *
+ * @param value The expression holding the value
+ * @param shape The literal variant to test for
+ *
+ * @returns The boolean expression holding when `value` belongs to `shape`
+ *
+ * @throws {@link !RangeError RangeError} If `shape` is a reference, resource or union shape: membership in a reference
+ * or resource variant depends on the stored class, and is gated by {@link membership} as a graph pattern instead
+ */
+export function admission(value: SPARQL, shape: Shape): SPARQL {
+
+	switch ( shape.kind ) {
+
+		case "boolean":
+
+			return and(
+				isLiteral(value),
+				eq(datatype(value), reference(xsd.boolean))
+			);
+
+		case "number":
+
+			return isNumeric(value);
+
+		case "string":
+
+			return textual(value);
+
+		case "dictionary":
+
+			return and(
+				isLiteral(value),
+				ne(lang(value), string(""))
+			);
+
+		case "reference":
+		case "resource":
+		case "union":
+
+			throw new RangeError(`unsupported ${shape.kind} variant`);
 
 	}
 
@@ -371,8 +406,9 @@ function winner(scope: Scope<Variable>, { owner, property }: Edge, locale: reado
  *
  * The trailing transform applies to `anchor` first and the leading transform is outermost. Each {@link Transform}
  * maps to its SPARQL aggregate or scalar function unchanged, so aggregates keep their SPARQL 1.1 §18.5.1 semantics:
- * strict engines void an aggregate fed an unbound value, and an empty group averages to `0`. Callers must feed
- * aggregates bound, compatible values only, and never an empty group (QEST Appendix A.4.2, A.4.3).
+ * strict engines void an aggregate fed an unbound or mistyped value, and an empty group averages to `0`. Callers
+ * must feed aggregates bound values only, never an empty group, and only values in the domain of the aggregate: the
+ * {@link admission} test keeps out the variants of a union outside it (QEST Appendix A.4.2, A.4.3, A.4.5).
  *
  * @param anchor The expression the pipe transforms, typically a value variable
  * @param pipe The transforms to compose, leading (outermost) first

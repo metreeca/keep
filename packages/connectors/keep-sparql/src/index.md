@@ -172,8 +172,9 @@ where {
     <filters>                       the row constraints, at group level
   [}]
   [bind(coalesce(<key>, <absent>) as <join>)]…   one join variable per key column of a reducing query
-  [optional { select ?owner <join>… (<pipe>(<value>) as <column>)…   one reduction subselect per reduced value
-    where { values (?owner) { … } <member pattern> bind(coalesce(<key>, <absent>) as <join>)… filter(bound(<value>)) }
+  [optional { select ?owner <join>… (<pipe>(<value>) as <column>)…   one subselect per reduced value and guard
+    where { values (?owner) { … } <member pattern> bind(coalesce(<key>, <absent>) as <join>)…
+      filter(bound(<value>) && <guard>) }
     group by ?owner <join>… }]…
 }
 [group by ?owner <key columns> <reduced columns>]
@@ -205,11 +206,14 @@ order by asc(?owner) <focus…> <sort keys…> <tiebreak…>
 - **reductions** — under SPARQL 1.1 §18.5.1 an unbound input is an error, and engines reading the spec strictly
   (Oxigraph, Jena) void `min`/`max`/`sum`/`avg` over it, where QEST drops the value (Appendix A.4.2). No aggregate
   therefore reads the group rows. Every read reducing stage is computed in a **reduction subselect**, one per reduced
-  value. The subselect restates the owner binding and the member pattern with `filter(bound(<value>))`, groups by the
-  owner and the join variables, and projects each stage's pipe as `(<pipe>(<value>) as <column>)`. It is left-joined
-  under `optional` on the owner and the **join variables**, one per key column. Both sides bind each join variable as
-  `coalesce(<key>, <absent>)`, with a sentinel IRI no key resolves to: SPARQL joins an unbound key with any value,
-  which would merge the group of an absent key into every other group. A filter inside the `optional` matching the
+  value and branch guard. The subselect restates the owner binding and the member pattern with
+  `filter(bound(<value>) && <guard>)`. The guard admits only the variants of a union-typed value in the domain of the
+  stage's aggregate (Appendix A.4.5), such as `isnumeric(<value>)` for `sum`/`avg` over a number mixed with a string,
+  and is left out where the aggregate accepts every variant. The subselect groups by the owner and the join variables
+  and projects each stage's pipe as `(<pipe>(<value>) as <column>)`. It is left-joined under `optional` on the owner
+  and the **join variables**, one per key column. Both sides bind each join variable as `coalesce(<key>, <absent>)`,
+  with a sentinel IRI no key resolves to: SPARQL joins an unbound key with any value, which would merge the group of
+  an absent key into every other group. A filter inside the `optional` matching the
   keys explicitly is not an alternative, since not every engine honours it (RDF4J cross-joins the groups). The head
   projects each stage as `(<column> as ?stage)`, under `coalesce(<column>, 0)` for `count` and `sum`, since a group
   whose members all lack the value has no subselect row (Appendix A.4.3). The outer `group by` also lists the columns,
