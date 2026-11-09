@@ -77,6 +77,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the resource, where it previously came back as an object holding the sibling's value and no identifier, leaving
   facets over linked resources with no value to offer ([#24](https://github.com/metreeca/keep/issues/24)); the
   item itself bound through an empty path beside a binding is kept bare the same way
+- `@metreeca/keep-sparql` — a localised label coalesces under the owner's own tags whatever other resources carry:
+  under a priority such as `["en", "und"]`, a resource labelled only in `und` now sorts, projects and contributes
+  its union text variant by that label, where sort keys like `^label` and `^vendor.label`, projected labels and
+  union variants previously came back unbound whenever the leading tag was present anywhere else in the store
+  ([#26](https://github.com/metreeca/keep/issues/26)); `@metreeca/keep-suite` checks connectors for the fallthrough
 - `@metreeca/keep-flake` — a bare template key in a collection query no longer gives its node an alias, so
   `isProbeBranch` picks out projected nodes alone and `isModelBranch` no longer misses single-valued template
   entries; `getFlakeTemplate` leaves out the branches bound by the enclosing projection, since they are bindings of

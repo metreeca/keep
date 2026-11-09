@@ -29,13 +29,14 @@
  */
 
 import type { Tag } from "@metreeca/core/language";
-import { ascending, by } from "@metreeca/core/order";
+import { isString } from "@metreeca/core";
+import { ascending, by, compound } from "@metreeca/core/order";
 import type { Criteria } from "@metreeca/qest/model";
 import { beforeAll, describe, expect, it } from "vitest";
 import { lookup, type TestFactory } from "../index.core.js";
 import { collections } from "../toys.core.js";
 import { Products, Vendor, Vendors } from "../toys.js";
-import { catalogue, members } from "./index.js";
+import { catalogue, members, rows as projected } from "./index.js";
 
 
 const { products, vendors } = collections;
@@ -642,6 +643,94 @@ export function testRetrieveLocalised(factory: TestFactory): void {
 				expect(row?.name).toBe(deOf(target.name));
 
 			}));
+
+			describe("falling through a leading tag other resources carry — §6.2", () => {
+
+				// §6.2: the priority is matched against the owner's own map, so a leading tag the owner lacks falls
+				// through to the next whatever other resources carry under it. The vendor labels are tagged `und`
+				// only while every product label is tagged `en`, so under ["en", "und"] each vendor still coalesces
+				// to its und label: in a sort key, in a projected cell and through a link alike. A processor that
+				// resolves the leading tag over the whole store before joining the owner leaves them unlabelled.
+
+				const priority: readonly Tag[] = ["en", "und"];
+
+				const labelOf = (vendor: typeof vendors[number] | undefined): string =>
+					vendor === undefined ? "" : coalesce(vendor.label) ?? "";
+
+				const vendorOf = (product: typeof products[number]) => lookup(vendors, { id: product.vendor });
+
+				it("should order a collection by a coalesced localised property (§5.7.5)", factory(async ({ store }) => {
+
+					const expected = [...vendors].sort(by(labelOf)).map(v => v.id);
+
+					const result = members(await store.lookup({
+						entry: VendorCatalogue,
+						shape: Vendors,
+						model: catalogue({ id: {} }, { "^label": 1 })
+					}, { locale: priority })) ?? [];
+
+					expect(result.map(r => r.id)).toEqual(expected);
+
+				}));
+
+				it("should order a collection by a coalesced localised property of a linked resource (§5.7.5)", factory(async ({ store }) => {
+
+					const expected = [...products]
+						.sort(compound(by(p => labelOf(vendorOf(p))), by(p => p.sku)))
+						.map(p => p.id);
+
+					const result = members(await store.lookup({
+						entry: ProductCatalogue,
+						shape: Products,
+						model: catalogue({ id: {} }, { "^vendor.label": 1, "^sku": 2 })
+					}, { locale: priority })) ?? [];
+
+					expect(result.map(r => r.id)).toEqual(expected);
+
+				}));
+
+				it("should project a coalesced localised property (§5.2)", factory(async ({ store }) => {
+
+					const result = projected(members(await store.lookup({
+						entry: VendorCatalogue,
+						shape: Vendors,
+						model: catalogue({ "id=id": {}, "label=label": {} })
+					}, { locale: priority })));
+
+					expect(result).toHaveLength(vendors.length);
+
+					vendors.forEach(v => {
+						const row = result.find(r => r.id === v.id);
+						expect(row?.label).toBe(coalesce(v.label));
+					});
+
+				}));
+
+				it("should project the coalesced text variant of a union property (§3.2)", factory(async ({ store }) => {
+
+					// the tagline union mixes plain strings with localised text: a plain slogan passes as it is, a
+					// localised one as the label the priority picks, the `und` slogan included
+
+					const taglineOf = (tagline: string | Local | undefined): string | undefined => tagline === undefined ? undefined
+						: isString(tagline) ? tagline
+							: priority.map(tag => tagline[tag]).find(isString);
+
+					const result = projected(members(await store.lookup({
+						entry: VendorCatalogue,
+						shape: Vendors,
+						model: catalogue({ "id=id": {}, "tagline=tagline": {} })
+					}, { locale: priority })));
+
+					expect(result).toHaveLength(vendors.length);
+
+					vendors.forEach(v => {
+						const row = result.find(r => r.id === v.id);
+						expect(row?.tagline).toBe(taglineOf(v.tagline));
+					});
+
+				}));
+
+			});
 
 			it("should order a collection by a coalesced localised property in the requested language (§5.7.5)", factory(async ({ store }) => {
 

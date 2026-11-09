@@ -59,7 +59,6 @@ import {
 	gt,
 	hours,
 	iif,
-	isBound,
 	isIRI,
 	isLiteral,
 	isNumeric,
@@ -73,7 +72,6 @@ import {
 	nil,
 	not,
 	number,
-	optional,
 	or,
 	pattern,
 	reference,
@@ -296,11 +294,11 @@ export function textual(value: SPARQL): SPARQL {
  * plain string a sibling string variant stores never passes. An owner carrying no value under any priority tag binds
  * nothing, as every owner does under an empty priority, which is taken literally rather than defaulted (§6.2).
  *
- * A property fixing a single string per tag is read through one `optional` edge per priority tag, coalesced into
- * one label. A property carrying several strings per tag settles the winning tag with an `exists` probe per tag
- * instead (Appendix A.5): a join per tag would multiply its rows by the values under every other tag.
+ * The patterns return one row per value under the winning tag and bind only where the owner is bound, so they nest
+ * safely inside any group at any depth, `optional` groups included. The winning tag is settled as Appendix A.5
+ * prescribes, so a property carrying several strings per tag never multiplies its rows by the values under other tags.
  *
- * @param scope The variable scope allocating the per-tag edges or the probe the priority is settled with
+ * @param scope The variable scope allocating the probe the priority is settled with
  * @param edge The edge storing the localised values
  * @param target The variable the label is bound to
  * @param locale The request's language priority, most preferred first
@@ -313,28 +311,11 @@ export function coalesced(scope: Scope<Variable>, edge: Edge, target: SPARQL, lo
 
 	const raw = variable(object);
 
-	if ( isUniqueLang(property) && locale.length > 0 ) {
-
-		const tagged = locale.map(tag => ({ tag, value: scope.resolve() }));
-
-		return [
-			...tagged.map(({ tag, value }) => optional(
-				link([owner, property, value]),
-				filter(eq(lang(variable(value)), string(tag)))
-			)),
-			bind(str(coalesce(...tagged.map(({ value }) => variable(value)))), target),
-			filter(isBound(target))
-		];
-
-	} else {
-
-		return [
-			link([owner, property, object]),
-			filter(and(ne(lang(raw), string("")), eq(lang(raw), winner(scope, edge, locale)))),
-			bind(str(raw), target)
-		];
-
-	}
+	return [
+		link([owner, property, object]),
+		filter(and(ne(lang(raw), string("")), eq(lang(raw), winner(scope, edge, locale)))),
+		bind(str(raw), target)
+	];
 
 }
 
@@ -381,16 +362,6 @@ function winner(scope: Scope<Variable>, { owner, property }: Edge, locale: reado
 		return exists(link([owner, property, probe]), filter(eq(lang(variable(probe)), string(tag))));
 	}
 
-}
-
-
-/**
- * Checks whether a localised property fixes a single string per tag, so its coalesced label is one value.
- */
-function isUniqueLang(property: Property): boolean {
-	return getShapeBranches(property.range.shape).some(variant =>
-		variant.kind === "dictionary" && variant.uniqueLang === true
-	);
 }
 
 
