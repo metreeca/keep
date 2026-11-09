@@ -122,6 +122,91 @@ describe("encode", () => {
 
 	});
 
+	describe("with the reductions", () => {
+
+		// a subselect per reduced value, its rows required to carry the value, keeps a member lacking it
+		// out of the aggregates (Appendix A.4.2), which an unbound input would void on a backend reading
+		// SPARQL 1.1 §18.5.1 strictly; the subselects stand out as the only nested `select` clauses
+
+		function subselects(query: SPARQL): readonly string[] {
+			return query.match(/\{ select /g) ?? [];
+		}
+
+		function requirements(query: SPARQL): readonly string[] {
+			return query.match(/filter\(bound\(\?\d+\)\)/g) ?? [];
+		}
+
+		function grouped(query: SPARQL): readonly string[] {
+			return (query.match(/group by (?:\?\d+ ?)+/g) ?? []).map(clause => clause.match(/\?\d+/g) ?? []).sort((x, y) => y.length-x.length)[0] ?? [];
+		}
+
+
+		it("reduces each value in a subselect requiring it", async () => {
+
+			const encoded = query(group(entries, { "low=min:code": {}, "cnt=count:broader": {} }));
+
+			expect(subselects(encoded)).toHaveLength(2);
+			expect(requirements(encoded)).toHaveLength(2);
+
+		});
+
+		it("shares the subselect of reductions over the same value", async () => {
+
+			const encoded = query(group(entries, { "low=min:code": {}, "high=max:code": {} }));
+
+			expect(subselects(encoded)).toHaveLength(1);
+			expect(encoded.match(/min\(/g)).toHaveLength(1);
+			expect(encoded.match(/max\(/g)).toHaveLength(1);
+
+		});
+
+		it("groups by the owner, the keys and the reduced columns", async () => {
+
+			const encoded = query(group(entries, { "code=code": {}, "cnt=count:broader": {}, "low=min:featured": {} }));
+
+			// the owner, the key and the two reduced columns, the reductions being settled in their subselects
+
+			expect(grouped(encoded)).toHaveLength(4);
+
+		});
+
+		it("restores the zero of count and sum over an empty group", async () => {
+
+			const encoded = query(group(entries, { "cnt=count:broader": {}, "low=min:code": {} }));
+
+			expect(encoded.match(/coalesce\(\?\d+, 0\)/g)).toHaveLength(1);
+
+		});
+
+		it("joins a reduction to its group by its keys, an absent key included", async () => {
+
+			const encoded = query(group(entries, { "upper=upper": {}, "cnt=count:broader": {} }));
+
+			// the key is bound to a join variable standing in for an absent key, once in the query and once in
+			// the subselect, so neither side ever matches an unbound key with any value of the other side
+
+			expect(encoded.match(/bind\(coalesce\(\?\d+, <[^>]+>\) as \?\d+\)/g)).toHaveLength(2);
+
+		});
+
+		it("binds the owners of the requests in every subselect", async () => {
+
+			const encoded = query(group(entries, { "cnt=count:broader": {}, "low=min:code": {} }));
+
+			expect(bindings(encoded)).toHaveLength(3);
+
+		});
+
+		it("never feeds the surviving owner row to an aggregate", async () => {
+
+			const encoded = query(group(entries, { "cnt=count:broader": {} }));
+
+			expect(encoded).not.toContain("if(bound(");
+
+		});
+
+	});
+
 	describe("with a virtual collection", () => {
 
 		// the member class the range declares, which a held query never states and a virtual one binds

@@ -2401,6 +2401,199 @@ export function testRetrieveProjection(factory: TestFactory): void {
 
 		});
 
+		describe("sparse-set aggregates — Appendix A.4.2", () => {
+
+			// Appendix A.4.2: an aggregate reduces the values its path gathers, so an item lacking the
+			// property drops out of the reduction rather than voiding it. `launched` and `change` are
+			// optional and carried by a proper subset of the products, so every case below reduces a
+			// sparse set; a connector feeding the missing value to its backend aggregate as an error
+			// would void the whole reduction on engines reading SPARQL 1.1 §18.5.1 strictly
+
+			type P = typeof products[number];
+
+			const launched = (ps: readonly P[]): readonly string[] =>
+				ps.flatMap(p => p.launched === undefined ? [] : [p.launched]).sort();
+
+			const changes = (ps: readonly P[]): readonly number[] =>
+				ps.flatMap(p => typeof p.change === "number" ? [p.change] : []);
+
+			const sum = (ns: readonly number[]): number => ns.reduce((s, n) => s+n, 0);
+
+
+			it("should reduce the items carrying the value with min and max", factory(async ({ store }) => {
+
+				const dates = launched(products);
+
+				expect(dates.length).toBeGreaterThan(0);
+				expect(dates.length).toBeLessThan(products.length);
+
+				const result = projected(members(await store.lookup({
+					entry: Catalogue,
+					shape: Products,
+					model: catalogue({ "low=min:launched": {}, "high=max:launched": {} })
+				})));
+
+				expect(result).toHaveLength(1);
+				expect(result?.[0]?.low).toBe(dates[0]);
+				expect(result?.[0]?.high).toBe(dates[dates.length-1]);
+
+			}));
+
+			it("should reduce the items carrying the value with sum, avg and count", factory(async ({ store }) => {
+
+				const values = changes(products);
+
+				expect(values.length).toBeGreaterThan(0);
+				expect(values.length).toBeLessThan(products.length);
+
+				const result = projected(members(await store.lookup({
+					entry: Catalogue,
+					shape: Products,
+					model: catalogue({ "total=sum:change": {}, "mean=avg:change": {}, "cnt=count:change": {} })
+				})));
+
+				expect(result).toHaveLength(1);
+				expect(num(result?.[0]?.total)).toBeCloseTo(sum(values), 5);
+				expect(num(result?.[0]?.mean)).toBeCloseTo(sum(values)/values.length, 5);
+				expect(result?.[0]?.cnt).toBe(values.length);
+
+			}));
+
+			it("should reduce a sparse set within each group", factory(async ({ store }) => {
+
+				const groups = [...new Set(products.map(p => p.condition))];
+
+				const sparse = groups.filter(c =>
+					products.some(p => p.condition === c && p.launched === undefined)
+				);
+
+				expect(sparse.length).toBeGreaterThan(0);
+
+				const result = projected(members(await store.lookup({
+					entry: Catalogue,
+					shape: Products,
+					model: catalogue({
+						"condition=condition": {},
+						"low=min:launched": {},
+						"high=max:launched": {},
+						"cnt=count:launched": {}
+					})
+				}))) ?? [];
+
+				expect(result).toHaveLength(groups.length);
+
+				result.forEach(row => {
+
+					const dates = launched(products.filter(p => p.condition === row.condition));
+
+					expect(row.low).toBe(dates[0]);
+					expect(row.high).toBe(dates[dates.length-1]);
+					expect(row.cnt).toBe(dates.length);
+
+				});
+
+			}));
+
+			it("should reduce a sparse set over the items a row filter admits", factory(async ({ store }) => {
+
+				const bound = 50;
+
+				const admitted = products.filter(p => typeof p.price === "number" && p.price > bound);
+				const dates = launched(admitted);
+
+				expect(admitted.length).toBeGreaterThan(0);
+				expect(admitted.length).toBeLessThan(products.length);
+
+				const result = projected(members(await store.lookup({
+					entry: Catalogue,
+					shape: Products,
+					model: catalogue({ "low=min:launched": {}, "high=max:launched": {} }, { ">price": bound })
+				})));
+
+				expect(result).toHaveLength(1);
+				expect(result?.[0]?.low).toBe(dates[0]);
+				expect(result?.[0]?.high).toBe(dates[dates.length-1]);
+
+			}));
+
+			it("should filter groups by a sparse reduction", factory(async ({ store }) => {
+
+				const since = "2020-01-01";
+
+				const byCondition = (c: string) => products.filter(p => p.condition === c);
+
+				const expected = [...new Set(products.map(p => p.condition))]
+					.filter(c => launched(byCondition(c))[0] >= since)
+					.sort();
+
+				expect(expected.length).toBeGreaterThan(0);
+				expect(expected.length).toBeLessThan(new Set(products.map(p => p.condition)).size);
+
+				const result = projected(members(await store.lookup({
+					entry: Catalogue,
+					shape: Products,
+					model: catalogue({ "condition=condition": {}, "cnt=count:sku": {} }, {
+						">=min:launched": since
+					})
+				}))) ?? [];
+
+				expect(result.map(r => r.condition).sort()).toEqual(expected);
+
+				result.forEach(row => expect(row.cnt).toBe(byCondition(String(row.condition)).length));
+
+			}));
+
+			it("should reduce a sparse set within the groups of an optional key, the absent key included",
+				factory(async ({ store }) => {
+
+					// §5.8.2.1: the launched-less products form the group omitting the key; a sparse
+					// reduction attached to its group by key equality must reach that group too, and
+					// never leak the values of one group into another, as a join treating an absent
+					// key as equal to any value would, merging that group into every other one
+
+					const year = (p: P): undefined | number =>
+						p.launched === undefined ? undefined : new Date(p.launched).getUTCFullYear();
+
+					const groups = [...new Set(products.map(year))];
+
+					expect(groups).toContain(undefined);
+
+					const result = projected(members(await store.lookup({
+						entry: Catalogue,
+						shape: Products,
+						model: catalogue({ "launchYear=year:launched": {}, "total=sum:change": {}, "cnt=count:change": {} })
+					}))) ?? [];
+
+					expect(result).toHaveLength(groups.length);
+
+					result.forEach(row => {
+
+						const values = changes(products.filter(p => year(p) === row.launchYear));
+
+						expect(num(row.total)).toBeCloseTo(sum(values), 5);
+						expect(row.cnt).toBe(values.length);
+
+					});
+
+				}));
+
+			it("should apply the leading scalars of a pipe to a sparse reduction", factory(async ({ store }) => {
+
+				const values = changes(products);
+
+				const result = projected(members(await store.lookup({
+					entry: Catalogue,
+					shape: Products,
+					model: catalogue({ "roundMean=round:avg:change": {} })
+				})));
+
+				expect(result).toHaveLength(1);
+				expect(result?.[0]?.roundMean).toBe(Math.round(sum(values)/values.length));
+
+			}));
+
+		});
+
 	});
 
 }

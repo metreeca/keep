@@ -161,16 +161,22 @@ subselect arm per owner for a windowed plan over several owners) and the **whole
 Every clause is a recursive descent over the nodes the query reads, assembled in the order the sketch below states:
 
 ```text
-select [distinct] ?owner <columns…> [(aggregate as ?stage)…]
+select [distinct] ?owner <columns…> [(<reduced> as ?stage)…]
 where {
   values (?owner) { (<entry>) … }   the entries of the group's requests
-  ?owner <field> ?root .            the member edge, optional for whole-collection aggregates; for a virtual
-                                    group `{ ?root a <class> } union …`, one arm per classed range variant
-  <patterns>                        stages, shards and branches under the root
-  <admitted>                        filter(bound(shard) || …) for a union root retrieving a proper subset of variants
-  <filters>                         the row constraints, at group level
+  [optional {]                      the member pattern, optional for whole-collection aggregates
+    ?owner <field> ?root .          the member edge; for a virtual group `{ ?root a <class> } union …`, one arm
+                                    per classed range variant
+    <patterns>                      stages, shards and branches under the root
+    <admitted>                      filter(bound(shard) || …) for a union root retrieving a proper subset of variants
+    <filters>                       the row constraints, at group level
+  [}]
+  [bind(coalesce(<key>, <absent>) as <join>)]…   one join variable per key column of a reducing query
+  [optional { select ?owner <join>… (<pipe>(<value>) as <column>)…   one reduction subselect per reduced value
+    where { values (?owner) { … } <member pattern> bind(coalesce(<key>, <absent>) as <join>)… filter(bound(<value>)) }
+    group by ?owner <join>… }]…
 }
-[group by ?owner <key columns>]
+[group by ?owner <key columns> <reduced columns>]
 [having (<group conditions>)]
 order by asc(?owner) <focus…> <sort keys…> <tiebreak…>
 [offset n] [limit n]
@@ -195,14 +201,23 @@ order by asc(?owner) <focus…> <sort keys…> <tiebreak…>
   bindings where the projection itself aggregates; else by the owner and the member, with the bindings and the
   non-aggregate sort and focus keys, so a selection aggregate reduces per item, and the query then wraps that grouped
   subselect in a `select distinct` over the owner and the cells, so the rows collapse as any projection's
-  do (§5.2) once the items are filtered. Every read reducing stage is projected as `(pipe(origin) as ?stage)`, its
-  conditions move to `having`, and `min`/`max`/`sum`/`avg` over references project nothing (Appendix A.4.1)
+  do (§5.2) once the items are filtered. `min`/`max`/`sum`/`avg` over references project nothing (Appendix A.4.1)
+- **reductions** — under SPARQL 1.1 §18.5.1 an unbound input is an error, and engines reading the spec strictly
+  (Oxigraph, Jena) void `min`/`max`/`sum`/`avg` over it, where QEST drops the value (Appendix A.4.2). No aggregate
+  therefore reads the group rows. Every read reducing stage is computed in a **reduction subselect**, one per reduced
+  value. The subselect restates the owner binding and the member pattern with `filter(bound(<value>))`, groups by the
+  owner and the join variables, and projects each stage's pipe as `(<pipe>(<value>) as <column>)`. It is left-joined
+  under `optional` on the owner and the **join variables**, one per key column. Both sides bind each join variable as
+  `coalesce(<key>, <absent>)`, with a sentinel IRI no key resolves to: SPARQL joins an unbound key with any value,
+  which would merge the group of an absent key into every other group. A filter inside the `optional` matching the
+  keys explicitly is not an alternative, since not every engine honours it (RDF4J cross-joins the groups). The head
+  projects each stage as `(<column> as ?stage)`, under `coalesce(<column>, 0)` for `count` and `sum`, since a group
+  whose members all lack the value has no subselect row (Appendix A.4.3). The outer `group by` also lists the columns,
+  which depend on the keys alone, and the conditions on a stage move to `having` over its head expression
 - **whole-collection aggregates** — a projection aggregating without non-aggregate bindings has a value on an empty
-  collection too (§5.2). Grouping by owner would drop an owner whose members are all filtered out, so the member edge
-  and everything under it become `optional` under the `values` block. Each aggregate argument then reads
-  `if(bound(?root), <value>, <neutral>)`: the neutral is `0` under `sum`, and an error (a variable nothing binds) under
-  any other aggregate, which drops it or comes out unbound. An owner with members thus aggregates exactly as a keyless
-  aggregation over its own members would, and an owner without members still gets one row of empty aggregates
+  collection too (§5.2). Grouping by owner would drop an owner whose members are all filtered out, so the member
+  pattern becomes `optional` under the `values` block and the owner row survives on its own. The reduction subselects
+  yield no row for such an owner, so it gets one row of empty aggregates, `count` and `sum` restored to `0`
 - **ordering** — the owner first, then focus boosts, then sort keys by precedence, each ranked by processing-type
   tier (boolean < numeric < temporal < string) before its value (§5.7.5), then the group keys or the member as a
   stable tiebreak, so the rows of every owner come back in the same order whatever else shares the query

@@ -2593,6 +2593,30 @@ export function testRetrieveCriteria(factory: TestFactory): void {
 
 				});
 
+				it("should drop the items lacking the reduced value and keep the others (Appendix A.4.2)", factory(async ({ store }) => {
+
+					// a per-item reduction over an optional single-valued slot reduces the one value an item
+					// carries, or nothing: an item lacking it has no reduced value to compare and drops out,
+					// while every item carrying one past the bound stays, whatever the backend makes of an
+					// aggregate fed an unbound input, which strict engines void (Appendix A.4.2)
+
+					const since = "2024-01-01";
+
+					const expected = products.filter(p => p.launched !== undefined && p.launched >= since);
+
+					expect(expected.length).toBeGreaterThan(0);
+					expect(expected.length).toBeLessThan(products.filter(p => p.launched !== undefined).length);
+
+					const result = members(await store.lookup({
+						entry: Catalogue,
+						shape: Products,
+						model: catalogue({ id: {} }, { ">=min:launched": since })
+					}));
+
+					expect(result?.map(p => p.id).sort()).toEqual(expected.map(p => p.id).sort());
+
+				}));
+
 				it("should drop every item whose per-item reduction fails the predicate", factory(async ({ store }) => {
 
 					const result = members(await store.lookup({

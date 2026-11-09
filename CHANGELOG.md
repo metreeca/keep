@@ -82,6 +82,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   its union text variant by that label, where sort keys like `^label` and `^vendor.label`, projected labels and
   union variants previously came back unbound whenever the leading tag was present anywhere else in the store
   ([#26](https://github.com/metreeca/keep/issues/26)); `@metreeca/keep-suite` checks connectors for the fallthrough
+- `@metreeca/keep-sparql` — `min`, `max`, `sum` and `avg` over a property some items lack now reduce the items
+  carrying it, as the specification requires, where they previously came back undefined on Oxigraph and Jena,
+  which void an aggregate fed an unbound value as SPARQL 1.1 §18.5.1 allows
+  ([#27](https://github.com/metreeca/keep/issues/27)), whether over the whole collection, within groups, under row
+  and group filters or wrapped in a scalar transform; `@metreeca/keep-suite` checks connectors for these sparse
+  reductions, including groups keyed on an optional property, whose values never leak into other groups
 - `@metreeca/keep-flake` — a bare template key in a collection query no longer gives its node an alias, so
   `isProbeBranch` picks out projected nodes alone and `isModelBranch` no longer misses single-valued template
   entries; `getFlakeTemplate` leaves out the branches bound by the enclosing projection, since they are bindings of

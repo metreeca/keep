@@ -33,7 +33,12 @@
  *    subselect arm per owner, each windowing its own members, under an outer query restating the ordering, since a
  *    `limit` spans every owner bound in a query and would otherwise cut the pooled rows of every owner at once;
  *  - the **whole**-collection aggregation (§5.2): a keyless aggregation keeps an owner without members, so the
- *    member edge turns optional and the aggregates discount the row that survives.
+ *    member edge turns optional and the owner row survives an empty member set.
+ *
+ * Every reduced value is aggregated in a subselect of its own over the members carrying it, so a member lacking the
+ * value never voids an aggregate (QEST Appendix A.4.2). Strict engines, Oxigraph and Jena among them, read SPARQL
+ * 1.1 §18.5.1 as voiding `min`, `max`, `sum` and `avg` over an unbound input. A group whose members all lack the
+ * value leaves `min`, `max` and `avg` unbound, while `count` and `sum` come to `0` as the protocol requires.
  *
  * The contract shared with the decoder is stated in `src/index.md`.
  *
@@ -85,6 +90,7 @@ import {
 	exists,
 	filter,
 	fragment,
+	group as block,
 	groupBy,
 	gt,
 	gte,
@@ -201,14 +207,48 @@ type Context = {
 	readonly whole: boolean;
 
 	/**
-	 * The cells the query returns, the grouping keys of a reducing query, and the reducing stages it reads, each
-	 * paired with the value its pipe reduces, so the head, the grouping and the having clauses read the same lists.
+	 * The cells the query returns, the grouping keys of a reducing query and the reductions it reads, settled once
+	 * so the head, the grouping, the having clause and the reduction subselects all read the same lists.
 	 */
 	readonly cells: readonly Flake[];
 	readonly keys: readonly Flake[];
-	readonly reduced: readonly (readonly [Flake, Variable])[];
+	readonly reductions: readonly Reduction[];
+
+	/**
+	 * The key columns of a reducing query, each paired with the join variable matching it to the reduction
+	 * subselects. The join variable binds the key, or a sentinel if the key is absent, so an absent key matches an
+	 * absent key alone: SPARQL joins an unbound variable with any value, merging that group into every other one.
+	 */
+	readonly joins: readonly (readonly [Variable, Variable])[];
 
 };
+
+/**
+ * A value the query reduces, with the aggregating stages reading it and the subselect columns they settle in.
+ *
+ * The stages reducing the same origin share one subselect, which admits only the members carrying the origin. Each
+ * stage is projected there under a column distinct from the stage variable. The head binds the stage variable from
+ * the column, and restores `count` and `sum` to `0` for a group lacking the value, which has no subselect row.
+ */
+type Reduction = {
+
+	/**
+	 * The member value the stages reduce.
+	 */
+	readonly origin: Variable;
+
+	/**
+	 * The reducing stages, each paired with the subselect column carrying its reduced value.
+	 */
+	readonly stages: readonly (readonly [Flake, Variable])[];
+
+};
+
+
+/**
+ * The term standing for an absent grouping key in the join variables, which no stored key resolves to.
+ */
+const absent = named("urn:x-metreeca:keep:absent");
 
 
 /**
@@ -258,19 +298,23 @@ function settle(scope: Scope<Variable>, group: Group): Context {
 	const root = scope.resolve(flake);
 
 	const keys = grouping(flake);
-	const reduced = reductions(scope, flake, read);
+	const reductions = reducing(scope, flake, read);
+
+	const joins = keys
+		.flatMap(key => (schema.get(key) ?? derive(key)).map(shard => column(scope, shard)))
+		.map((key): readonly [Variable, Variable] => [key, scope.resolve()]);
 
 	// a query whose projection aggregates is one grouped select; one reduced per item alone (§5.8.2.1)
 	// groups by the member in a subselect, which the query then projects as distinct rows (§5.2)
 
-	const form = reduced.length === 0 ? "ungrouped"
+	const form = reductions.length === 0 ? "ungrouped"
 		: isGroupingFlake(flake) ? "grouped"
 			: "itemised";
 
 	// an aggregate over the whole collection has a value on an empty collection too (§5.2): a keyless
 	// aggregation yields one group whatever its input, but grouped by owner it keeps an owner's group only
 	// if a row of that owner survives an empty member set, so the members become optional under the owner
-	// binding and `reduction` keeps the surviving row out of the aggregates it would otherwise distort
+	// binding; the reductions read their own subselects, which the surviving row never enters
 
 	return {
 
@@ -285,7 +329,8 @@ function settle(scope: Scope<Variable>, group: Group): Context {
 
 		cells: [...schema.keys()],
 		keys,
-		reduced
+		reductions,
+		joins
 
 	};
 
@@ -329,12 +374,23 @@ function grouping(flake: Flake): readonly Flake[] {
 }
 
 /**
- * The reducing stages a query reads, each paired with the value its pipe reduces; `min`/`max`/`sum`/`avg`
- * over references are left out, their cells unbound (Appendix A.4.1), while `count` still reduces.
+ * The reductions a query reads, one per reduced value, each giving every stage reducing that value a subselect
+ * column of its own. `min`/`max`/`sum`/`avg` over references are left out and their cells stay unbound (Appendix
+ * A.4.1), while `count` still reduces references, counting them by presence alone.
  */
-function reductions(scope: Scope<Variable>, flake: Flake, read: (node: Flake) => boolean): readonly (readonly [Flake, Variable])[] {
+function reducing(scope: Scope<Variable>, flake: Flake, read: (node: Flake) => boolean): readonly Reduction[] {
 
-	return reduced(flake, scope.resolve(flake));
+	const stages = reduced(flake, scope.resolve(flake));
+
+	return unique(stages.map(([, origin]) => origin)).map(origin => ({
+
+		origin,
+
+		stages: stages
+			.filter(([, reduced]) => reduced === origin)
+			.map(([stage]): readonly [Flake, Variable] => [stage, scope.resolve()])
+
+	}));
 
 
 	function reduced(node: Flake, origin: Variable): readonly (readonly [Flake, Variable])[] {
@@ -367,8 +423,8 @@ function reductions(scope: Scope<Variable>, flake: Flake, read: (node: Flake) =>
 
 /**
  * The query over the owners of `items`: the owners bound in a `values` block, the member edge, the patterns the
- * query reads, and the clauses projecting, filtering, grouping, ordering and slicing the members; a `nested`
- * query also projects the ordering keys, so the enclosing query can order its rows.
+ * query reads, the reduction subselects, and the clauses projecting, filtering, grouping, ordering and slicing the
+ * members. A `nested` query also projects the ordering keys, so the enclosing query can order its rows.
  */
 function query(context: Context, items: readonly Deferred<Select>[], nested: boolean): SPARQL {
 
@@ -380,7 +436,9 @@ function query(context: Context, items: readonly Deferred<Select>[], nested: boo
 		head(context, nested),
 		where(
 			binding,
-			whole ? optional(...body(context)) : fragment(...body(context))
+			whole ? optional(...body(context)) : fragment(...body(context)),
+			joins(context),
+			...reductions(context, binding)
 		),
 		groupings(context),
 		havings(context),
@@ -405,12 +463,12 @@ function query(context: Context, items: readonly Deferred<Select>[], nested: boo
  */
 function head(context: Context, nested: boolean): SPARQL | readonly SPARQL[] {
 
-	const { scope, owner, form, keys, reduced } = context;
+	const { scope, owner, form, keys, reductions } = context;
 
 	return form === "ungrouped"
 		? distinct(...projection(context, nested))
-		: [variable(owner), ...keys.flatMap(key => columns(context, key)), ...reduced.map(([stage, origin]) =>
-			as(reduction(context, stage, origin), variable(scope.resolve(stage)))
+		: [variable(owner), ...keys.flatMap(key => columns(context, key)), ...reductions.flatMap(({ stages }) =>
+			stages.map(([stage, column]) => as(reduced(stage, column), variable(scope.resolve(stage))))
 		)];
 
 }
@@ -469,28 +527,64 @@ function body(context: Context): readonly SPARQL[] {
 }
 
 /**
- * The `group by` clause of a grouped or itemised query: the owner and the grouping keys.
+ * The binds of the join variables of a reducing query, one per key column, each binding the key or the absent
+ * sentinel. The query and every reduction subselect state the same binds after the member pattern, so both sides
+ * match on the same values and a group lacking a key joins its own reductions and no other group's.
+ */
+function joins({ joins }: Context): SPARQL {
+	return fragment(joins.map(([key, join]) => bind(coalesce(variable(key), term(absent)), variable(join))));
+}
+
+/**
+ * The reduction subselects of a reducing query, one per reduced value (Appendix A.4.2). Each restates the owner
+ * `binding` and the member pattern, admits only the members carrying the value, and reduces them per owner and join
+ * variables. The query left-joins each subselect on the owner and the join variables, so a group lacking the value
+ * reads its reductions as unbound rather than losing its row or borrowing another group's values.
+ */
+function reductions(context: Context, binding: SPARQL): readonly SPARQL[] {
+
+	const { owner, reductions, joins: joined } = context;
+
+	return reductions.map(({ origin, stages }) => optional(block(select(
+		[
+			variable(owner),
+			...joined.map(([, join]) => variable(join)),
+			...stages.map(([stage, column]) => as(expression(variable(origin), stage.pipe), variable(column)))
+		],
+		where(binding, ...body(context), joins(context), filter(isBound(variable(origin)))),
+		groupBy(variable(owner), joined.map(([, join]) => variable(join)))
+	))));
+
+}
+
+/**
+ * The `group by` clause of a grouped or itemised query: the owner, the grouping keys and the reduced columns, listed
+ * although the keys settle them, since a grouped head may project a grouped variable alone.
  */
 function groupings(context: Context): SPARQL {
 
-	const { owner, form, keys } = context;
+	const { owner, form, keys, reductions } = context;
 
-	return form === "ungrouped" ? nil() : groupBy(variable(owner), keys.flatMap(key => columns(context, key)));
+	return form === "ungrouped" ? nil() : groupBy(
+		variable(owner),
+		keys.flatMap(key => columns(context, key)),
+		reductions.flatMap(({ stages }) => stages.map(([, column]) => variable(column)))
+	);
 
 }
 
 /**
  * The `having` clause of a grouped or itemised query: the conditions the reducing stages state over their
- * aggregates, and the `!` conditions over them (§5.7.3), which only hold once the groups have been reduced.
+ * reduced values, and the `!` conditions over them (§5.7.3), which only hold once the groups have been reduced.
  */
 function havings(context: Context): SPARQL {
 
-	const { form, reduced } = context;
+	const { form, reductions } = context;
 
-	return form === "ungrouped" ? nil() : having(reduced.flatMap(([stage, origin]) => [
-		...conditions(stage, reduction(context, stage, origin)),
-		...opt(stage.all, options => [conjunction(reduction(context, stage, origin), optionsToTerms(options, stage.range))], [])
-	]));
+	return form === "ungrouped" ? nil() : having(reductions.flatMap(({ stages }) => stages.flatMap(([stage, column]) => [
+		...conditions(stage, reduced(stage, column)),
+		...opt(stage.all, options => [conjunction(reduced(stage, column), optionsToTerms(options, stage.range))], [])
+	])));
 
 }
 
@@ -573,21 +667,20 @@ function shard({ group: { schema } }: Context, cell: Flake): readonly Column[] {
 }
 
 /**
- * The expression reducing `origin` through `stage`'s pipe. Under a whole-collection aggregation, the row
- * an owner without members keeps feeds the aggregates an error, which they drop or turn unbound, except
- * under `sum`, which still has to come to `0` (§5.2); every member row feeds them its plain value, so the
- * aggregates of an owner with members come out exactly as a keyless aggregation would compute them.
+ * The value of a reducing stage, read off its subselect `column`. A group whose members all lack the value has no
+ * subselect row, so the column stays unbound: `count` and `sum` restore it to `0`, as the protocol requires over an
+ * empty set (§5.2, Appendix A.4.3), and any other aggregate leaves it unbound, its empty value being undefined.
  */
-function reduction({ scope, root, whole }: Context, stage: Flake, origin: Variable): SPARQL {
+function reduced(stage: Flake, column: Variable): SPARQL {
 
-	// a variable nothing binds is the portable error: `coalesce()` reads as an error too, but RDF4J
-	// rejects its empty argument list at parse time as a malformed query, where oxigraph accepts it
+	// a scalar leading the pipe is applied in the subselect, so the restored `0` stands for the scalar over an
+	// empty sum or count: every numeric scalar admitted on them (abs, floor, ceil, round) maps `0` to `0`
 
-	const unbound = scope.resolve();
+	const aggregate = stage.pipe.find(isAggregate);
 
-	return expression(whole
-		? iif(isBound(variable(root)), variable(origin), stage.pipe.find(isAggregate) === "sum" ? number(0) : variable(unbound))
-		: variable(origin), stage.pipe);
+	return aggregate === "count" || aggregate === "sum"
+		? coalesce(variable(column), number(0))
+		: variable(column);
 
 }
 

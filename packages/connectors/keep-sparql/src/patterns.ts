@@ -56,7 +56,6 @@ import {
 	exists,
 	filter,
 	floor,
-	gt,
 	hours,
 	iif,
 	isIRI,
@@ -371,8 +370,9 @@ function winner(scope: Scope<Variable>, { owner, property }: Edge, locale: reado
  * Generates the SPARQL expression applying a transform `pipe` to an `anchor` expression (§5.8.2).
  *
  * The trailing transform applies to `anchor` first and the leading transform is outermost. Each {@link Transform}
- * maps to its SPARQL aggregate or scalar function. An `avg` over no rows leaves its binding unbound rather than `0`,
- * as QEST requires (Appendix A.4.3), so an empty group decodes to an absent average rather than to a false zero.
+ * maps to its SPARQL aggregate or scalar function unchanged, so aggregates keep their SPARQL 1.1 §18.5.1 semantics:
+ * strict engines void an aggregate fed an unbound value, and an empty group averages to `0`. Callers must feed
+ * aggregates bound, compatible values only, and never an empty group (QEST Appendix A.4.2, A.4.3).
  *
  * @param anchor The expression the pipe transforms, typically a value variable
  * @param pipe The transforms to compose, leading (outermost) first
@@ -407,15 +407,7 @@ export function expression(anchor: SPARQL, pipe: readonly Transform[]): SPARQL {
 
 			case "avg":
 
-				// sparql averages an empty group to 0, where qest leaves the aggregate undefined (Appendix
-				// A.4.3): forcing an ill-typed cast on an empty count errors the expression, so the binding
-				// stays unbound and decodes as absent, with no sentinel value the decoder has to recognise
-
-				return iif(
-					gt(count(expression), number(0)),
-					avg(expression),
-					`${reference(xsd.integer)}("!")`
-				);
+				return avg(expression);
 
 			case "length":
 
